@@ -143,6 +143,28 @@ files and session transcripts on disk — your data never leaves your machine.
 
 <br>
 
+### Limitations (transparency)
+
+**Token counts are approximate.** The tool estimates tokens as
+`ceil(chars / 3.7)`, based on the average English BPE tokenizer rate.
+Real token counts vary by tokenizer (Claude vs GPT vs Gemini) and content
+(more code ≈ more tokens per char). This is a documented approximation —
+the relative ranking matters more than the absolute number.
+
+**Platform format stability.** Each supported platform has its own config
+layout and transcript format. These change over time as platforms evolve.
+Parser updates are an ongoing maintenance reality. The project is architected
+for easy fixes (one struct per platform in `internal/platform/`), but format
+changes can lag by days to weeks after a platform update.
+
+**Not a tool declaration fix.** Claude Code's deferred tools reduce the
+*init-time tool declaration* overhead. Skillreaper addresses a different
+problem: **always-loaded skill/agent/prose files.** If a skill description
+is 248 characters, it is read into context every session — regardless of
+lazy tool loading. These two optimizations are complementary, not competing.
+
+<br>
+
 ### Design
 
 - **100 % local**, zero dependencies, single static binary (Go ≥ 1.22)

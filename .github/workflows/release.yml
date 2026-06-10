@@ -26,3 +26,41 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  homebrew-tap:
+    runs-on: ubuntu-latest
+    needs: goreleaser
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: thousandflowers/homebrew-tap
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update formula for ${{ github.ref_name }}
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${TAG#v}"
+          cd Formula
+
+          # fetch checksums from the release
+          gh release download "$TAG" \
+            --repo thousandflowers/skillreaper \
+            -p "checksums.txt" \
+            --output /tmp/checksums.txt
+
+          AMD64_SHA=$(grep darwin_amd64 /tmp/checksums.txt | cut -d' ' -f1)
+          ARM64_SHA=$(grep darwin_arm64 /tmp/checksums.txt | cut -d' ' -f1)
+
+          # rewrite the formula with new version + checksums
+          sed -i "s/version \"[0-9.]*\"/version \"${VERSION}\"/" skillreaper.rb
+          sed -i "s|/download/v[0-9.]*/skillreaper_darwin_amd64|/download/${TAG}/skillreaper_darwin_amd64|" skillreaper.rb
+          sed -i "s|/download/v[0-9.]*/skillreaper_darwin_arm64|/download/${TAG}/skillreaper_darwin_arm64|" skillreaper.rb
+          sed -i "s/sha256 \"[a-f0-9]\{64\}\"$/sha256 \"${AMD64_SHA}\"/" skillreaper.rb
+          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"$/!{s/sha256 \"[a-f0-9]\{64\}\"$/sha256 \"${ARM64_SHA}\"/}" skillreaper.rb
+
+          git config user.name "skillreaper-bot"
+          git config user.email "bot@skillreaper.dev"
+          git add skillreaper.rb
+          git commit -m "Update skillreaper to ${TAG}"
+          git push

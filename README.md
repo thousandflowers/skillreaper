@@ -54,55 +54,85 @@ go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 Pre-built binaries available for every platform. No runtime
 dependencies — single static binary.
 
-## 🎮 Tutorial (3 minuti)
+## 🎮 Interactive tutorial
 
-### 1. Vedi cosa sta caricando il tuo agente
+Run through this in 3 minutes. No config, no setup.
+
+### Step 1: See what your agent actually loads
 
 ```bash
 reap
 ```
 
-Output tipico:
+You'll see output like this:
 
 ```
-Items scanned:  187
-Items with evidence:  165
-Items reaped:   142 (76 %)
+skillreaper — evidence-based pruning for your agent stack
+
+Window: last 30 days · 180 sessions analyzed
+
+8 items never used · ~0 dead tokens injected per session
+
+SKILLS (description injected every session)
+NAME                     PLATFORM      SOURCE           WEIGHT   USES  LAST USED   VERDICT
+ecc:flox-environments    claude-code   plugin:ecc@ecc   ~336 tok  0     never       REVIEW
+ecc:videodb              claude-code   plugin:ecc@ecc   ~161 tok  0     never       REVIEW
+ecc:data-scraper-agent   claude-code   plugin:ecc@ecc   ~113 tok  0     never       REVIEW
+...[snip]...
 ```
 
-Scorri la tabella: ogni riga è una skill/agente/MCP che il tuo agente
-carica a ogni sessione. Colonna `VERDICT` dice se è REAP (mai usata),
-KEEP (usata), o REVIEW (pochi dati).
+Each row is a skill, agent, or MCP server your agent loads
+**every single session**. The `VERDICT` column tells you:
 
-### 2. Capisci il costo
+| Label | Meaning |
+|---|---|
+| **`REAP`** 🟢 | Zero uses in the evidence window — safe to quarantine |
+| **`KEEP`** 🔵 | Used at least once — keep it |
+| **`REVIEW`** 🟡 | Not enough data yet (recently installed, or transcriptless platform) |
 
-Ogni skill ha una colonna `WEIGHT/SESSION` — caratteri che consumano
-contesto ogni volta. Somma quelle delle REAP per vedere quanto spazio
-sprecato recuperi.
+### Step 2: Find what's costing you
 
-### 3. Metti in quarantena gli inutilizzati
+Look at the `WEIGHT` column. Every `~N tok` is context consumed
+from your agent's working memory — for something it never uses.
+
+Run this to see your total bloat in one number:
+
+```bash
+reap --json | jq '.TotalDeadWeight'
+```
+
+> If you don't have `jq`, just scan the table — items with
+> `VERDICT=REAP` and high weight are your biggest win.
+
+### Step 3: Quarantine the dead weight
 
 ```bash
 reap prune
 ```
 
-Skillreaper sposta i file in `<config>/reaped/` — non cancella niente.
-Ti chiede conferma prima. Se cambi idea:
+Skillreaper asks for confirmation, then moves the files to
+`<config-dir>/reaped/` — **nothing is deleted, ever.**
+
+Changed your mind? One command undoes everything:
 
 ```bash
 reap restore --all
 ```
 
-Tutto torna esattamente com'era. Punto.
+Every file goes back exactly where it was. No trace of the prune.
 
-### 4. Verifica il risultato
+### Step 4: See the difference
 
-Rilancia `reap` — gli stessi item ora mostrano `(reaped)` nel nome.
-Hai recuperato contesto senza perdere niente.
+Run `reap` again. The quarantined items now show `(reaped)` in
+their name — they're still visible but no longer loaded.
 
-> **Consiglio**: aspetta almeno 10 sessioni di lavoro prima di prune.
-> skillreaper ha bisogno di dati per decidere con sicurezza.
-> Se un item è in dubbio (REVIEW), lascialo stare.
+Your agent starts every session with a cleaner context. Fewer
+distractions, fewer wrong tool picks, faster first token.
+
+> **When to prune**: wait until you have at least 10 sessions of
+> transcript data. Skillreaper needs evidence to decide confidently.
+> Items showing `REVIEW`? Leave them be — they'll resolve on their own
+> as more sessions accumulate.
 
 ## 🚀 Usage
 

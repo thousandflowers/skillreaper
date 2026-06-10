@@ -63,9 +63,6 @@ one. Wrong picks cost turns. Turns cost tokens. Tokens cost money.
 # macOS — Homebrew
 brew install thousandflowers/tap/skillreaper
 
-# Any platform — npm/npx (Node ≥ 18)
-npx skillreaper
-
 # Any platform — Go (Go ≥ 1.22)
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```

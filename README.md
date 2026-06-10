@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="docs/reap-demo.png" alt="reap in action" width="800">
+  <img src="docs/reap-demo.gif" alt="reap in action" width="800">
 </p>
 
 <h1 align="center">

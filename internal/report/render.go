@@ -64,11 +64,11 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		fmt.Fprintf(w, "\n  %s\n", paint(cYell, "⚠  no transcripts found in window — verdicts unavailable, inventory only."))
 	}
 
-	blockWidth := 64
+	shockContent := fmt.Sprintf("%d items never used · ~%d dead tokens/session · ~$%.2f/month",
+		r.DeadCount, r.DeadTokensPerSession, r.MoneyPerMonth)
+	blockWidth := len(shockContent) + 6
 	shockLine := fmt.Sprintf("  ╔%s╗", strings.Repeat("═", blockWidth-2))
-	shockMid := fmt.Sprintf("  ║  %-*s  ║", blockWidth-6,
-		fmt.Sprintf("%d items never used · ~%d dead tokens/session · ~$%.2f/month",
-			r.DeadCount, r.DeadTokensPerSession, r.MoneyPerMonth))
+	shockMid := fmt.Sprintf("  ║  %s  ║", shockContent)
 	shockBot := fmt.Sprintf("  ╚%s╝", strings.Repeat("═", blockWidth-2))
 	fmt.Fprintf(w, "\n%s\n%s\n%s\n",
 		paint(cBRed, shockLine),

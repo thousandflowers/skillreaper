@@ -57,16 +57,26 @@ one. Wrong picks cost turns. Turns cost tokens. Tokens cost money.
 
 <br>
 
-### Install (4 ways)
+### Install
 
 ```bash
-brew install thousandflowers/tap/skillreaper    # macOS
-npx skillreaper                                  # any platform
+# macOS — Homebrew
+brew install thousandflowers/tap/skillreaper
+
+# Any platform — npm/npx (Node ≥ 18)
+npx skillreaper
+
+# Any platform — Go (Go ≥ 1.22)
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```
 
-See [INSTALL.md](INSTALL.md) for every method: Homebrew, npm, Go install,
-binary downloads (6 OS/arch combos), upgrade guides, and uninstall steps.
+**Binary downloads** — macOS (Intel + Apple Silicon), Linux (amd64 + arm64),
+Windows (amd64 + arm64) — all on the
+[releases page](https://github.com/thousandflowers/skillreaper/releases).
+Single static binary, no dependencies.
+
+Upgrading, uninstalling, and platform-specific tips →
+[INSTALL.md](INSTALL.md).
 
 <br>
 

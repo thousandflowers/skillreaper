@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
@@ -66,7 +67,7 @@ func RenderText(w io.Writer, r *Report, color bool) {
 
 	shockContent := fmt.Sprintf("%d items never used · ~%d dead tokens/session · ~$%.2f/month",
 		r.DeadCount, r.DeadTokensPerSession, r.MoneyPerMonth)
-	blockWidth := len(shockContent) + 6
+	blockWidth := utf8.RuneCountInString(shockContent) + 6
 	shockLine := fmt.Sprintf("  ╔%s╗", strings.Repeat("═", blockWidth-2))
 	shockMid := fmt.Sprintf("  ║  %s  ║", shockContent)
 	shockBot := fmt.Sprintf("  ╚%s╝", strings.Repeat("═", blockWidth-2))

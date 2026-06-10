@@ -7,28 +7,28 @@ import (
 	"time"
 )
 
-// ScanAgents inventories personal agents (~/.claude/agents/*.md) and
+// ScanAgents inventories personal agents (<dir>/agents/*.md) and
 // plugin-provided agents. The Name field matches the subagent_type
 // used in Task/Agent tool calls: bare for personal agents,
 // "plugin:agent" for plugin agents.
-func ScanAgents(claudeDir string) ([]Item, []Warning) {
+func ScanAgents(dir, platformID string) ([]Item, []Warning) {
 	var items []Item
 	var warns []Warning
 
 	items, warns = appendAgentsFromDir(items, warns,
-		filepath.Join(claudeDir, "agents"), "", "personal", time.Time{}, true)
+		filepath.Join(dir, "agents"), "", "personal", time.Time{}, true, platformID)
 
-	plugins, pw := installedPlugins(claudeDir)
+	plugins, pw := installedPlugins(dir)
 	warns = append(warns, pw...)
 	for _, p := range plugins {
 		items, warns = appendAgentsFromDir(items, warns,
 			filepath.Join(p.InstallPath, "agents"),
-			p.Name+":", "plugin:"+p.FullName, p.InstalledAt, false)
+			p.Name+":", "plugin:"+p.FullName, p.InstalledAt, false, platformID)
 	}
 	return items, warns
 }
 
-func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source string, installedAt time.Time, removable bool) ([]Item, []Warning) {
+func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source string, installedAt time.Time, removable bool, platformID string) ([]Item, []Warning) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -55,6 +55,7 @@ func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 		items = append(items, Item{
 			Category:    CatAgent,
 			Name:        key,
+			Platform:    platformID,
 			Source:      source,
 			Path:        path,
 			Description: desc,

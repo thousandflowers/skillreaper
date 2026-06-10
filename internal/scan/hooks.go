@@ -22,11 +22,11 @@ type settingsHooks struct {
 // settings.local.json. Hooks are report-only in this version
 // (Removable false): their cost varies per event and removal is a
 // settings edit the user should review.
-func ScanHooks(claudeDir string) ([]Item, []Warning) {
+func ScanHooks(dir, platformID string) ([]Item, []Warning) {
 	var items []Item
 	var warns []Warning
 	for _, base := range []string{"settings.json", "settings.local.json"} {
-		path := filepath.Join(claudeDir, base)
+		path := filepath.Join(dir, base)
 		b, err := os.ReadFile(path)
 		if err != nil {
 			if !os.IsNotExist(err) {
@@ -46,6 +46,7 @@ func ScanHooks(claudeDir string) ([]Item, []Warning) {
 					items = append(items, Item{
 						Category:    CatHook,
 						Name:        fmt.Sprintf("%s#%d", event, n),
+						Platform:    platformID,
 						Source:      base,
 						Path:        path,
 						Description: h.Command,

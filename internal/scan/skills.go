@@ -6,23 +6,23 @@ import (
 	"time"
 )
 
-// ScanSkills inventories personal skills (~/.claude/skills/<name>/SKILL.md)
+// ScanSkills inventories personal skills (<dir>/skills/<name>/SKILL.md)
 // and skills shipped by installed plugins. The Name field is the
 // invocation key as it appears in transcripts: bare for personal
 // skills, "plugin:skill" for plugin skills.
-func ScanSkills(claudeDir string) ([]Item, []Warning) {
+func ScanSkills(dir, platformID string) ([]Item, []Warning) {
 	var items []Item
 	var warns []Warning
 
 	items, warns = appendSkillsFromDir(items, warns,
-		filepath.Join(claudeDir, "skills"), "", "personal", time.Time{}, true)
+		filepath.Join(dir, "skills"), "", "personal", time.Time{}, true, platformID)
 
-	plugins, pw := installedPlugins(claudeDir)
+	plugins, pw := installedPlugins(dir)
 	warns = append(warns, pw...)
 	for _, p := range plugins {
 		items, warns = appendSkillsFromDir(items, warns,
 			filepath.Join(p.InstallPath, "skills"),
-			p.Name+":", "plugin:"+p.FullName, p.InstalledAt, false)
+			p.Name+":", "plugin:"+p.FullName, p.InstalledAt, false, platformID)
 	}
 	return items, warns
 }
@@ -30,7 +30,7 @@ func ScanSkills(claudeDir string) ([]Item, []Warning) {
 // appendSkillsFromDir scans one skills directory where each child
 // directory holds a SKILL.md. namePrefix is "" for personal skills or
 // "<plugin>:" for plugin-provided ones.
-func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source string, installedAt time.Time, removable bool) ([]Item, []Warning) {
+func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source string, installedAt time.Time, removable bool, platformID string) ([]Item, []Warning) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -55,6 +55,7 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 		items = append(items, Item{
 			Category:    CatSkill,
 			Name:        key,
+			Platform:    platformID,
 			Source:      source,
 			Path:        skillPath,
 			Description: desc,

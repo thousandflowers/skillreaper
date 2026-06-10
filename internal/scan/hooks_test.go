@@ -21,7 +21,7 @@ func TestScanHooks(t *testing.T) {
 		}
 	}`)
 
-	items, warns := ScanHooks(home)
+	items, warns := ScanHooks(home, "test")
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -36,7 +36,7 @@ func TestScanHooks(t *testing.T) {
 func TestScanHooksCorrupt(t *testing.T) {
 	home := t.TempDir()
 	mustWrite(t, filepath.Join(home, "settings.json"), "{bad")
-	_, warns := ScanHooks(home)
+	_, warns := ScanHooks(home, "test")
 	if len(warns) != 1 {
 		t.Errorf("expected 1 warning, got %d", len(warns))
 	}
@@ -49,7 +49,7 @@ func TestScanProse(t *testing.T) {
 	mustWrite(t, filepath.Join(home, "rules", "common", "style.md"), "rule body")
 	mustWrite(t, filepath.Join(cwd, "CLAUDE.md"), "project notes")
 
-	items, warns := ScanProse(home, cwd)
+	items, warns := ScanProse(home, cwd, "test")
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}

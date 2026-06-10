@@ -15,20 +15,20 @@ type mcpServerConfig struct {
 	URL     string   `json:"url"`
 }
 
-// ScanMCP inventories MCP servers from ~/.claude.json (user scope and
-// per-project scope) and from installed plugins' .mcp.json files.
-// claudeJSONPath may point at a missing file (fresh install).
-func ScanMCP(claudeJSONPath, claudeDir string) ([]Item, []Warning) {
+// ScanMCP inventories MCP servers from the platform config file (user
+// scope and per-project scope) and from installed plugins' .mcp.json
+// files. configPath may point at a missing file (fresh install).
+func ScanMCP(configPath, configDir, platformID string) ([]Item, []Warning) {
 	var items []Item
 	var warns []Warning
 
-	b, err := os.ReadFile(claudeJSONPath)
+	b, err := os.ReadFile(configPath)
 	if err == nil {
 		var top map[string]json.RawMessage
 		if jerr := json.Unmarshal(b, &top); jerr != nil {
-			warns = append(warns, Warning{Path: claudeJSONPath, Msg: "unreadable JSON: " + jerr.Error()})
+			warns = append(warns, Warning{Path: configPath, Msg: "unreadable JSON: " + jerr.Error()})
 		} else {
-			items = appendMCPServers(items, top["mcpServers"], "user-config", claudeJSONPath)
+			items = appendMCPServers(items, top["mcpServers"], "user-config", configPath, platformID)
 
 			var projects map[string]json.RawMessage
 			if raw, ok := top["projects"]; ok {
@@ -38,17 +38,17 @@ func ScanMCP(claudeJSONPath, claudeDir string) ([]Item, []Warning) {
 							MCPServers json.RawMessage `json:"mcpServers"`
 						}
 						if json.Unmarshal(projRaw, &proj) == nil {
-							items = appendMCPServers(items, proj.MCPServers, "project:"+projPath, claudeJSONPath)
+							items = appendMCPServers(items, proj.MCPServers, "project:"+projPath, configPath, platformID)
 						}
 					}
 				}
 			}
 		}
 	} else if !os.IsNotExist(err) {
-		warns = append(warns, Warning{Path: claudeJSONPath, Msg: err.Error()})
+		warns = append(warns, Warning{Path: configPath, Msg: err.Error()})
 	}
 
-	plugins, pw := installedPlugins(claudeDir)
+	plugins, pw := installedPlugins(configDir)
 	warns = append(warns, pw...)
 	for _, p := range plugins {
 		path := filepath.Join(p.InstallPath, ".mcp.json")
@@ -65,8 +65,9 @@ func ScanMCP(claudeJSONPath, claudeDir string) ([]Item, []Warning) {
 		}
 		// Plugin-shipped servers cannot be pruned per-server; mark not removable.
 		before := len(items)
-		items = appendMCPServers(items, f.MCPServers, "plugin:"+p.FullName, path)
+		items = appendMCPServers(items, f.MCPServers, "plugin:"+p.FullName, path, platformID)
 		for i := before; i < len(items); i++ {
+			items[i].Platform = platformID
 			items[i].Removable = false
 		}
 	}
@@ -75,7 +76,7 @@ func ScanMCP(claudeJSONPath, claudeDir string) ([]Item, []Warning) {
 
 // appendMCPServers expands one mcpServers JSON object into Items.
 // Servers from user/project config are removable.
-func appendMCPServers(items []Item, raw json.RawMessage, source, path string) []Item {
+func appendMCPServers(items []Item, raw json.RawMessage, source, path, platformID string) []Item {
 	if len(raw) == 0 {
 		return items
 	}
@@ -93,6 +94,7 @@ func appendMCPServers(items []Item, raw json.RawMessage, source, path string) []
 		items = append(items, Item{
 			Category:    CatMCP,
 			Name:        name,
+			Platform:    platformID,
 			Source:      source,
 			Path:        path,
 			Description: display,

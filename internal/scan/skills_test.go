@@ -64,7 +64,7 @@ func findItem(items []Item, name string) *Item {
 
 func TestScanSkills(t *testing.T) {
 	home := buildFixtureHome(t)
-	items, warns := ScanSkills(home)
+	items, warns := ScanSkills(home, "test")
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -97,7 +97,7 @@ func TestScanSkills(t *testing.T) {
 }
 
 func TestScanSkillsMissingDirs(t *testing.T) {
-	items, warns := ScanSkills(t.TempDir())
+	items, warns := ScanSkills(t.TempDir(), "test")
 	if len(items) != 0 || len(warns) != 0 {
 		t.Errorf("expected empty results, got %d items %d warns", len(items), len(warns))
 	}
@@ -109,7 +109,7 @@ func TestScanSkillsCorruptRegistry(t *testing.T) {
 		"---\nname: ok\ndescription: still works\n---\n")
 	mustWrite(t, filepath.Join(home, "plugins", "installed_plugins.json"), "{not json")
 
-	items, warns := ScanSkills(home)
+	items, warns := ScanSkills(home, "test")
 	if len(items) != 1 {
 		t.Errorf("personal skills should survive corrupt registry, got %d", len(items))
 	}
@@ -120,7 +120,7 @@ func TestScanSkillsCorruptRegistry(t *testing.T) {
 
 func TestScanAgents(t *testing.T) {
 	home := buildFixtureHome(t)
-	items, warns := ScanAgents(home)
+	items, warns := ScanAgents(home, "test")
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}

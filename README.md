@@ -2,30 +2,31 @@
 
 > Declare 87 skills. Use 4. Reap the rest.
 
-Audit your Claude Code / OpenCode / Cursor / Codex CLI stack — every
-skill, MCP server, agent, hook, and prose file — cross-referenced with
-real session transcripts. Tells you with evidence what you never use and
-what it costs in context tokens every session.
+<p align="center">
+  <img src="docs/reap-demo.gif" alt="reap in action" width="720">
+</p>
 
-```text
-SKILLS (description injected every session)
-NAME                              PLATFORM     SOURCE                    WEIGHT/SESSION  USES  LAST USED    VERDICT
-ecc:plan                          claude-code  plugin:ecc@ecc            ~13 tok          2     2026-06-05   KEEP
-graphify                          claude-code  personal                  ~270 tok         0     —            REAP
-dead-skill                        opencode     personal                  ~100 tok         0     —            REAP
+**Your AI agent loads every skill, MCP server, agent, and rule file
+every single session.** Most of it never gets used. Skillreaper tells
+you — with evidence from your own transcripts — what is bloat and what
+it costs you in context window, latency, and response quality.
+
+**One command. Zero config. Read-only. Reversible quarantine.**
+
+```
+Items scanned:  187
+Items reaped:   142 (76 %)
 ```
 
-**No guesses. No config. Read-only analysis + safe reversible quarantine.**
+---
 
 ## 🔒 Privacy
 
 **skillreaper is 100 % local.** Zero telemetry, zero network, zero
 uploads. It reads your config files and session transcripts on disk,
-computes verdicts, and prints results. That's it. The binary has no
-dependencies and makes no outbound connections.
-
-Your transcript data — tool calls, prompts, file contents — never leaves
-your machine.
+computes verdicts, and prints results. The binary has no dependencies
+and makes no outbound connections. Your transcript data — tool calls,
+prompts, file contents — never leaves your machine.
 
 ## 📦 Install
 
@@ -36,15 +37,12 @@ go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 # npm (requires Node ≥ 18)
 npx skillreaper
 
-# Homebrew (coming soon)
-# brew install thousandflowers/tap/skillreaper
-
-# Binary download
+# Binary download (macOS, Linux, Windows — amd64 + arm64)
 # https://github.com/thousandflowers/skillreaper/releases
 ```
 
-Requires Go ≥ 1.22 for source builds. The npm wrapper downloads a
-pre-built binary and falls back to `go install` if needed.
+Requires Go ≥ 1.22 for source builds. Releases provide pre-built
+binaries for every combination.
 
 ## 🚀 Usage
 
@@ -63,31 +61,25 @@ reap version        # print version
 |---|---|---|
 | `--days N` | 30 | Evidence window in days |
 | `--min-sessions N` | 10 | Minimum sessions for REAP verdict |
-| `--price N` | auto | Input token price ($/MTok, resolved from `--model`) |
-| `--model M` | claude-3-5-sonnet | Model key for price lookup |
+| `--model M` | claude-sonnet-4-6 | Model key for automatic price lookup |
+| `--price N` | auto | Input token price ($/MTok, overrides model lookup) |
 | `--json` | false | Output JSON |
 | `--md` | false | Output Markdown |
 | `--claude-dir` | auto | Override config directory (backward compat) |
 | `--claude-json` | auto | Override config file path |
 | `--yes` | false | Skip confirmation before prune |
 
-**Price resolution**: `--model` sets a known model → price auto-resolves.
-`--price` overrides the model price. When neither is set, falls back to
-Claude 3.5 Sonnet pricing.
-
-### Report columns
-
-Each item shows its **platform** and **source** so you can pinpoint
-where bloat comes from — personal skills, plugin registries, or
-project-level configs.
+**Price resolution**: `--model` auto-resolves to the model's current
+input price. `--price` overrides it. When neither is set, falls back to
+Claude Sonnet 4.6 pricing ($3/MTok input).
 
 ### Output formats
 
-- **Default**: colour-coded terminal table with verdicts
+- **Default**: colour-coded terminal table with REAP/KEEP/REVIEW verdicts
 - **`--md`**: Markdown table (pipeline-friendly)
 - **`--json`**: full structured JSON with timestamps, weights, verdicts
 
-## 🔬 Case study: what a typical audit finds
+## 🔬 Case study: context is the bottleneck
 
 On a real machine with Claude Code + ECC plugin installed for 6 months:
 
@@ -98,51 +90,79 @@ Items reaped:   142 (76 %)
 Items unclear:  22
 ```
 
-The 142 reaped items — skills, agents, unused MCP servers — were costing
-an estimated **~8 000 wasted tokens per session**. With 3 Claude Code
-sessions per day and Claude 3.5 Sonnet pricing ($3/MTok input), that is:
+**The $2.16/month saving** (at 8 000 wasted tokens/session, 3 sessions/day,
+Sonnet 4.6 pricing) is almost incidental. The real impact:
+
+- **142 fewer definitions** the agent reads every session before it can
+  start working. That is 142 skill descriptions, agent configs, and
+  inline instructions that do nothing but push real context out.
+- **Shorter context means lower latency.** A smaller prompt has better
+  cache hit rates and faster first-token generation.
+- **Less noise means better responses.** Every irrelevant skill is a
+  chance for the model to pick the wrong tool, hallucinate a command
+  that does not exist, or waste a turn on something you uninstalled
+  months ago.
+
+> Every reaped skill shortens the model's effective context by the
+> weight of its description and instructions — the agent does not have
+> to read 142 irrelevant definitions before getting to work.
+
+### Real numbers
 
 ```
-8 000 tok × 3 × 30 = 720 000 tok/month → $2.16/month in wasted input
+8 000 wasted tok/session × 90 sessions/month
+  = 720 000 tok/month
+  = ~$2.16/month (Sonnet 4.6)
+  = ~30 pages of instruction text your agent skims every month
 ```
 
-More importantly, every reaped skill shortens the agent's context window
-by the weight of its description and instructions — meaning the agent
-does not have to read 142 irrelevant definitions before getting to work.
+## 🎯 What gets scanned
+
+skillreaper inventories everything your agent loads at startup:
+
+| Layer | What is found | Transcript evidence |
+|---|---|---|
+| Skills (`skills/`) | Personal + plugin skills (.md files) | ✅ tool_use + command-name calls |
+| Agents (`agents/`) | Agent definitions (JSON) | ✅ Task/Agent tool_use blocks |
+| MCP servers (`mcpServers`) | User, project, plugin scopes | ✅ mcp__ tool invocations |
+| Hooks (`hooks/`) | Post-tool-use + stop hooks | ❌ not tracked in transcripts |
+| Prose (`CLAUDE.md`, `rules/`) | Global + project always-loaded docs | ❌ always loaded, no tracking |
+
+### Platform support
+
+| Platform | Inventory | Transcript evidence | Status |
+|---|---|---|---|
+| **Claude Code** | ✅ full | ✅ JSONL | Full |
+| **OpenCode** | ✅ full | ✅ SQLite | Full |
+| **Codex CLI** | ✅ full | ✅ JSONL | Full |
+| **Hermes** | ✅ full | ✅ JSONL | Full |
+| **Cursor** | ✅ inventory | ❌ no transcripts | Inventory only |
+| **OpenClaw** | ✅ inventory | ❌ no transcripts | Inventory only |
+
+Platforms without transcript access still benefit from inventory scans:
+you see everything installed, but evidence-based verdicts (`REAP`/`KEEP`)
+work fully only on platforms with transcript parsing. Items on
+read-only platforms always show `REVIEW`.
 
 ## ⚙️ How it works
 
-**Auto-detection** — probes every well-known config directory:
+**Auto-detection** — probes every well-known config directory at launch.
+Only installed platforms are scanned. No flags needed.
 
-| Platform | Config path | Transcripts | Detection |
-|---|---|---|---|
-| **Claude Code** | `~/.claude/` | `~/.claude/projects/*.jsonl` | ✅ auto |
-| **OpenCode** | `~/.config/opencode/` | `~/.opencode/opencode.db` (SQLite) | ✅ auto |
-| **Cursor** | `~/.cursor/` | — | ✅ auto |
-| **Codex CLI** | `~/.codex/` | `~/.codex/sessions/*.jsonl` | ✅ auto |
-| **OpenClaw** | `~/.openclaw/` | — | ✅ auto |
-| **Hermes** | `~/.hermes/` | `~/.hermes/sessions/*.jsonl` | ✅ auto |
+**Inventory** — within each config directory, `reap` scans skills, agents,
+MCP servers, hooks, and always-loaded prose files.
 
-Only installed platforms are scanned.
-
-**Inventory** — within each config directory, `reap` scans:
-- `skills/` — personal and plugin-supplied skills
-- `agents/` — personal and plugin-supplied agents
-- `mcpServers` from config JSON (user, per-project, and plugin scopes)
-- `hooks` from `settings.json` / `settings.local.json`
-- Always-loaded prose: `CLAUDE.md` (global + project), `rules/*.md`
-
-**Evidence** — parses session transcripts (JSONL or SQLite). Counts
-`tool_use` blocks, command invocations, and tool declarations from init
-messages — all with timestamps.
+**Evidence** — parses session transcripts (JSONL or SQLite depending on
+platform). Counts `tool_use` blocks, `<command-name>` invocations, and
+tool declarations from init messages — all with timestamps.
 
 **Cost estimation** — two sources:
 1. **Character weight**: `ceil(chars / 3.7)` — every skill description,
    agent definition, and prose file has a known character count.
 2. **Dead tool declarations**: init messages list every declared tool.
-   Tools declared in init but never used in any session carry their
-   schema weight as pure overhead. These appear as `dead tool chars` in
-   the report summary.
+   Tools declared in init but never used carry their schema weight as
+   pure overhead. Reported as `init parser: ~N chars of tool descriptions
+   unused per session`.
 
 MCP server schema sizes are unknown without running the server, so their
 weight is marked `?`.
@@ -152,34 +172,39 @@ weight is marked `?`.
 - **REAP** — zero uses in the evidence window (≥ N sessions, installed
   before the window)
 - **KEEP** — used at least once in the window
-- **REVIEW** — insufficient evidence (too few sessions, or recently
-  installed)
+- **REVIEW** — insufficient evidence (too few sessions, recently
+  installed, or platform without transcript parsing)
 
-### Model pricing map
+### Model pricing (June 2026)
 
-`--model` accepts known model names and resolves their input token price
-automatically. Current map:
+`--model` resolves the input token price automatically. Supported models
+and their current input pricing from the respective providers:
 
 | Model | Input price ($/MTok) |
 |---|---|
+| claude-opus-4-8 | 5.00 |
+| claude-opus-4-7 | 5.00 |
+| claude-opus-4-6 | 5.00 |
+| claude-opus-4-5 | 5.00 |
+| claude-sonnet-4-6 | 3.00 |
+| claude-sonnet-4-5 | 3.00 |
+| claude-haiku-4-5 | 1.00 |
 | claude-3-5-sonnet | 3.00 |
-| claude-4-opus | 15.00 |
-| claude-5-sonnet | 3.00 |
+| claude-fable-5 | 10.00 |
+| claude-mythos-5 | 10.00 |
 | gpt-4o | 2.50 |
 | gpt-4o-mini | 0.15 |
 | o3-mini | 1.10 |
 
-The map lives in [`internal/cost/`](internal/cost/cost.go) — one-file
-patch to add a new model.
+Default: `claude-sonnet-4-6` (the most widely used Claude model as of
+June 2026). Add new models by editing
+[`internal/cost/cost.go`](internal/cost/cost.go) — one file, one patch.
 
 ### Prune is reversible quarantine
 
-`reap prune` moves files to `<config-dir>/reaped/` with a recovery
+`reap prune` moves files to `<config-dir>/reaped/` with a versioned
 manifest. Nothing is ever deleted. `reap restore --all` puts everything
-back.
-
-The manifest (`reaped/manifest.json`) includes a version field and
-quarantine timestamp for future format migrations.
+back exactly where it was.
 
 ```json
 {
@@ -187,12 +212,12 @@ quarantine timestamp for future format migrations.
   "quarantined_at": "2026-06-10T15:30:00Z",
   "entries": [
     {
-      "id": "...",
+      "id": "a1b2c3d4",
       "category": "skill",
-      "name": "dead-skill",
-      "from": "~/.claude/skills/dead-skill",
-      "to": "~/.claude/reaped/skills/dead-skill",
-      "timestamp": "..."
+      "name": "graphify",
+      "from": "~/.claude/skills/graphify",
+      "to": "~/.claude/reaped/skills/graphify",
+      "timestamp": "2026-06-10T15:30:00Z"
     }
   ]
 }
@@ -222,6 +247,7 @@ internal/
   prune/             — reversible quarantine + restore + manifest
   cost/              — model pricing map + token/money helpers
 npm/                 — npm wrapper (npx skillreaper)
+docs/                — screenshots, demo assets
 ```
 
 ## ⚖ License

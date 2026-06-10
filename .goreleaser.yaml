@@ -1,0 +1,53 @@
+version: 2
+
+project_name: skillreaper
+
+env:
+  - GO_VERSION=1.22
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: reap
+    main: ./cmd/reap
+    binary: skillreaper
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.Version={{ .Version }}
+    flags:
+      - -trimpath
+
+archives:
+  - formats: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - none*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+release:
+  github:
+    owner: thousandflowers
+    name: skillreaper
+  draft: false
+  prerelease: false

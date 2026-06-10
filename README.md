@@ -41,6 +41,9 @@ prompts, file contents — never leaves your machine.
 # macOS — Homebrew
 brew install thousandflowers/tap/skillreaper
 
+# npm / npx (any platform, requires Node ≥ 18)
+npx skillreaper
+
 # Go (any platform)
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 
@@ -50,6 +53,56 @@ go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 
 Pre-built binaries available for every platform. No runtime
 dependencies — single static binary.
+
+## 🎮 Tutorial (3 minuti)
+
+### 1. Vedi cosa sta caricando il tuo agente
+
+```bash
+reap
+```
+
+Output tipico:
+
+```
+Items scanned:  187
+Items with evidence:  165
+Items reaped:   142 (76 %)
+```
+
+Scorri la tabella: ogni riga è una skill/agente/MCP che il tuo agente
+carica a ogni sessione. Colonna `VERDICT` dice se è REAP (mai usata),
+KEEP (usata), o REVIEW (pochi dati).
+
+### 2. Capisci il costo
+
+Ogni skill ha una colonna `WEIGHT/SESSION` — caratteri che consumano
+contesto ogni volta. Somma quelle delle REAP per vedere quanto spazio
+sprecato recuperi.
+
+### 3. Metti in quarantena gli inutilizzati
+
+```bash
+reap prune
+```
+
+Skillreaper sposta i file in `<config>/reaped/` — non cancella niente.
+Ti chiede conferma prima. Se cambi idea:
+
+```bash
+reap restore --all
+```
+
+Tutto torna esattamente com'era. Punto.
+
+### 4. Verifica il risultato
+
+Rilancia `reap` — gli stessi item ora mostrano `(reaped)` nel nome.
+Hai recuperato contesto senza perdere niente.
+
+> **Consiglio**: aspetta almeno 10 sessioni di lavoro prima di prune.
+> skillreaper ha bisogno di dati per decidere con sicurezza.
+> Se un item è in dubbio (REVIEW), lascialo stare.
 
 ## 🚀 Usage
 

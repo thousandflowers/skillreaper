@@ -1,9 +1,9 @@
 {
   "name": "skillreaper",
-  "version": "0.2.0",
-  "description": "Audit and prune unused Claude Code skills, MCP servers, hooks, and agents",
+  "version": "0.1.2",
+  "description": "Audit and prune unused AI agent skills, MCP servers, hooks, and agents",
   "bin": {
-    "skillreaper": "./bin/skillreaper"
+    "skillreaper": "bin/skillreaper.js"
   },
   "scripts": {
     "postinstall": "node install.js"
@@ -17,7 +17,8 @@
     "claude-code",
     "prune",
     "audit",
-    "cleanup"
+    "cleanup",
+    "ai-agents"
   ],
   "author": "Eugenio Z.",
   "license": "MIT",

@@ -12,7 +12,7 @@ import (
 // CLAUDE.md. These are injected verbatim into every session, so
 // DescChars is the full file size. They are report-only (pruning
 // prose means editing it, which stays a human decision).
-func ScanProse(claudeDir, cwd string) ([]Item, []Warning) {
+func ScanProse(dir, cwd, platformID string) ([]Item, []Warning) {
 	var items []Item
 	var warns []Warning
 
@@ -24,6 +24,7 @@ func ScanProse(claudeDir, cwd string) ([]Item, []Warning) {
 		items = append(items, Item{
 			Category:  CatProse,
 			Name:      displayPath(path),
+			Platform:  platformID,
 			Source:    source,
 			Path:      path,
 			DescChars: int(info.Size()),
@@ -31,9 +32,9 @@ func ScanProse(claudeDir, cwd string) ([]Item, []Warning) {
 		})
 	}
 
-	addFile(filepath.Join(claudeDir, "CLAUDE.md"), "global")
+	addFile(filepath.Join(dir, "CLAUDE.md"), "global")
 
-	rulesDir := filepath.Join(claudeDir, "rules")
+	rulesDir := filepath.Join(dir, "rules")
 	err := filepath.WalkDir(rulesDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") {
 			return nil

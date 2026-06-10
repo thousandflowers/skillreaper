@@ -20,7 +20,7 @@ func TestScanMCP(t *testing.T) {
 		}
 	}`)
 
-	items, warns := ScanMCP(claudeJSON, home)
+	items, warns := ScanMCP(claudeJSON, home, "test")
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -52,7 +52,7 @@ func TestScanMCP(t *testing.T) {
 
 func TestScanMCPMissingFile(t *testing.T) {
 	home := t.TempDir()
-	items, warns := ScanMCP(filepath.Join(home, "nope.json"), home)
+	items, warns := ScanMCP(filepath.Join(home, "nope.json"), home, "test")
 	if len(items) != 0 || len(warns) != 0 {
 		t.Errorf("expected empty, got %d items %d warns", len(items), len(warns))
 	}
@@ -62,7 +62,7 @@ func TestScanMCPCorrupt(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "bad.json")
 	mustWrite(t, path, "{nope")
-	_, warns := ScanMCP(path, home)
+	_, warns := ScanMCP(path, home, "test")
 	if len(warns) != 1 {
 		t.Errorf("expected 1 warning, got %d", len(warns))
 	}

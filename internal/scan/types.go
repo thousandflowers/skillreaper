@@ -1,7 +1,7 @@
-// Package scan inventories the context payload of a Claude Code
+// Package scan inventories the context payload of an AI coding agent
 // installation: skills, agents, MCP servers, hooks, and always-loaded
-// prose (CLAUDE.md, rules). All scanners take explicit root paths so
-// tests can run against fixture trees.
+// prose. All scanners take explicit root paths so tests can run against
+// fixture trees.
 package scan
 
 import "time"
@@ -20,7 +20,8 @@ const (
 // Item is one entry in the agent-stack inventory.
 type Item struct {
 	Category    Category
-	Name        string // invocation key: "graphify", "ecc:plan", mcp server name, "SessionStart#0", file path
+	Name        string // invocation key: "graphify", "ecc:plan", mcp server name
+	Platform    string   // platform ID: "claude-code", "opencode", "cursor", etc.
 	Source      string // "personal", "plugin:<name@mkt>", "user-config", "project:<path>"
 	Path        string
 	Description string    // text injected into context (skills/agents) or display string

@@ -69,7 +69,7 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		}
 		fmt.Fprintf(w, "\n%s\n", paint(cBold, sec.title))
 		tw := newTable(w)
-		tw.row("NAME", "SOURCE", "WEIGHT/SESSION", "USES", "LAST USED", "VERDICT")
+		tw.row("NAME", "PLATFORM", "SOURCE", "WEIGHT/SESSION", "USES", "LAST USED", "VERDICT")
 		for _, row := range rows {
 			weight := fmt.Sprintf("~%d tok", row.Tokens)
 			if row.Category == scan.CatMCP || row.Category == scan.CatHook {
@@ -89,7 +89,7 @@ func RenderText(w io.Writer, r *Report, color bool) {
 				uses = fmt.Sprintf("%d", row.Uses)
 				last = humanTime(row.LastUsed)
 			}
-			tw.row(truncate(row.Name, 36), truncate(row.Source, 28), weight, uses, last, verdict)
+			tw.row(truncate(row.Name, 32), truncate(platformLabel(row.Platform), 12), truncate(row.Source, 24), weight, uses, last, verdict)
 		}
 		tw.flush()
 	}
@@ -117,8 +117,8 @@ func RenderMarkdown(w io.Writer, r *Report) {
 			continue
 		}
 		fmt.Fprintf(w, "\n## %s\n\n", sec.title)
-		fmt.Fprintln(w, "| Name | Source | Weight/session | Uses | Last used | Verdict |")
-		fmt.Fprintln(w, "|---|---|---|---|---|---|")
+		fmt.Fprintln(w, "| Name | Platform | Source | Weight/session | Uses | Last used | Verdict |")
+		fmt.Fprintln(w, "|---|---|---|---|---|---|---|")
 		for _, row := range rows {
 			weight := fmt.Sprintf("~%d tok", row.Tokens)
 			if row.Category == scan.CatMCP || row.Category == scan.CatHook {
@@ -129,10 +129,17 @@ func RenderMarkdown(w io.Writer, r *Report) {
 				uses = fmt.Sprintf("%d", row.Uses)
 				last = humanTime(row.LastUsed)
 			}
-			fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s |\n",
-				row.Name, row.Source, weight, uses, last, row.Verdict)
+			fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s |\n",
+				row.Name, platformLabel(row.Platform), row.Source, weight, uses, last, row.Verdict)
 		}
 	}
+}
+
+func platformLabel(id string) string {
+	if id == "" {
+		return "—"
+	}
+	return id
 }
 
 func filterRows(rows []Row, cat scan.Category) []Row {

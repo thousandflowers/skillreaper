@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/report"
 	"github.com/thousandflowers/skillreaper/internal/scan"
@@ -101,43 +102,93 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func fillDefaults(opts *options) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
+	if opts.claudeDir != "" {
+		return nil
 	}
-	if opts.claudeDir == "" {
-		opts.claudeDir = filepath.Join(home, ".claude")
-	}
-	if opts.claudeJSON == "" {
-		opts.claudeJSON = filepath.Join(home, ".claude.json")
+	// Auto-detect Claude Code dir for backward compat (prune/restore use this).
+	detected := platform.Detect()
+	for _, p := range detected {
+		if p.ID == platform.ClaudeCode {
+			opts.claudeDir = p.ConfigDirAbs
+			opts.claudeJSON = p.ConfigFileAbs
+			return nil
+		}
 	}
 	return nil
 }
 
-// gather runs every scanner plus the transcript parser and joins the
-// result into a report.
+// gather runs every scanner plus transcript parsers across all
+// detected platforms and joins the result into a report.
 func gather(opts options) (*report.Report, error) {
-	if _, err := os.Stat(opts.claudeDir); err != nil {
-		return nil, fmt.Errorf("no Claude Code installation found at %s", opts.claudeDir)
+	var platforms []platform.Info
+
+	if opts.claudeDir != "" {
+		// Override mode: --claude-dir was provided (test fixture or manual).
+		p := platform.Info{
+			ID:             platform.ClaudeCode,
+			Name:           "Claude Code",
+			ConfigDirAbs:   opts.claudeDir,
+			ConfigFileAbs:  opts.claudeJSON,
+			TranscriptType: "jsonl",
+			TranscriptDirs: []string{filepath.Join(opts.claudeDir, "projects")},
+		}
+		if _, err := os.Stat(p.ConfigDirAbs); err != nil {
+			return nil, fmt.Errorf("no Claude Code installation found at %s", opts.claudeDir)
+		}
+		platforms = append(platforms, p)
+	} else {
+		platforms = platform.Detect()
+		if len(platforms) == 0 {
+			return nil, fmt.Errorf("no supported AI coding platform found")
+		}
 	}
 
 	var items []scan.Item
 	var warns []scan.Warning
+	cwd, _ := os.Getwd()
 	collect := func(i []scan.Item, w []scan.Warning) {
 		items = append(items, i...)
 		warns = append(warns, w...)
 	}
-	collect(scan.ScanSkills(opts.claudeDir))
-	collect(scan.ScanAgents(opts.claudeDir))
-	collect(scan.ScanMCP(opts.claudeJSON, opts.claudeDir))
-	collect(scan.ScanHooks(opts.claudeDir))
-	cwd, _ := os.Getwd()
-	collect(scan.ScanProse(opts.claudeDir, cwd))
+
+	for _, p := range platforms {
+		dir := p.ConfigDirAbs
+		pid := string(p.ID)
+
+		collect(scan.ScanSkills(dir, pid))
+		collect(scan.ScanAgents(dir, pid))
+		collect(scan.ScanMCP(p.ConfigFileAbs, dir, pid))
+		collect(scan.ScanHooks(dir, pid))
+		collect(scan.ScanProse(dir, cwd, pid))
+
+		for _, proseDir := range p.ProseDirs {
+			if info, err := os.Stat(proseDir); err == nil && info.IsDir() {
+				collect(scan.ScanProse(proseDir, "", pid))
+			}
+		}
+	}
 
 	cutoff := time.Now().AddDate(0, 0, -opts.days)
-	st, err := usage.Parse(filepath.Join(opts.claudeDir, "projects"), cutoff, opts.days)
-	if err != nil {
-		return nil, err
+
+	var st *usage.Stats
+	for _, p := range platforms {
+		if p.TranscriptType != "jsonl" || len(p.TranscriptDirs) == 0 {
+			continue
+		}
+		for _, td := range p.TranscriptDirs {
+			parsed, err := usage.Parse(td, cutoff, opts.days)
+			if err != nil {
+				continue
+			}
+			if st == nil {
+				st = parsed
+			} else {
+				mergeStats(st, parsed)
+			}
+		}
+	}
+	if st == nil {
+		st = usage.NewStats(opts.days)
 	}
 
 	return report.Build(items, st, warns, report.Opts{
@@ -145,6 +196,25 @@ func gather(opts options) (*report.Report, error) {
 		PricePerMTok: opts.price,
 		Cutoff:       cutoff,
 	}), nil
+}
+
+// mergeStats combines two usage stats into dst.
+func mergeStats(dst, src *usage.Stats) {
+	dst.Sessions += src.Sessions
+	dst.FilesScanned += src.FilesScanned
+	dst.MalformedLines += src.MalformedLines
+	for cat, uses := range src.Uses {
+		for key, count := range uses {
+			dst.Uses[cat][key] += count
+		}
+	}
+	for cat, lasts := range src.Last {
+		for key, ts := range lasts {
+			if ts.After(dst.Last[cat][key]) {
+				dst.Last[cat][key] = ts
+			}
+		}
+	}
 }
 
 func cmdReport(opts options, stdout, stderr io.Writer) int {

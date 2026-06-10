@@ -1,0 +1,32 @@
+{
+  "name": "skillreaper",
+  "version": "0.2.0",
+  "description": "Audit and prune unused Claude Code skills, MCP servers, hooks, and agents",
+  "bin": {
+    "skillreaper": "./bin/skillreaper"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thousandflowers/skillreaper.git"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "prune",
+    "audit",
+    "cleanup"
+  ],
+  "author": "Eugenio Z.",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/thousandflowers/skillreaper/issues"
+  },
+  "homepage": "https://github.com/thousandflowers/skillreaper#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "type": "module"
+}

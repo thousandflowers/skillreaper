@@ -61,6 +61,10 @@ func RenderText(w io.Writer, r *Report, color bool) {
 	shock := fmt.Sprintf("%d items never used · ~%d dead tokens injected per session · ~$%.2f/month at your session rate",
 		r.DeadCount, r.DeadTokensPerSession, r.MoneyPerMonth)
 	fmt.Fprintf(w, "\n%s\n", paint(cBold+cRed, shock))
+	if r.DeadToolChars > 0 {
+		fmt.Fprintf(w, "  (init parser: ~%d chars of tool descriptions unused per session)\n",
+			r.DeadToolChars)
+	}
 
 	for _, sec := range sectionTitles {
 		rows := filterRows(r.Rows, sec.cat)

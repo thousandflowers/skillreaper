@@ -32,6 +32,13 @@ type Stats struct {
 	WindowDays     int
 	Uses           map[scan.Category]map[string]int
 	Last           map[scan.Category]map[string]time.Time
+
+	// DeadToolChars is the total estimated prompt-injection size of all
+	// tools declared in init blocks that were never invoked during the
+	// session. This captures the "dead weight" of MCP server schemas,
+	// skill descriptions, and agent definitions that the model receives
+	// every session but never uses.
+	DeadToolChars int
 }
 
 // NewStats returns an empty Stats with initialized maps.
@@ -59,11 +66,23 @@ func (s *Stats) record(cat scan.Category, key string, ts time.Time) {
 
 // transcript entry shapes (only the fields we need).
 type entry struct {
-	Type      string `json:"type"`
-	Timestamp string `json:"timestamp"`
+	Type      string          `json:"type"`
+	Timestamp string          `json:"timestamp"`
 	Message   struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
+	Init *initPayload `json:"init,omitempty"`
+}
+
+type initPayload struct {
+	Model string     `json:"model"`
+	Tools []toolDecl `json:"tools"`
+}
+
+type toolDecl struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"input_schema"`
 }
 
 type contentBlock struct {
@@ -97,6 +116,10 @@ func Parse(projectsDir string, cutoff time.Time, windowDays int) (*Stats, error)
 
 // parseFile reads one transcript. Unreadable files or lines count as
 // malformed rather than aborting the whole scan.
+//
+// It tracks declared tools from the init block and cross-references
+// them with actual tool_use invocations to compute dead-tool weight
+// (tools the model sees every session but never invokes).
 func parseFile(path string, st *Stats) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -105,21 +128,37 @@ func parseFile(path string, st *Stats) {
 	}
 	defer f.Close()
 
+	declared := map[string]int{}
+	used := map[string]bool{}
+	parsedInit := false
+
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 256*1024), maxLineBytes)
 	for sc.Scan() {
 		line := sc.Bytes()
-		hasToolUse := bytes.Contains(line, []byte(`"tool_use"`))
-		hasCommand := bytes.Contains(line, []byte(`<command-name>`))
-		if !hasToolUse && !hasCommand {
-			continue
-		}
+
 		var e entry
 		if err := json.Unmarshal(line, &e); err != nil {
-			st.MalformedLines++
+			if bytes.Contains(line, []byte(`"tool_use"`)) || bytes.Contains(line, []byte(`<command-name>`)) {
+				st.MalformedLines++
+			}
 			continue
 		}
 		ts, _ := time.Parse(time.RFC3339, e.Timestamp)
+
+		if !parsedInit && e.Type == "init" && e.Init != nil {
+			parsedInit = true
+			for _, t := range e.Init.Tools {
+				w := len(t.Name) + len(t.Description) + len(t.InputSchema)
+				if w < len(t.Name) {
+					w = len(t.Name)
+				}
+				declared[t.Name] = w
+			}
+		}
+
+		hasToolUse := e.Type == "assistant" && bytes.Contains(line, []byte(`"tool_use"`))
+		hasCommand := bytes.Contains(line, []byte(`<command-name>`))
 
 		if hasCommand {
 			for _, m := range commandNameRe.FindAllSubmatch(line, -1) {
@@ -131,12 +170,22 @@ func parseFile(path string, st *Stats) {
 		}
 		var blocks []contentBlock
 		if err := json.Unmarshal(e.Message.Content, &blocks); err != nil {
-			continue // content can be a plain string; not malformed
+			continue
 		}
 		for _, b := range blocks {
 			if b.Type != "tool_use" {
 				continue
 			}
+			used[b.Name] = true
+			if strings.HasPrefix(b.Name, "mcp__") {
+				rest := b.Name[len("mcp__"):]
+				if i := strings.Index(rest, "__"); i > 0 {
+					used[rest[:i]] = true
+				} else {
+					used[rest] = true
+				}
+			}
+
 			switch {
 			case b.Name == "Skill":
 				var in struct {
@@ -164,5 +213,11 @@ func parseFile(path string, st *Stats) {
 	}
 	if sc.Err() != nil {
 		st.MalformedLines++
+	}
+
+	for name, weight := range declared {
+		if !used[name] {
+			st.DeadToolChars += weight
+		}
 	}
 }

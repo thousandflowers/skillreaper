@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thousandflowers/skillreaper/internal/cost"
 	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/report"
@@ -39,6 +40,7 @@ type options struct {
 	days        int
 	minSessions int
 	price       float64
+	model       string
 	asJSON      bool
 	asMarkdown  bool
 	noColor     bool
@@ -63,7 +65,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var opts options
 	fs.IntVar(&opts.days, "days", 30, "evidence window in days")
 	fs.IntVar(&opts.minSessions, "min-sessions", 10, "sessions required before REAP verdicts")
-	fs.Float64Var(&opts.price, "price", 3.0, "input price per million tokens (USD)")
+	fs.StringVar(&opts.model, "model", "", "model ID for pricing lookup (overrides --price)")
+	fs.Float64Var(&opts.price, "price", 0, "input price per million tokens (USD) — used when --model is unknown or unset")
 	fs.BoolVar(&opts.asJSON, "json", false, "output JSON")
 	fs.BoolVar(&opts.asMarkdown, "md", false, "output Markdown")
 	fs.BoolVar(&opts.noColor, "no-color", false, "disable colors")
@@ -102,16 +105,25 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func fillDefaults(opts *options) error {
-	if opts.claudeDir != "" {
-		return nil
+	if opts.claudeDir == "" {
+		detected := platform.Detect()
+		for _, p := range detected {
+			if p.ID == platform.ClaudeCode {
+				opts.claudeDir = p.ConfigDirAbs
+				opts.claudeJSON = p.ConfigFileAbs
+				break
+			}
+		}
 	}
-	// Auto-detect Claude Code dir for backward compat (prune/restore use this).
-	detected := platform.Detect()
-	for _, p := range detected {
-		if p.ID == platform.ClaudeCode {
-			opts.claudeDir = p.ConfigDirAbs
-			opts.claudeJSON = p.ConfigFileAbs
-			return nil
+	// Price: --model lookup takes priority, then --price, then default.
+	if opts.model != "" {
+		if p, ok := cost.LookupPrice(opts.model); ok {
+			opts.price = p
+		}
+	}
+	if opts.price == 0 {
+		if p, ok := cost.LookupPrice(cost.DefaultModel); ok {
+			opts.price = p
 		}
 	}
 	return nil

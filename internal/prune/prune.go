@@ -16,7 +16,18 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
-// Entry records one reversible prune action in the manifest.
+const manifestVersion = 1
+
+// Manifest wraps the list of prune entries together with format
+// versioning. When the manifest format changes, bump manifestVersion
+// and handle migration in LoadManifest.
+type Manifest struct {
+	Version       int       `json:"version"`
+	QuarantinedAt time.Time `json:"quarantined_at"`
+	Entries       []Entry   `json:"entries"`
+}
+
+// Entry records one reversible prune action.
 type Entry struct {
 	ID         string          `json:"id"`
 	Category   string          `json:"category"`
@@ -36,6 +47,8 @@ func manifestPath(claudeDir string) string {
 }
 
 // LoadManifest returns all recorded prune actions (empty when none).
+// Transparently handles the legacy flat-array format (v0) by wrapping
+// into a Manifest on read.
 func LoadManifest(claudeDir string) ([]Entry, error) {
 	b, err := os.ReadFile(manifestPath(claudeDir))
 	if err != nil {
@@ -44,18 +57,27 @@ func LoadManifest(claudeDir string) ([]Entry, error) {
 		}
 		return nil, err
 	}
-	var entries []Entry
-	if err := json.Unmarshal(b, &entries); err != nil {
+	var m Manifest
+	if err := json.Unmarshal(b, &m); err == nil && m.Version > 0 {
+		return m.Entries, nil
+	}
+	var legacy []Entry
+	if err := json.Unmarshal(b, &legacy); err != nil {
 		return nil, fmt.Errorf("corrupt manifest %s: %w", manifestPath(claudeDir), err)
 	}
-	return entries, nil
+	return legacy, nil
 }
 
 func saveManifest(claudeDir string, entries []Entry) error {
 	if err := os.MkdirAll(reapedDir(claudeDir), 0o755); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(entries, "", "  ")
+	m := Manifest{
+		Version:       manifestVersion,
+		QuarantinedAt: time.Now(),
+		Entries:       entries,
+	}
+	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}

@@ -37,6 +37,7 @@ type Report struct {
 	Rows                 []Row
 	DeadCount            int
 	DeadTokensPerSession int
+	DeadToolChars        int // from init-based tool-declaration tracking
 	SessionsPerMonth     int
 	MoneyPerMonth        float64
 	Warnings             []scan.Warning
@@ -50,6 +51,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		WindowDays:     st.WindowDays,
 		Sessions:       st.Sessions,
 		MalformedLines: st.MalformedLines,
+		DeadToolChars:  st.DeadToolChars,
 		Warnings:       warns,
 	}
 	if st.WindowDays > 0 {

@@ -129,7 +129,7 @@ func TestRenderMarkdown(t *testing.T) {
 	var buf bytes.Buffer
 	RenderMarkdown(&buf, fixtureReport())
 	out := buf.String()
-	for _, want := range []string{"| dead-skill |", "REAP(unused)", "# skillreaper report"} {
+	for _, want := range []string{"| dead-skill |", "| REAP |", "unused |", "# skillreaper report"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("markdown output missing %q", want)
 		}

@@ -182,8 +182,8 @@ func TestRunKeep(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("report exit = %d", code)
 	}
-	if !strings.Contains(out.String(), "deadskill (kept)") {
-		t.Errorf("report should show (kept), got: %s", out.String())
+	if !strings.Contains(out.String(), "KEEP · keep") {
+		t.Errorf("report should show KEEP · keep, got: %s", out.String())
 	}
 	if !strings.Contains(out.String(), "KEEP") {
 		t.Errorf("deadskill should have KEEP verdict")

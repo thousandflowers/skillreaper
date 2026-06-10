@@ -88,12 +88,16 @@ func RenderText(w io.Writer, r *Report, color bool) {
 			case VerdictReview:
 				verdict = paint(cYell, verdict)
 			}
+			name := row.Name
+			if row.Kept {
+				name += " (kept)"
+			}
 			uses, last := "-", "-"
 			if row.Verdict != VerdictInfo {
 				uses = fmt.Sprintf("%d", row.Uses)
 				last = humanTime(row.LastUsed)
 			}
-			tw.row(truncate(row.Name, 32), truncate(platformLabel(row.Platform), 12), truncate(row.Source, 24), weight, uses, last, verdict)
+			tw.row(truncate(name, 32), truncate(platformLabel(row.Platform), 12), truncate(row.Source, 24), weight, uses, last, verdict)
 		}
 		tw.flush()
 	}

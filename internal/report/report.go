@@ -17,6 +17,7 @@ type Opts struct {
 	MinSessions  int
 	PricePerMTok float64
 	Cutoff       time.Time
+	KeepSet      map[string]bool // items manually marked as keep
 }
 
 // Row is one inventory item with its evidence and verdict.
@@ -25,7 +26,8 @@ type Row struct {
 	Uses     int
 	LastUsed time.Time
 	Verdict  string
-	Tokens   int // estimated per-session weight
+	Tokens   int       // estimated per-session weight
+	Kept     bool      // user manually marked this as keep
 }
 
 // Report is the full result of a scan.
@@ -58,12 +60,20 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		r.SessionsPerMonth = st.Sessions * 30 / st.WindowDays
 	}
 
+	itemKey := func(it scan.Item) string {
+		return strings.ToLower(string(it.Category) + ":" + it.Name)
+	}
+
 	for _, it := range items {
 		row := Row{Item: it, Tokens: cost.Tokens(it.DescChars)}
 		switch it.Category {
 		case scan.CatSkill, scan.CatAgent, scan.CatMCP:
 			row.Uses, row.LastUsed = lookupUses(st, it)
 			row.Verdict = Verdict(row.Uses, st.Sessions, opts.MinSessions, it.InstalledAt, opts.Cutoff)
+			if opts.KeepSet != nil && opts.KeepSet[itemKey(it)] {
+				row.Verdict = VerdictKeep
+				row.Kept = true
+			}
 		default:
 			row.Verdict = VerdictInfo
 		}

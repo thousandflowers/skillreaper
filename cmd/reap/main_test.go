@@ -159,3 +159,70 @@ func TestRunVersion(t *testing.T) {
 		t.Errorf("version output = %q", out.String())
 	}
 }
+
+func TestRunKeep(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	code := run([]string{
+		"keep", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "skill:deadskill",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("keep exit = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "marked as keep") {
+		t.Errorf("output = %q", out.String())
+	}
+
+	out.Reset()
+	code = run([]string{
+		"--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("report exit = %d", code)
+	}
+	if !strings.Contains(out.String(), "deadskill (kept)") {
+		t.Errorf("report should show (kept), got: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "KEEP") {
+		t.Errorf("deadskill should have KEEP verdict")
+	}
+}
+
+func TestRunKeepList(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var discard bytes.Buffer
+	_ = run([]string{
+		"keep", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "skill:deadskill",
+	}, strings.NewReader(""), &discard, &discard)
+
+	var out, errOut bytes.Buffer
+	code := run([]string{
+		"keep", "--list", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("keep --list exit = %d", code)
+	}
+	if !strings.Contains(out.String(), "skill:deadskill") {
+		t.Errorf("list output = %q", out.String())
+	}
+}
+
+func TestRunPruneSkipsKept(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+
+	var discard bytes.Buffer
+	_ = run([]string{
+		"keep", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "skill:deadskill",
+	}, strings.NewReader(""), &discard, &discard)
+
+	var out, errOut bytes.Buffer
+	_ = run([]string{
+		"prune", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--yes",
+	}, strings.NewReader(""), &out, &errOut)
+	if strings.Contains(out.String(), "deadskill") {
+		t.Errorf("kept skill deadskill should not be pruned, got: %s", out.String())
+	}
+}

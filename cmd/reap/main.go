@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/cost"
+	"github.com/thousandflowers/skillreaper/internal/override"
 	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/report"
@@ -29,6 +30,9 @@ const usageText = `reap — evidence-based pruning for your Claude Code agent st
 Usage:
   reap [flags]              scan and report (read-only)
   reap prune [flags]        quarantine unused items (reversible)
+  reap keep <name>          mark item as keep (never prune)
+  reap keep --list          show all kept items
+  reap keep --remove <name>  remove item from keep list
   reap restore <id>|--all   undo prune actions
   reap version              print version
 
@@ -45,6 +49,8 @@ type options struct {
 	noColor     bool
 	yes         bool
 	all         bool
+	listKeep    bool
+	removeKeep  string
 	claudeDir   string
 	claudeJSON  string
 }
@@ -71,6 +77,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&opts.noColor, "no-color", false, "disable colors")
 	fs.BoolVar(&opts.yes, "yes", false, "prune: apply without confirmation")
 	fs.BoolVar(&opts.all, "all", false, "restore: undo every prune action")
+	fs.BoolVar(&opts.listKeep, "list", false, "keep: list all kept items")
+	fs.StringVar(&opts.removeKeep, "remove", "", "keep: remove a kept item")
 	fs.StringVar(&opts.claudeDir, "claude-dir", "", "Claude Code directory (default ~/.claude)")
 	fs.StringVar(&opts.claudeJSON, "claude-json", "", "Claude config file (default ~/.claude.json)")
 	fs.Usage = func() {
@@ -89,6 +97,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch cmd {
 	case "":
 		return cmdReport(opts, stdout, stderr)
+	case "keep":
+		if opts.listKeep {
+			return cmdKeepList(opts, stdout, stderr)
+		}
+		if opts.removeKeep != "" {
+			return cmdKeepRemove(opts, opts.removeKeep, stdout, stderr)
+		}
+		return cmdKeep(opts, fs.Args(), stdout, stderr)
 	case "prune":
 		return cmdPrune(opts, stdin, stdout, stderr)
 	case "restore":
@@ -202,10 +218,13 @@ func gather(opts options) (*report.Report, error) {
 		st = usage.NewStats(opts.days)
 	}
 
+	keepSet, _ := override.KeepSet(opts.claudeDir)
+
 	return report.Build(items, st, warns, report.Opts{
 		MinSessions:  opts.minSessions,
 		PricePerMTok: opts.price,
 		Cutoff:       cutoff,
+		KeepSet:      keepSet,
 	}), nil
 }
 
@@ -258,6 +277,48 @@ func colorEnabled(opts options, w io.Writer) bool {
 	}
 	info, err := f.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func cmdKeepRemove(opts options, name string, stdout, stderr io.Writer) int {
+	if err := override.RemoveKeep(opts.claudeDir, name); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "removed keep: %s\n", name)
+	return 0
+}
+
+func cmdKeepList(opts options, stdout, stderr io.Writer) int {
+	items, err := override.ListKeep(opts.claudeDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if len(items) == 0 {
+		fmt.Fprintln(stdout, "No items kept. Mark items with: reap keep <name>")
+		return 0
+	}
+	fmt.Fprintln(stdout, "Kept items (never pruned):")
+	for _, item := range items {
+		fmt.Fprintf(stdout, "  %s\n", item)
+	}
+	return 0
+}
+
+func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: reap keep <name>")
+		return 2
+	}
+
+	itemKey := strings.ToLower(args[0])
+	if err := override.AddKeep(opts.claudeDir, itemKey); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "marked as keep: %s\n", itemKey)
+	fmt.Fprintf(stdout, "This item will be excluded from prune. Undo: reap keep --remove %s\n", itemKey)
+	return 0
 }
 
 func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {

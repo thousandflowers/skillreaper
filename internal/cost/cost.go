@@ -10,8 +10,7 @@ package cost
 // When a provider releases a new model, just add its pricing here
 // instead of changing core logic.
 var ModelPricing = map[string]float64{
-	// Claude — current (June 2026)
-	"claude-opus-4-8":   5.0,
+	// Claude — current (June 2026, verified from api docs)
 	"claude-opus-4-7":   5.0,
 	"claude-opus-4-6":   5.0,
 	"claude-opus-4-5":   5.0,
@@ -19,10 +18,6 @@ var ModelPricing = map[string]float64{
 	"claude-sonnet-4-5": 3.0,
 	"claude-haiku-4-5":  1.0,
 	"claude-3-5-sonnet": 3.0,
-
-	// Claude — frontier
-	"claude-fable-5":   10.0,
-	"claude-mythos-5":  10.0,
 
 	// OpenAI
 	"gpt-4o":      2.50,

@@ -3,6 +3,13 @@
 > Declare 87 skills. Use 4. Reap the rest.
 
 <p align="center">
+  <a href="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml"><img src="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/v/release/thousandflowers/skillreaper" alt="Release"></a>
+  <a href="https://github.com/thousandflowers/skillreaper/issues"><img src="https://img.shields.io/github/issues/thousandflowers/skillreaper" alt="Issues"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
+</p>
+
+<p align="center">
   <img src="docs/reap-demo.gif" alt="reap in action" width="720">
 </p>
 
@@ -180,25 +187,23 @@ weight is marked `?`.
 `--model` resolves the input token price automatically. Supported models
 and their current input pricing from the respective providers:
 
-| Model | Input price ($/MTok) |
-|---|---|
-| claude-opus-4-8 | 5.00 |
-| claude-opus-4-7 | 5.00 |
-| claude-opus-4-6 | 5.00 |
-| claude-opus-4-5 | 5.00 |
-| claude-sonnet-4-6 | 3.00 |
-| claude-sonnet-4-5 | 3.00 |
-| claude-haiku-4-5 | 1.00 |
-| claude-3-5-sonnet | 3.00 |
-| claude-fable-5 | 10.00 |
-| claude-mythos-5 | 10.00 |
-| gpt-4o | 2.50 |
-| gpt-4o-mini | 0.15 |
-| o3-mini | 1.10 |
+| Model | Input price ($/MTok) | Source |
+|---|---|---|
+| claude-opus-4-7 | 5.00 | [platform.claude.com](https://platform.claude.com) |
+| claude-opus-4-6 | 5.00 | [platform.claude.com](https://platform.claude.com) |
+| claude-opus-4-5 | 5.00 | [platform.claude.com](https://platform.claude.com) |
+| claude-sonnet-4-6 | 3.00 | [platform.claude.com](https://platform.claude.com) |
+| claude-sonnet-4-5 | 3.00 | [platform.claude.com](https://platform.claude.com) |
+| claude-haiku-4-5 | 1.00 | [platform.claude.com](https://platform.claude.com) |
+| claude-3-5-sonnet | 3.00 | [platform.claude.com](https://platform.claude.com) |
+| gpt-4o | 2.50 | [openai.com](https://openai.com/pricing) |
+| gpt-4o-mini | 0.15 | [openai.com](https://openai.com/pricing) |
+| o3-mini | 1.10 | [openai.com](https://openai.com/pricing) |
 
-Default: `claude-sonnet-4-6` (the most widely used Claude model as of
-June 2026). Add new models by editing
-[`internal/cost/cost.go`](internal/cost/cost.go) — one file, one patch.
+Only models with **verifiable pricing from official API docs** are
+included. Default: `claude-sonnet-4-6` (the most widely used Claude
+model as of June 2026). Add new models by editing
+[`internal/cost/cost.go`](internal/cost/cost.go) — one file.
 
 ### Prune is reversible quarantine
 

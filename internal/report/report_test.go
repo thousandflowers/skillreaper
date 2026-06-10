@@ -15,22 +15,31 @@ func TestVerdict(t *testing.T) {
 	older := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	newer := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 
+	defOpts := VerdictOpts{MinSessions: 10, GraceDays: 14, MinTokens: 3, WindowDays: 30, Cutoff: cutoff}
+
 	cases := []struct {
-		name                       string
-		uses, sessions, minSession int
-		installedAt                time.Time
-		want                       string
+		name                     string
+		uses, sessions, tokens   int
+		installedAt              time.Time
+		opts                     VerdictOpts
+		wantVerdict, wantReason  string
 	}{
-		{"used", 5, 50, 10, older, VerdictKeep},
-		{"unused with evidence", 0, 50, 10, older, VerdictReap},
-		{"no sessions yet", 0, 0, 10, older, VerdictReview},
-		{"few sessions still reap", 0, 3, 10, older, VerdictReap},
-		{"installed recently", 0, 50, 10, newer, VerdictReview},
-		{"unknown install date", 0, 50, 10, time.Time{}, VerdictReap},
+		{"used", 5, 50, 100, older, defOpts, VerdictKeep, ReasonUsed},
+		{"unused with evidence", 0, 50, 100, older, defOpts, VerdictReap, ReasonUnused},
+		{"no sessions yet", 0, 0, 100, older, defOpts, VerdictReview, ReasonNeedsData},
+		{"reap above min-sessions", 0, 3, 100, older, VerdictOpts{MinSessions: 3, GraceDays: 14, MinTokens: 3, WindowDays: 30, Cutoff: cutoff}, VerdictReap, ReasonUnused},
+		{"tiny weight", 0, 50, 1, older, defOpts, VerdictKeep, ReasonTiny},
+		{"installed recently (grace)", 0, 50, 100, newer, defOpts, VerdictReview, ReasonGrace},
+		{"unknown install date", 0, 50, 100, time.Time{}, defOpts, VerdictReap, ReasonUnused},
+		{"proportional scaling", 0, 2, 100, time.Date(2026, 5, 20, 0, 0, 0, 0, time.UTC), VerdictOpts{MinSessions: 10, GraceDays: 14, MinTokens: 3, WindowDays: 30, Cutoff: cutoff}, VerdictReview, ReasonNeedsData},
 	}
 	for _, c := range cases {
-		if got := Verdict(c.uses, c.sessions, c.minSession, c.installedAt, cutoff); got != c.want {
-			t.Errorf("%s: got %s, want %s", c.name, got, c.want)
+		gotV, gotR := Verdict(c.uses, c.sessions, c.tokens, c.installedAt, c.opts)
+		if gotV != c.wantVerdict {
+			t.Errorf("%s: verdict got %s, want %s", c.name, gotV, c.wantVerdict)
+		}
+		if gotR != c.wantReason {
+			t.Errorf("%s: reason got %s, want %s", c.name, gotR, c.wantReason)
 		}
 	}
 }
@@ -120,7 +129,7 @@ func TestRenderMarkdown(t *testing.T) {
 	var buf bytes.Buffer
 	RenderMarkdown(&buf, fixtureReport())
 	out := buf.String()
-	for _, want := range []string{"| dead-skill |", "| REAP |", "# skillreaper report"} {
+	for _, want := range []string{"| dead-skill |", "REAP(unused)", "# skillreaper report"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("markdown output missing %q", want)
 		}

@@ -80,7 +80,10 @@ func RenderText(w io.Writer, r *Report, color bool) {
 				weight = "?"
 			}
 			verdict := row.Verdict
-			switch verdict {
+			if row.Reason != "" && verdict != VerdictInfo {
+				verdict += "(" + row.Reason + ")"
+			}
+			switch row.Verdict {
 			case VerdictReap:
 				verdict = paint(cRed, verdict)
 			case VerdictKeep:
@@ -140,8 +143,12 @@ func RenderMarkdown(w io.Writer, r *Report) {
 				uses = fmt.Sprintf("%d", row.Uses)
 				last = humanTime(row.LastUsed)
 			}
-			fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s |\n",
-				row.Name, platformLabel(row.Platform), row.Source, weight, uses, last, row.Verdict)
+			mdVerdict := row.Verdict
+			if row.Reason != "" && mdVerdict != VerdictInfo {
+				mdVerdict += "(" + row.Reason + ")"
+			}
+		fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s |\n",
+				row.Name, platformLabel(row.Platform), row.Source, weight, uses, last, mdVerdict)
 		}
 	}
 }

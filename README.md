@@ -86,9 +86,12 @@ Each row is a skill, agent, or MCP server your agent loads
 
 | Label | Meaning |
 |---|---|
-| **`REAP`** 🟢 | Zero uses in the evidence window — safe to quarantine |
-| **`KEEP`** 🔵 | Used at least once — keep it |
-| **`REVIEW`** 🟡 | Not enough data yet (recently installed, or transcriptless platform) |
+| **`REAP(unused)`** 🟢 | Zero uses in the evidence window — safe to quarantine |
+| **`KEEP(used)`** 🔵 | Used at least once — keep it |
+| **`KEEP(tiny)`** 🔵 | Negligible weight (< `--min-tokens`) — not worth pruning |
+| **`KEEP(keep)`** 🔵 | Manually protected via `reap keep` |
+| **`REVIEW(grace)`** 🟡 | Installed recently — needs more sessions |
+| **`REVIEW(needs-data)`** 🟡 | Not enough evidence (too few sessions or transcriptless platform) |
 
 ### Step 2: Find what's costing you
 
@@ -137,20 +140,25 @@ distractions, fewer wrong tool picks, faster first token.
 ## 🚀 Usage
 
 ```bash
-reap                # scan every installed platform + report (read-only)
-reap --json         # JSON report
-reap --md           # Markdown report
-reap prune          # quarantine unused items (reversible)
-reap restore --all  # undo every prune
-reap version        # print version
+reap                     # scan every installed platform + report (read-only)
+reap --json              # JSON report
+reap --md                # Markdown report
+reap prune               # quarantine unused items (reversible)
+reap keep <name>         # protect item from pruning
+reap keep --list         # show all kept items
+reap keep --remove <name>  # remove item from keep list
+reap restore --all       # undo every prune
+reap version             # print version
 ```
 
 ### Flags
 
 | Flag | Default | Description |
-|---|---|---|
+|---|---|---|---|
 | `--days N` | 30 | Evidence window in days |
-| `--min-sessions N` | 10 | Minimum sessions for REAP verdict |
+| `--min-sessions N` | 10 | Minimum sessions for REAP(unused) verdict |
+| `--grace-days N` | 14 | Items installed this recently → REVIEW(grace) |
+| `--min-tokens N` | 3 | Items below this token weight → KEEP(tiny) |
 | `--model M` | claude-sonnet-4-6 | Model key for automatic price lookup |
 | `--price N` | auto | Input token price ($/MTok, overrides model lookup) |
 | `--json` | false | Output JSON |
@@ -296,13 +304,20 @@ tool declarations from init messages — all with timestamps.
 MCP server schema sizes are unknown without running the server, so their
 weight is marked `?`.
 
-**Verdicts** — three outcomes:
+**Verdicts** — five outcomes, each with a reason suffix explaining *why*:
 
-- **REAP** — zero uses in the evidence window (≥ N sessions, installed
-  before the window)
-- **KEEP** — used at least once in the window
-- **REVIEW** — insufficient evidence (too few sessions, recently
-  installed, or platform without transcript parsing)
+| Verdict | When |
+|---|---|
+| `REAP(unused)` | Zero uses, enough sessions for this item, not too new |
+| `KEEP(used)` | Used at least once in the evidence window |
+| `KEEP(tiny)` | Negligible weight (< `--min-tokens`), not worth pruning |
+| `KEEP(keep)` | Manually protected via `reap keep` |
+| `REVIEW(grace)` | Installed within the last `--grace-days` days |
+| `REVIEW(needs-data)` | Not enough session evidence (too few sessions since install, or platform without transcripts) |
+
+New items get a proportional threshold: if an item was installed
+mid-window, the required `--min-sessions` is scaled down (e.g. 50 %
+of the window needs 5 of 10 sessions).
 
 ### Model pricing (June 2026)
 

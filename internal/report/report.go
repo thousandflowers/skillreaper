@@ -15,8 +15,11 @@ import (
 // Opts tunes report generation.
 type Opts struct {
 	MinSessions  int
+	GraceDays    int           // items installed this recently → REVIEW(grace)
+	MinTokens    int           // items below this token weight → KEEP(tiny)
 	PricePerMTok float64
-	Cutoff       time.Time
+	Cutoff       time.Time     // start of the evidence window
+	WindowDays   int
 	KeepSet      map[string]bool // items manually marked as keep
 }
 
@@ -26,6 +29,7 @@ type Row struct {
 	Uses     int
 	LastUsed time.Time
 	Verdict  string
+	Reason   string    // why this verdict was assigned
 	Tokens   int       // estimated per-session weight
 	Kept     bool      // user manually marked this as keep
 }
@@ -69,9 +73,16 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		switch it.Category {
 		case scan.CatSkill, scan.CatAgent, scan.CatMCP:
 			row.Uses, row.LastUsed = lookupUses(st, it)
-			row.Verdict = Verdict(row.Uses, st.Sessions, opts.MinSessions, it.InstalledAt, opts.Cutoff)
+			row.Verdict, row.Reason = Verdict(row.Uses, st.Sessions, row.Tokens, it.InstalledAt, VerdictOpts{
+				MinSessions: opts.MinSessions,
+				GraceDays:   opts.GraceDays,
+				MinTokens:   opts.MinTokens,
+				WindowDays:  opts.WindowDays,
+				Cutoff:      opts.Cutoff,
+			})
 			if opts.KeepSet != nil && opts.KeepSet[itemKey(it)] {
 				row.Verdict = VerdictKeep
+				row.Reason = ReasonUserKeep
 				row.Kept = true
 			}
 		default:

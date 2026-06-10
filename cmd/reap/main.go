@@ -42,6 +42,8 @@ Flags:
 type options struct {
 	days        int
 	minSessions int
+	graceDays   int
+	minTokens   int
 	price       float64
 	model       string
 	asJSON      bool
@@ -70,6 +72,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var opts options
 	fs.IntVar(&opts.days, "days", 30, "evidence window in days")
 	fs.IntVar(&opts.minSessions, "min-sessions", 10, "sessions required before REAP verdicts")
+	fs.IntVar(&opts.graceDays, "grace-days", 14, "items installed this recently → REVIEW(grace)")
+	fs.IntVar(&opts.minTokens, "min-tokens", 3, "items below this token weight → KEEP(tiny)")
 	fs.StringVar(&opts.model, "model", "", "model ID for pricing lookup (overrides --price)")
 	fs.Float64Var(&opts.price, "price", 0, "input price per million tokens (USD) — used when --model is unknown or unset")
 	fs.BoolVar(&opts.asJSON, "json", false, "output JSON")
@@ -222,8 +226,11 @@ func gather(opts options) (*report.Report, error) {
 
 	return report.Build(items, st, warns, report.Opts{
 		MinSessions:  opts.minSessions,
+		GraceDays:    opts.graceDays,
+		MinTokens:    opts.minTokens,
 		PricePerMTok: opts.price,
 		Cutoff:       cutoff,
+		WindowDays:   opts.days,
 		KeepSet:      keepSet,
 	}), nil
 }

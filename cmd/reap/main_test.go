@@ -138,7 +138,7 @@ func TestRunPruneInteractiveAbort(t *testing.T) {
 	code := run([]string{
 		"prune", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
 		"--min-sessions", "1",
-	}, strings.NewReader("\n"), &out, &errOut)
+	}, strings.NewReader("n\n"), &out, &errOut)
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}

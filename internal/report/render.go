@@ -105,7 +105,10 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		}
 	}
 
-	fmt.Fprintf(w, "\n%s\n\n", paint(cDim, "Estimates use chars/3.7 ≈ tokens. Run `reap prune` to quarantine REAP items (reversible)."))
+	if r.DeadCount > 0 {
+		fmt.Fprintf(w, "\n%s", paint(cBold+cRed, fmt.Sprintf("→  Run: reap prune   (%d items · ~%d tok/session reclaimed)", r.DeadCount, r.DeadTokensPerSession)))
+	}
+	fmt.Fprintf(w, "\n%s\n\n", paint(cDim, "  All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all"))
 }
 
 // RenderMarkdown writes the report as a shareable Markdown document.

@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -289,40 +288,37 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintf(stdout, "\n%d unused items can be reaped (quarantined, reversible):\n\n", len(candidates))
-	for i, row := range candidates {
-		fmt.Fprintf(stdout, "  [%d] %-8s %-40s %s\n", i+1, row.Category, row.Name, row.Source)
+	totalTok := 0
+	for _, row := range candidates {
+		totalTok += row.Tokens
+	}
+	fmt.Fprintf(stdout, "\n🧹  %d items unused · reclaim ~%s tok/session\n\n", len(candidates), humanTok(totalTok))
+	for _, row := range candidates {
+		weight := fmt.Sprintf("~%d tok", row.Tokens)
+		if row.Category == scan.CatMCP || row.Category == scan.CatHook {
+			weight = "?"
+		}
+		fmt.Fprintf(stdout, "  %-6s  %-40s  %s\n", row.Category, row.Name, weight)
 	}
 	if skipped > 0 {
-		fmt.Fprintf(stdout, "\n(%d unused plugin items skipped — disable those via /plugin)\n", skipped)
+		fmt.Fprintf(stdout, "\n  (%d unused plugin items skipped — disable via /plugin)\n", skipped)
 	}
 
-	selected := candidates
 	if !opts.yes {
-		fmt.Fprint(stdout, "\nSelect items (e.g. 1,3,5), 'all', or empty to abort: ")
+		fmt.Fprintf(stdout, "\nPrune all %d items? This quarantines them (reversible). [Y/n] ", len(candidates))
 		sc := bufio.NewScanner(stdin)
 		if !sc.Scan() {
 			fmt.Fprintln(stdout, "aborted")
 			return 0
 		}
 		line := strings.TrimSpace(sc.Text())
-		if line == "" {
+		if line != "" && strings.ToLower(line) != "y" && strings.ToLower(line) != "yes" {
 			fmt.Fprintln(stdout, "aborted")
 			return 0
 		}
-		if line != "all" {
-			selected = nil
-			for _, part := range strings.Split(line, ",") {
-				n, err := strconv.Atoi(strings.TrimSpace(part))
-				if err != nil || n < 1 || n > len(candidates) {
-					fmt.Fprintf(stderr, "invalid selection %q\n", part)
-					return 2
-				}
-				selected = append(selected, candidates[n-1])
-			}
-		}
 	}
 
+	selected := candidates
 	for _, row := range selected {
 		var e prune.Entry
 		var err error
@@ -366,4 +362,13 @@ func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "restored %s\n", args[0])
 	return 0
+}
+
+func humanTok(n int) string {
+	switch {
+	case n >= 1000:
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
 }

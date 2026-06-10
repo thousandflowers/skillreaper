@@ -11,13 +11,14 @@ const (
 )
 
 // Verdict decides whether an item is safe to reap based on usage
-// evidence. Zero uses only earns REAP when the window holds enough
-// sessions to be meaningful and the item predates the window.
-func Verdict(uses, sessions, minSessions int, installedAt time.Time, cutoff time.Time) string {
+// evidence. REAP requires at least one session analyzed as evidence
+// (any session count above zero). Zero sessions or an item installed
+// after the window cutoff produce REVIEW.
+func Verdict(uses, sessions, _ int, installedAt time.Time, cutoff time.Time) string {
 	if uses > 0 {
 		return VerdictKeep
 	}
-	if sessions < minSessions {
+	if sessions == 0 {
 		return VerdictReview
 	}
 	if !installedAt.IsZero() && installedAt.After(cutoff) {

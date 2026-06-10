@@ -23,7 +23,8 @@ func TestVerdict(t *testing.T) {
 	}{
 		{"used", 5, 50, 10, older, VerdictKeep},
 		{"unused with evidence", 0, 50, 10, older, VerdictReap},
-		{"too few sessions", 0, 3, 10, older, VerdictReview},
+		{"no sessions yet", 0, 0, 10, older, VerdictReview},
+		{"few sessions still reap", 0, 3, 10, older, VerdictReap},
 		{"installed recently", 0, 50, 10, newer, VerdictReview},
 		{"unknown install date", 0, 50, 10, time.Time{}, VerdictReap},
 	}

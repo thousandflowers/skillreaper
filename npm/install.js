@@ -4,15 +4,15 @@
 // Falls back to building from source when the release is missing.
 
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createWriteStream } from "node:fs";
 import { homedir, platform, arch } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { pipeline } from "node:stream/promises";
 
-const { name, version } = JSON.parse(
-  execSync("node -e \"process.stdout.write(JSON.stringify(require('./package.json')))\"", { encoding: "utf-8" })
-);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const { name, version } = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf-8"));
 
 const osMap = {
   darwin: "darwin",
@@ -32,7 +32,7 @@ if (!os || !archName) {
   process.exit(1);
 }
 
-const installDir = resolve(import.meta.dirname, "..", "bin");
+const installDir = resolve(__dirname, "..", "bin");
 mkdirSync(installDir, { recursive: true });
 
 const binaryName = os === "windows" ? "skillreaper.exe" : "skillreaper";

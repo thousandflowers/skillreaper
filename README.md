@@ -81,6 +81,7 @@ Upgrading, uninstalling, and platform-specific tips →
 
 ```bash
 reap                     # scan + report (read-only)
+reap gap                 # loaded-vs-fired utilization breakdown
 reap prune               # quarantine unused items (reversible)
 reap keep <name>         # protect an item from pruning
 reap restore --all       # undo every prune
@@ -105,6 +106,42 @@ directory with a versioned manifest. Nothing is ever deleted. Run
 | **`REVIEW`** | Too new or not enough sessions |
 
 Every verdict includes a reason suffix explaining *why*.
+
+<br>
+
+### Loaded vs fired
+
+Beyond the prune verdicts, `reap gap` shows your **utilization rate** —
+how much of what you load you actually use.
+
+```
+⟡ loaded vs fired — last 30 days · 142 sessions
+
+CATEGORY   LOADED  FIRED   UTIL   ────────────       TOKENS
+skills        187      4    2%    ▰▱▱▱▱▱▱▱▱▱     ~8 000 →   210
+mcp            12      3   25%    ▰▰▱▱▱▱▱▱▱▱          ? →     ?
+agents         30      2    7%    ▰▱▱▱▱▱▱▱▱▱     ~1 200 →    90
+───────────────────────────────────────────────────────────────
+total         229      9    4%    ▰▱▱▱▱▱▱▱▱▱     ~9 200 →   300
+```
+
+Each row breaks down by category (skill, MCP, agent) with item count, token
+weight, and a 10-segment utilization bar. Low utilization (<10 %) is red,
+medium (<50 %) yellow, high (≥50 %) green.
+
+The default `reap` report also includes a compact utilization summary line:
+
+```
+⟡ utilization 4%  —  9/229 items fired · ~300/9 200 tok touched (30d)
+```
+
+This is the **real** gap between what your agent carries and what it fires —
+complementary to the shock box (which only counts items that are safe to prune
+right now).
+
+<pre>reap gap          # text breakdown
+reap gap --json   # JSON output
+reap gap --md     # markdown table</pre>
 
 <br>
 

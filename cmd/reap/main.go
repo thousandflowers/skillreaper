@@ -29,6 +29,7 @@ const usageText = `reap — evidence-based pruning for your Claude Code agent st
 
 Usage:
   reap [flags]              scan and report (read-only)
+  reap gap [flags]          loaded-vs-fired utilization breakdown
   reap prune [flags]        quarantine unused items (reversible)
   reap keep <name>          mark item as keep (never prune)
   reap keep --list          show all kept items
@@ -101,6 +102,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch cmd {
 	case "":
 		return cmdReport(opts, stdout, stderr)
+	case "gap":
+		return cmdGap(opts, stdout, stderr)
 	case "keep":
 		if opts.listKeep {
 			return cmdKeepList(opts, stdout, stderr)
@@ -270,6 +273,26 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		report.RenderMarkdown(stdout, r)
 	default:
 		report.RenderText(stdout, r, colorEnabled(opts, stdout))
+	}
+	return 0
+}
+
+func cmdGap(opts options, stdout, stderr io.Writer) int {
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	switch {
+	case opts.asJSON:
+		if err := report.RenderGapJSON(stdout, r); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+	case opts.asMarkdown:
+		report.RenderGapMarkdown(stdout, r)
+	default:
+		report.RenderGap(stdout, r, colorEnabled(opts, stdout))
 	}
 	return 0
 }

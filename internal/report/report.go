@@ -47,6 +47,7 @@ type Report struct {
 	SessionsPerMonth     int
 	MoneyPerMonth        float64
 	Warnings             []scan.Warning
+	Gap                  *Gap
 }
 
 // Build joins inventory items with usage stats and computes verdicts
@@ -97,6 +98,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 
 	r.MoneyPerMonth = cost.MoneyPerMonth(r.DeadTokensPerSession, r.SessionsPerMonth, opts.PricePerMTok)
 	sortRows(r.Rows)
+	r.Gap = computeGap(r.Rows)
 	return r
 }
 

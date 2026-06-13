@@ -226,3 +226,45 @@ func TestRunPruneSkipsKept(t *testing.T) {
 		t.Errorf("kept skill deadskill should not be pruned, got: %s", out.String())
 	}
 }
+
+func TestRunGap(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	code := run([]string{
+		"gap",
+		"--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--days", "30", "--min-sessions", "1",
+	}, strings.NewReader(""), &out, &errOut)
+
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	for _, want := range []string{"loaded vs fired", "skills", "total"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("gap output missing %q", want)
+		}
+	}
+}
+
+func TestRunGapJSON(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	code := run([]string{
+		"gap",
+		"--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--json",
+	}, strings.NewReader(""), &out, &errOut)
+
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, ok := decoded["Loaded"]; !ok {
+		t.Errorf("gap json missing Loaded key: %s", out.String())
+	}
+}

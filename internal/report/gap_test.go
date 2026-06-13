@@ -51,6 +51,34 @@ func TestComputeGap(t *testing.T) {
 	}
 }
 
+func TestRenderGap(t *testing.T) {
+	var buf bytes.Buffer
+	RenderGap(&buf, fixtureReport(), false)
+	out := buf.String()
+	for _, want := range []string{"loaded vs fired", "skills", "mcp", "total", "60 sessions"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("gap view missing %q", want)
+		}
+	}
+	// MCP token weight is unknown and must render as "?".
+	if !strings.Contains(out, "?") {
+		t.Error("gap view must mark MCP tokens as ?")
+	}
+	if strings.Contains(out, "\x1b[") {
+		t.Error("color disabled but ANSI codes present")
+	}
+}
+
+func TestRenderGapNoSessions(t *testing.T) {
+	r := fixtureReport()
+	r.Sessions = 0
+	var buf bytes.Buffer
+	RenderGap(&buf, r, false) // must not panic on divide-by-zero
+	if !strings.Contains(buf.String(), "n/a") {
+		t.Error("expected n/a utilization when no sessions")
+	}
+}
+
 func TestRenderTextHasGapLine(t *testing.T) {
 	var buf bytes.Buffer
 	RenderText(&buf, fixtureReport(), false)

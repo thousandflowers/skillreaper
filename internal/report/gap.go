@@ -98,6 +98,51 @@ func renderGapLine(w io.Writer, r *Report, color bool) {
 		g.Fired, g.Loaded, g.FiredTok, g.LoadedTok, r.WindowDays)
 }
 
+// RenderGap writes the dedicated loaded-vs-fired breakdown. The bar shows
+// per-category utilization; counts and token weight sit side by side. The
+// whole row is tinted by its utilization so alignment is unaffected by ANSI.
+func RenderGap(w io.Writer, r *Report, color bool) {
+	paint := painter(color)
+	g := r.Gap
+
+	fmt.Fprintf(w, "\n  %s\n\n",
+		paint(cBold, fmt.Sprintf("⟡ loaded vs fired — last %d days · %d sessions", r.WindowDays, r.Sessions)))
+
+	if g == nil || g.Loaded == 0 {
+		fmt.Fprintf(w, "  %s\n\n", paint(cDim, "no inventory found."))
+		return
+	}
+
+	fmt.Fprintf(w, "  %-9s %7s %6s %6s   %-10s   %s\n",
+		"CATEGORY", "LOADED", "FIRED", "UTIL", "", "TOKENS")
+
+	for _, gc := range g.PerCat {
+		if gc.Loaded == 0 {
+			continue
+		}
+		writeGapRow(w, gapLabel(gc.Category), gc, gc.Category == scan.CatMCP, r.Sessions, paint)
+	}
+
+	fmt.Fprintf(w, "  %s\n", paint(cDim, "─────────────────────────────────────────────────────────"))
+	total := GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}
+	writeGapRow(w, "total", total, false, r.Sessions, paint)
+	fmt.Fprintln(w)
+}
+
+// writeGapRow renders one aligned row, tinted by utilization. mcp marks the
+// token columns as unknown ("?").
+func writeGapRow(w io.Writer, label string, gc GapCat, mcp bool, sessions int, paint func(code, s string) string) {
+	pct, utilStr := utilPct(gc.Fired, gc.Loaded, sessions)
+	bar := utilBar(pct)
+	tok := "      ? →     ?"
+	if !mcp {
+		tok = fmt.Sprintf("~%5d → %5d", gc.LoadedTok, gc.FiredTok)
+	}
+	line := fmt.Sprintf("  %-9s %7d %6d %6s   %-10s   %s",
+		label, gc.Loaded, gc.Fired, utilStr, bar, tok)
+	fmt.Fprintln(w, paint(utilColor(pct), line))
+}
+
 // computeGap derives the loaded-vs-fired snapshot from joined rows.
 // Only skill/agent/mcp participate. MCP token weight is unknown, so its
 // token sums are left at zero and excluded from totals.

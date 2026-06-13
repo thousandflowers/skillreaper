@@ -1,6 +1,7 @@
 package report
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -141,6 +142,43 @@ func writeGapRow(w io.Writer, label string, gc GapCat, mcp bool, sessions int, p
 	line := fmt.Sprintf("  %-9s %7d %6d %6s   %-10s   %s",
 		label, gc.Loaded, gc.Fired, utilStr, bar, tok)
 	fmt.Fprintln(w, paint(utilColor(pct), line))
+}
+
+// RenderGapMarkdown writes the gap breakdown as a Markdown table.
+func RenderGapMarkdown(w io.Writer, r *Report) {
+	g := r.Gap
+	fmt.Fprintf(w, "# loaded vs fired\n\n")
+	fmt.Fprintf(w, "Window: last %d days · %d sessions\n\n", r.WindowDays, r.Sessions)
+	if g == nil || g.Loaded == 0 {
+		fmt.Fprintln(w, "_No inventory found._")
+		return
+	}
+	fmt.Fprintln(w, "| Category | Loaded | Fired | Util | Loaded tok | Fired tok |")
+	fmt.Fprintln(w, "|---|---|---|---|---|---|")
+
+	row := func(label string, gc GapCat, mcp bool) {
+		_, utilStr := utilPct(gc.Fired, gc.Loaded, r.Sessions)
+		lt, ft := fmt.Sprintf("~%d", gc.LoadedTok), fmt.Sprintf("~%d", gc.FiredTok)
+		if mcp {
+			lt, ft = "?", "?"
+		}
+		fmt.Fprintf(w, "| %s | %d | %d | %s | %s | %s |\n",
+			label, gc.Loaded, gc.Fired, utilStr, lt, ft)
+	}
+	for _, gc := range g.PerCat {
+		if gc.Loaded == 0 {
+			continue
+		}
+		row(gapLabel(gc.Category), gc, gc.Category == scan.CatMCP)
+	}
+	row("total", GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}, false)
+}
+
+// RenderGapJSON writes only the Gap snapshot as indented JSON.
+func RenderGapJSON(w io.Writer, r *Report) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(r.Gap)
 }
 
 // computeGap derives the loaded-vs-fired snapshot from joined rows.

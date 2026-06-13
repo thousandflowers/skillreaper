@@ -94,3 +94,28 @@ func TestRenderTextHasGapLine(t *testing.T) {
 		t.Error("report text missing fired/loaded counts")
 	}
 }
+
+func TestRenderGapMarkdown(t *testing.T) {
+	var buf bytes.Buffer
+	RenderGapMarkdown(&buf, fixtureReport())
+	out := buf.String()
+	for _, want := range []string{"# loaded vs fired", "| skills |", "| total |", "| Category |"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("gap markdown missing %q", want)
+		}
+	}
+}
+
+func TestRenderGapJSON(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RenderGapJSON(&buf, fixtureReport()); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `"Loaded": 4`) {
+		t.Errorf("gap json missing Loaded: %s", out)
+	}
+	if !strings.Contains(out, `"Fired": 2`) {
+		t.Errorf("gap json missing Fired: %s", out)
+	}
+}

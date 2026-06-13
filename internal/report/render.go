@@ -26,6 +26,17 @@ const (
 	cBCyan = "\x1b[1;36m"
 )
 
+// painter returns a function that wraps text in an ANSI code when color
+// is enabled, and returns it unchanged otherwise.
+func painter(color bool) func(code, s string) string {
+	return func(code, s string) string {
+		if !color {
+			return s
+		}
+		return code + s + cReset
+	}
+}
+
 var sectionTitles = []struct {
 	cat   scan.Category
 	title string
@@ -46,12 +57,7 @@ func RenderJSON(w io.Writer, r *Report) error {
 
 // RenderText writes the human-readable report. color toggles ANSI codes.
 func RenderText(w io.Writer, r *Report, color bool) {
-	paint := func(code, s string) string {
-		if !color {
-			return s
-		}
-		return code + s + cReset
-	}
+	paint := painter(color)
 
 	fmt.Fprintf(w, "\n  %s\n\n", paint(cBold, "⟡ skillreaper — evidence-based pruning for your agent stack"))
 	fmt.Fprintf(w, "  %s  %s",
@@ -78,6 +84,8 @@ func RenderText(w io.Writer, r *Report, color bool) {
 	if r.DeadToolChars > 0 {
 		fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf("(init: ~%d chars of tool descriptions unused per session)", r.DeadToolChars)))
 	}
+
+	renderGapLine(w, r, color)
 
 	for _, sec := range sectionTitles {
 		rows := filterRows(r.Rows, sec.cat)

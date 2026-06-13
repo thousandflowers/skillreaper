@@ -1,6 +1,10 @@
 package report
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
 
 func TestComputeGap(t *testing.T) {
 	r := fixtureReport()
@@ -44,5 +48,21 @@ func TestComputeGap(t *testing.T) {
 	// prose/hook never appear in PerCat.
 	if _, ok := byCat["prose"]; ok {
 		t.Error("prose must not appear in Gap")
+	}
+}
+
+func TestRenderTextHasGapLine(t *testing.T) {
+	var buf bytes.Buffer
+	RenderText(&buf, fixtureReport(), false)
+	out := buf.String()
+	// fixtureReport: 2 of 4 fired → 50% utilization.
+	if !strings.Contains(out, "utilization") {
+		t.Error("report text missing utilization line")
+	}
+	if !strings.Contains(out, "50%") {
+		t.Errorf("expected 50%% utilization, got:\n%s", out)
+	}
+	if !strings.Contains(out, "2/4 items fired") {
+		t.Error("report text missing fired/loaded counts")
 	}
 }

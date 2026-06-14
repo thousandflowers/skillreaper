@@ -47,6 +47,54 @@ func parseFrontmatter(b []byte) (name, description string, bodyChars int) {
 	return name, description, bodyChars
 }
 
+// frontmatterValue returns the single-line value of key in a Markdown file's
+// YAML frontmatter, and whether the key was present.
+func frontmatterValue(b []byte, key string) (string, bool) {
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
+		return "", false
+	}
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "---" {
+			return "", false
+		}
+		if v, ok := yamlValue(line, key); ok {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// toolSurface counts the tools a skill/agent is restricted to, reading the
+// first present of keys (e.g. "allowed-tools", "tools"). A missing key, an
+// empty value, or "*" means unrestricted → ToolSurfaceAll. Otherwise it
+// counts the comma-separated entries.
+func toolSurface(b []byte, keys ...string) int {
+	for _, k := range keys {
+		v, ok := frontmatterValue(b, k)
+		if !ok {
+			continue
+		}
+		v = strings.TrimSpace(v)
+		if v == "" || v == "*" {
+			return ToolSurfaceAll
+		}
+		n := 0
+		for _, part := range strings.Split(v, ",") {
+			if strings.TrimSpace(part) != "" {
+				n++
+			}
+		}
+		if n == 0 {
+			return ToolSurfaceAll
+		}
+		return n
+	}
+	return ToolSurfaceAll
+}
+
 // yamlValue returns the value of a single-line "key: value" YAML pair,
 // with surrounding quotes removed.
 func yamlValue(line, key string) (string, bool) {

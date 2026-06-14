@@ -63,6 +63,7 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			BodyChars:   bodyChars,
 			InstalledAt: installedAt,
 			Removable:   removable,
+			ToolSurface: toolSurface(b, "allowed-tools"),
 		})
 	}
 	return items, warns

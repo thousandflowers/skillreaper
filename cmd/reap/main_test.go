@@ -227,6 +227,163 @@ func TestRunPruneSkipsKept(t *testing.T) {
 	}
 }
 
+func TestRunMuteUnmute(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	skill := filepath.Join(claudeDir, "skills", "usedskill", "SKILL.md")
+	var out, errOut bytes.Buffer
+
+	code := run([]string{
+		"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "usedskill",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
+	}
+	b, _ := os.ReadFile(skill)
+	if strings.Contains(string(b), "description:") {
+		t.Errorf("muted skill still has a description: %s", b)
+	}
+
+	out.Reset()
+	code = run([]string{"unmute", "--claude-dir", claudeDir, "usedskill"},
+		strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("unmute exit = %d, stderr: %s", code, errOut.String())
+	}
+	b, _ = os.ReadFile(skill)
+	if !strings.Contains(string(b), "description:") {
+		t.Errorf("unmute did not restore the description: %s", b)
+	}
+}
+
+func TestRunInstallUninstallHook(t *testing.T) {
+	claudeDir, _ := buildFixture(t)
+	settings := filepath.Join(claudeDir, "settings.json")
+	var out, errOut bytes.Buffer
+
+	if code := run([]string{"install-hook", "--claude-dir", claudeDir},
+		strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("install-hook exit = %d, stderr: %s", code, errOut.String())
+	}
+	b, _ := os.ReadFile(settings)
+	if !strings.Contains(string(b), "SessionStart") {
+		t.Errorf("settings.json missing the hook: %s", b)
+	}
+
+	out.Reset()
+	if code := run([]string{"uninstall-hook", "--claude-dir", claudeDir},
+		strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("uninstall-hook exit = %d", code)
+	}
+	b, _ = os.ReadFile(settings)
+	if strings.Contains(string(b), "skillreaper-weekly-nudge") {
+		t.Errorf("uninstall left the nudge hook: %s", b)
+	}
+}
+
+func TestRunInstallHookDryRun(t *testing.T) {
+	claudeDir, _ := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	if code := run([]string{"install-hook", "--dry-run", "--claude-dir", claudeDir},
+		strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if !strings.Contains(out.String(), "dry-run") {
+		t.Errorf("expected dry-run output, got: %s", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(claudeDir, "settings.json")); !os.IsNotExist(err) {
+		t.Error("dry-run must not write settings.json")
+	}
+}
+
+func TestRunByProjectAndManifest(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	if code := run([]string{
+		"by-project", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1",
+	}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("by-project exit = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "skills by project") {
+		t.Errorf("by-project output: %s", out.String())
+	}
+
+	out.Reset()
+	if code := run([]string{
+		"manifest", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--claude-version", "9.9", "usedskill",
+	}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("manifest exit = %d, stderr: %s", code, errOut.String())
+	}
+	for _, want := range []string{"skillreaper manifest", "usedskill", "9.9", "Tool surface"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("manifest output missing %q: %s", want, out.String())
+		}
+	}
+}
+
+func TestRunWhy(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	// REAP item, text output.
+	code := run([]string{
+		"why", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "skill:deadskill",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("why exit = %d, stderr: %s", code, errOut.String())
+	}
+	for _, want := range []string{"REAP", "verdict", "zero uses", "reap prune"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("why text missing %q: %s", want, out.String())
+		}
+	}
+
+	// Bare name, JSON output.
+	out.Reset()
+	code = run([]string{
+		"why", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--json", "deadskill",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("why --json exit = %d, stderr: %s", code, errOut.String())
+	}
+	var e map[string]any
+	if err := json.Unmarshal(out.Bytes(), &e); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if e["verdict"] != "REAP" {
+		t.Errorf("verdict = %v, want REAP", e["verdict"])
+	}
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Error("JSON output must not contain ANSI color codes")
+	}
+
+	// Used item → KEEP.
+	out.Reset()
+	code = run([]string{
+		"why", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "usedskill",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("why usedskill exit = %d", code)
+	}
+	if !strings.Contains(out.String(), "KEEP") {
+		t.Errorf("usedskill should be KEEP: %s", out.String())
+	}
+
+	// Unknown item → error exit.
+	out.Reset()
+	code = run([]string{
+		"why", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "nope-nope",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 1 {
+		t.Errorf("unknown item exit = %d, want 1", code)
+	}
+}
+
 func TestRunGap(t *testing.T) {
 	claudeDir, claudeJSON := buildFixture(t)
 	var out, errOut bytes.Buffer

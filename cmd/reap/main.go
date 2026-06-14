@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/cost"
+	"github.com/thousandflowers/skillreaper/internal/hook"
+	"github.com/thousandflowers/skillreaper/internal/mute"
 	"github.com/thousandflowers/skillreaper/internal/override"
 	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/prune"
@@ -30,32 +33,44 @@ const usageText = `reap — evidence-based pruning for your Claude Code agent st
 Usage:
   reap [flags]              scan and report (read-only)
   reap gap [flags]          loaded-vs-fired utilization breakdown
+  reap by-project [flags]   skills bucketed by the project that fired them
+  reap manifest <name>      emit a release manifest for one skill
+  reap why <name>           explain in detail why an item got its verdict
   reap prune [flags]        quarantine unused items (reversible)
   reap keep <name>          mark item as keep (never prune)
   reap keep --list          show all kept items
   reap keep --remove <name>  remove item from keep list
+  reap mute <name>          strip a heavy skill's description (reversible)
+  reap unmute <name>|--all  restore a muted skill's description
   reap restore <id>|--all   undo prune actions
+  reap install-hook         add a weekly SessionStart nudge to settings.json
+  reap uninstall-hook       remove skillreaper's SessionStart nudge
   reap version              print version
 
 Flags:
 `
 
 type options struct {
-	days        int
-	minSessions int
-	graceDays   int
-	minTokens   int
-	price       float64
-	model       string
-	asJSON      bool
-	asMarkdown  bool
-	noColor     bool
-	yes         bool
-	all         bool
-	listKeep    bool
-	removeKeep  string
-	claudeDir   string
-	claudeJSON  string
+	days          int
+	minSessions   int
+	graceDays     int
+	minTokens     int
+	muteThreshold float64
+	muteMinTokens int
+	price         float64
+	model         string
+	asJSON        bool
+	asMarkdown    bool
+	noColor       bool
+	yes           bool
+	all           bool
+	dryRun        bool
+	quiet         bool
+	listKeep      bool
+	removeKeep    string
+	claudeDir     string
+	claudeJSON    string
+	claudeVersion string
 }
 
 func main() {
@@ -75,17 +90,22 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.IntVar(&opts.minSessions, "min-sessions", 10, "sessions required before REAP verdicts")
 	fs.IntVar(&opts.graceDays, "grace-days", 14, "items installed this recently → REVIEW(grace)")
 	fs.IntVar(&opts.minTokens, "min-tokens", 3, "items below this token weight → KEEP(tiny)")
+	fs.Float64Var(&opts.muteThreshold, "mute-threshold", 0.20, "MUTE used skills fired in fewer than this fraction of sessions (0 disables)")
+	fs.IntVar(&opts.muteMinTokens, "mute-min-tokens", 50, "only MUTE skills heavier than this token weight")
 	fs.StringVar(&opts.model, "model", "", "model ID for pricing lookup (overrides --price)")
 	fs.Float64Var(&opts.price, "price", 0, "input price per million tokens (USD) — used when --model is unknown or unset")
 	fs.BoolVar(&opts.asJSON, "json", false, "output JSON")
 	fs.BoolVar(&opts.asMarkdown, "md", false, "output Markdown")
 	fs.BoolVar(&opts.noColor, "no-color", false, "disable colors")
 	fs.BoolVar(&opts.yes, "yes", false, "prune: apply without confirmation")
-	fs.BoolVar(&opts.all, "all", false, "restore: undo every prune action")
+	fs.BoolVar(&opts.all, "all", false, "restore/unmute: act on every recorded action")
+	fs.BoolVar(&opts.dryRun, "dry-run", false, "install-hook: print the change without writing")
+	fs.BoolVar(&opts.quiet, "quiet", false, "suppress the normal text report")
 	fs.BoolVar(&opts.listKeep, "list", false, "keep: list all kept items")
 	fs.StringVar(&opts.removeKeep, "remove", "", "keep: remove a kept item")
 	fs.StringVar(&opts.claudeDir, "claude-dir", "", "Claude Code directory (default ~/.claude)")
 	fs.StringVar(&opts.claudeJSON, "claude-json", "", "Claude config file (default ~/.claude.json)")
+	fs.StringVar(&opts.claudeVersion, "claude-version", "", "manifest: Claude Code version this skill was tested on")
 	fs.Usage = func() {
 		fmt.Fprint(stderr, usageText)
 		fs.PrintDefaults()
@@ -104,6 +124,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdReport(opts, stdout, stderr)
 	case "gap":
 		return cmdGap(opts, stdout, stderr)
+	case "by-project":
+		return cmdByProject(opts, stdout, stderr)
+	case "manifest":
+		return cmdManifest(opts, fs.Args(), stdout, stderr)
+	case "why":
+		return cmdWhy(opts, fs.Args(), stdout, stderr)
 	case "keep":
 		if opts.listKeep {
 			return cmdKeepList(opts, stdout, stderr)
@@ -112,10 +138,20 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return cmdKeepRemove(opts, opts.removeKeep, stdout, stderr)
 		}
 		return cmdKeep(opts, fs.Args(), stdout, stderr)
+	case "mute":
+		return cmdMute(opts, fs.Args(), stdout, stderr)
+	case "unmute":
+		return cmdUnmute(opts, fs.Args(), stdout, stderr)
 	case "prune":
 		return cmdPrune(opts, stdin, stdout, stderr)
 	case "restore":
 		return cmdRestore(opts, fs.Args(), stdout, stderr)
+	case "install-hook":
+		return cmdInstallHook(opts, stdout, stderr)
+	case "uninstall-hook":
+		return cmdUninstallHook(opts, stdout, stderr)
+	case "nudge":
+		return cmdNudge(opts, stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, "reap", Version)
 		return 0
@@ -205,20 +241,57 @@ func gather(opts options) (*report.Report, error) {
 	cutoff := time.Now().AddDate(0, 0, -opts.days)
 
 	var st *usage.Stats
+	evidenceBlind := map[string]bool{}
 	for _, p := range platforms {
-		if p.TranscriptType != "jsonl" || len(p.TranscriptDirs) == 0 {
-			continue
-		}
-		for _, td := range p.TranscriptDirs {
-			parsed, err := usage.Parse(td, cutoff, opts.days)
-			if err != nil {
-				continue
-			}
+		parsedAny := false
+		mergeParsed := func(parsed *usage.Stats) {
+			parsedAny = true
 			if st == nil {
 				st = parsed
 			} else {
 				mergeStats(st, parsed)
 			}
+		}
+		switch p.TranscriptType {
+		case "jsonl":
+			for _, td := range p.TranscriptDirs {
+				parsed, err := usage.Parse(td, cutoff, opts.days)
+				if err != nil {
+					continue
+				}
+				mergeParsed(parsed)
+			}
+		case "sqlite":
+			if p.TranscriptDB != "" {
+				parsed, err := usage.ParseSQLite(p.TranscriptDB, cutoff, opts.days)
+				switch {
+				case err == nil:
+					mergeParsed(parsed)
+				case errors.Is(err, usage.ErrNoSQLite):
+					// CLI missing — handled by the evidence-blind block below.
+				default:
+					// A genuine parse failure: surface it but stay evidence-blind.
+					warns = append(warns, scan.Warning{Path: p.TranscriptDB,
+						Msg: fmt.Sprintf("%s SQLite evidence could not be read: %v", p.Name, err)})
+				}
+			}
+		}
+		// A platform that advertises transcripts but yielded no usable
+		// evidence — OpenCode without the sqlite3 CLI, or no session files on
+		// disk — is "evidence-blind". Its items must not be REAP'd on missing
+		// data, so flag the platform and tell the user why.
+		if !parsedAny && p.HasTranscripts {
+			evidenceBlind[string(p.ID)] = true
+			reason := "no session transcripts were found"
+			if p.TranscriptType == "sqlite" {
+				reason = "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH"
+			} else if p.TranscriptType != "jsonl" {
+				reason = fmt.Sprintf("its transcripts use a format skillreaper does not parse yet (%s)", p.TranscriptType)
+			}
+			warns = append(warns, scan.Warning{
+				Path: p.ConfigDirAbs,
+				Msg:  fmt.Sprintf("%s usage is not counted because %s; its items are shown as REVIEW, not REAP.", p.Name, reason),
+			})
 		}
 	}
 	if st == nil {
@@ -226,15 +299,21 @@ func gather(opts options) (*report.Report, error) {
 	}
 
 	keepSet, _ := override.KeepSet(opts.claudeDir)
+	home, _ := os.UserHomeDir()
+	claudeMD := scan.LoadClaudeMD(cwd, home)
 
 	return report.Build(items, st, warns, report.Opts{
-		MinSessions:  opts.minSessions,
-		GraceDays:    opts.graceDays,
-		MinTokens:    opts.minTokens,
-		PricePerMTok: opts.price,
-		Cutoff:       cutoff,
-		WindowDays:   opts.days,
-		KeepSet:      keepSet,
+		MinSessions:   opts.minSessions,
+		GraceDays:     opts.graceDays,
+		MinTokens:     opts.minTokens,
+		PricePerMTok:  opts.price,
+		Cutoff:        cutoff,
+		WindowDays:    opts.days,
+		KeepSet:       keepSet,
+		EvidenceBlind: evidenceBlind,
+		ClaudeMDLines: claudeMD,
+		MuteThreshold: opts.muteThreshold,
+		MuteMinTokens: opts.muteMinTokens,
 	}), nil
 }
 
@@ -255,6 +334,26 @@ func mergeStats(dst, src *usage.Stats) {
 			}
 		}
 	}
+	for cat, errs := range src.Errors {
+		for key, count := range errs {
+			dst.Errors[cat][key] += count
+		}
+	}
+	for cat, lasts := range src.LastAttempt {
+		for key, ts := range lasts {
+			if ts.After(dst.LastAttempt[cat][key]) {
+				dst.LastAttempt[cat][key] = ts
+			}
+		}
+	}
+	for key, projs := range src.SkillProjects {
+		if dst.SkillProjects[key] == nil {
+			dst.SkillProjects[key] = map[string]int{}
+		}
+		for proj, count := range projs {
+			dst.SkillProjects[key][proj] += count
+		}
+	}
 }
 
 func cmdReport(opts options, stdout, stderr io.Writer) int {
@@ -271,6 +370,8 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		}
 	case opts.asMarkdown:
 		report.RenderMarkdown(stdout, r)
+	case opts.quiet:
+		// audit silently — used to warm caches without printing
 	default:
 		report.RenderText(stdout, r, colorEnabled(opts, stdout))
 	}
@@ -452,6 +553,227 @@ func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "restored %s\n", args[0])
+	return 0
+}
+
+// findSkill locates a skill row by its exact invocation key, then by the bare
+// suffix of a namespaced key (so "plan" matches "ecc:plan").
+func findSkill(r *report.Report, name string) (report.Row, bool) {
+	for _, row := range r.Rows {
+		if row.Category == scan.CatSkill && row.Name == name {
+			return row, true
+		}
+	}
+	for _, row := range r.Rows {
+		if row.Category != scan.CatSkill {
+			continue
+		}
+		if i := strings.LastIndexByte(row.Name, ':'); i >= 0 && row.Name[i+1:] == name {
+			return row, true
+		}
+	}
+	return report.Row{}, false
+}
+
+func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: reap mute <name>")
+		return 2
+	}
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	row, ok := findSkill(r, args[0])
+	if !ok {
+		fmt.Fprintf(stderr, "no skill found: %s\n", args[0])
+		return 1
+	}
+	if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "muted %s — description stripped (~%d tok/session saved)\n", row.Name, row.Tokens)
+	fmt.Fprintf(stdout, "Undo: reap unmute %s\n", row.Name)
+	return 0
+}
+
+func cmdUnmute(opts options, args []string, stdout, stderr io.Writer) int {
+	if opts.all {
+		n, err := mute.UnmuteAll(opts.claudeDir)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "unmuted %d skills\n", n)
+		return 0
+	}
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: reap unmute <name>|--all")
+		return 2
+	}
+	if err := mute.Unmute(opts.claudeDir, args[0]); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "unmuted %s\n", args[0])
+	return 0
+}
+
+func cmdInstallHook(opts options, stdout, stderr io.Writer) int {
+	settings := filepath.Join(opts.claudeDir, "settings.json")
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		exe = "reap"
+	}
+	out, err := hook.Install(settings, hook.Command(exe), opts.dryRun)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if opts.dryRun {
+		fmt.Fprintf(stdout, "dry-run — would write %s:\n%s\n", settings, out)
+		return 0
+	}
+	fmt.Fprintf(stdout, "installed SessionStart nudge hook in %s\n", settings)
+	fmt.Fprintf(stdout, "Undo: reap uninstall-hook\n")
+	return 0
+}
+
+func cmdUninstallHook(opts options, stdout, stderr io.Writer) int {
+	settings := filepath.Join(opts.claudeDir, "settings.json")
+	if err := hook.Uninstall(settings); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "removed skillreaper nudge hook from %s\n", settings)
+	return 0
+}
+
+// cmdNudge is the SessionStart hook entry point: a passive, at-most-weekly
+// reminder. It never fails loudly — a broken audit must not break a session.
+func cmdNudge(opts options, stdout, stderr io.Writer) int {
+	r, err := gather(opts)
+	if err != nil {
+		return 0
+	}
+	st, err := hook.LoadNudgeState(opts.claudeDir)
+	if err != nil {
+		return 0
+	}
+	now := time.Now()
+	if !hook.ShouldNudge(now, r.DeadCount, r.MuteCount, st) {
+		return 0
+	}
+	fmt.Fprintf(stderr, "skillreaper: %d skills flagged for pruning since last check. Run `reap` to review.\n", r.DeadCount)
+	st.LastNudgeAt = now
+	st.LastReapCount = r.DeadCount
+	st.LastMuteCount = r.MuteCount
+	_ = hook.SaveNudgeState(opts.claudeDir, st)
+	return 0
+}
+
+func cmdByProject(opts options, stdout, stderr io.Writer) int {
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if opts.asJSON {
+		if err := report.RenderByProjectJSON(stdout, r); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	report.RenderByProject(stdout, r, colorEnabled(opts, stdout))
+	return 0
+}
+
+func cmdManifest(opts options, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: reap manifest <name>")
+		return 2
+	}
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	m, ok := report.BuildManifest(r, args[0], opts.claudeDir, opts.claudeVersion)
+	if !ok {
+		fmt.Fprintf(stderr, "no skill found: %s\n", args[0])
+		return 1
+	}
+	if opts.asJSON {
+		if err := report.RenderManifestJSON(stdout, m); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	report.RenderManifestMarkdown(stdout, m)
+	return 0
+}
+
+func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: reap why <name>")
+		return 2
+	}
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+
+	matches := report.MatchItems(r, args[0])
+	if len(matches) == 0 {
+		fmt.Fprintf(stderr, "no item found: %s\n", args[0])
+		return 1
+	}
+	if len(matches) > 1 {
+		fmt.Fprintf(stderr, "ambiguous: %q matches multiple items:\n", args[0])
+		for _, m := range matches {
+			fmt.Fprintf(stderr, "  %s\n", report.CanonicalName(m))
+		}
+		fmt.Fprintln(stderr, "qualify with a category, e.g. skill:<name>")
+		return 1
+	}
+	row := matches[0]
+
+	muted := false
+	if names, e := mute.List(opts.claudeDir); e == nil {
+		for _, n := range names {
+			if n == row.Name {
+				muted = true
+				break
+			}
+		}
+	}
+	cwd, _ := os.Getwd()
+	home, _ := os.UserHomeDir()
+	claudeMD := scan.ClaudeMDReferences(scan.LoadClaudeMD(cwd, home), row.Name)
+
+	e := report.BuildExplanation(row, r.Sessions, report.ExplainInput{
+		MinSessions:   opts.minSessions,
+		GraceDays:     opts.graceDays,
+		MuteThreshold: opts.muteThreshold,
+		WindowDays:    opts.days,
+		Muted:         muted,
+		ClaudeMDRef:   claudeMD,
+		Now:           time.Now(),
+	})
+
+	if opts.asJSON {
+		if err := report.RenderWhyJSON(stdout, e); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	report.RenderWhy(stdout, e, colorEnabled(opts, stdout))
 	return 0
 }
 

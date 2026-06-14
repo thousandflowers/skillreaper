@@ -63,6 +63,7 @@ func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			BodyChars:   bodyChars,
 			InstalledAt: installedAt,
 			Removable:   removable,
+			ToolSurface: toolSurface(b, "tools", "allowed-tools"),
 		})
 	}
 	return items, warns

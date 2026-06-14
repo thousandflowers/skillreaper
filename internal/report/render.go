@@ -13,17 +13,17 @@ import (
 
 // ANSI escape codes, applied only when color is enabled.
 const (
-	cReset = "\x1b[0m"
-	cBold  = "\x1b[1m"
-	cDim   = "\x1b[2m"
-	cRed   = "\x1b[31m"
-	cGreen = "\x1b[32m"
-	cYell  = "\x1b[33m"
-	cCyan  = "\x1b[36m"
-	cBRed  = "\x1b[1;31m"
+	cReset  = "\x1b[0m"
+	cBold   = "\x1b[1m"
+	cDim    = "\x1b[2m"
+	cRed    = "\x1b[31m"
+	cGreen  = "\x1b[32m"
+	cYell   = "\x1b[33m"
+	cCyan   = "\x1b[36m"
+	cBRed   = "\x1b[1;31m"
 	cBGreen = "\x1b[1;32m"
-	cBYell = "\x1b[1;33m"
-	cBCyan = "\x1b[1;36m"
+	cBYell  = "\x1b[1;33m"
+	cBCyan  = "\x1b[1;36m"
 )
 
 // painter returns a function that wraps text in an ANSI code when color
@@ -97,7 +97,7 @@ func RenderText(w io.Writer, r *Report, color bool) {
 	}
 
 	if len(r.Warnings) > 0 {
-		fmt.Fprintf(w, "\n  %s\n", paint(cYell, fmt.Sprintf("── %d warnings (unreadable files) ──", len(r.Warnings))))
+		fmt.Fprintf(w, "\n  %s\n", paint(cYell, fmt.Sprintf("── %d warnings ──", len(r.Warnings))))
 		for _, warn := range r.Warnings {
 			fmt.Fprintf(w, "    %s\n", paint(cDim, warn.Path+": "+warn.Msg))
 		}
@@ -122,7 +122,7 @@ func renderSection(w io.Writer, rows []Row, paint func(code, s string) string) {
 	}
 	groups := groupByVerdict(rows)
 	first := true
-	for _, v := range []string{VerdictReap, VerdictReview, VerdictKeep, VerdictInfo} {
+	for _, v := range []string{VerdictReap, VerdictMute, VerdictReview, VerdictKeep, VerdictInfo} {
 		items := groups[v]
 		// Skip empty groups (shouldn't happen but guard).
 		if len(items) == 0 {
@@ -147,6 +147,9 @@ func renderSection(w io.Writer, rows []Row, paint func(code, s string) string) {
 		case VerdictReap:
 			subColor = cBRed
 			subIcon = "▸"
+		case VerdictMute:
+			subColor = cBYell
+			subIcon = "▸"
 		case VerdictReview:
 			subColor = cBYell
 			subIcon = "▸"
@@ -170,10 +173,11 @@ func renderSection(w io.Writer, rows []Row, paint func(code, s string) string) {
 
 		// ── Column header + rows ──────────────────────────────
 		tw := newTable(w)
-		tw.row("NAME", "TOK", "SRC", "USES", "LAST", "JUDGMENT")
+		tw.row("NAME", "TOK", "SRC", "PERM", "USES", "LAST", "JUDGMENT")
 		for _, row := range items {
 			weight := weightDisplay(row.Tokens, maxTok, row.Category, paint)
 			src := shortSource(row.Source)
+			perm := permDisplay(row)
 
 			judgment := row.Verdict
 			if row.Reason != "" && row.Verdict != VerdictInfo {
@@ -181,7 +185,14 @@ func renderSection(w io.Writer, rows []Row, paint func(code, s string) string) {
 			}
 			switch row.Verdict {
 			case VerdictReap:
-				judgment = paint(cRed, judgment)
+				// Broken skills (invoked, only errored) are louder than plain unused.
+				if row.Reason == ReasonBroken {
+					judgment = paint(cBRed, judgment)
+				} else {
+					judgment = paint(cRed, judgment)
+				}
+			case VerdictMute:
+				judgment = paint(cYell, judgment)
 			case VerdictKeep:
 				judgment = paint(cGreen, judgment)
 			case VerdictReview:
@@ -193,9 +204,24 @@ func renderSection(w io.Writer, rows []Row, paint func(code, s string) string) {
 				uses = fmt.Sprintf("%d", row.Uses)
 				last = humanTime(row.LastUsed)
 			}
-			tw.row(truncate(row.Name, 44), weight, src, uses, last, judgment)
+			tw.row(truncate(row.Name, 44), weight, src, perm, uses, last, judgment)
 		}
 		tw.flush()
+	}
+}
+
+// permDisplay shows a skill/agent's permission surface: "all" when
+// unrestricted, otherwise the count of allowed tools. "-" where it does not
+// apply (MCP, hooks, prose).
+func permDisplay(row Row) string {
+	switch row.Category {
+	case scan.CatSkill, scan.CatAgent:
+		if row.ToolSurface == scan.ToolSurfaceAll {
+			return "all"
+		}
+		return fmt.Sprintf("%d", row.ToolSurface)
+	default:
+		return "-"
 	}
 }
 
@@ -254,15 +280,15 @@ func RenderMarkdown(w io.Writer, r *Report) {
 			if row.Kept {
 				reason = "user-kept"
 			}
-		fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s |\n",
+			fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s |\n",
 				row.Name, shortSource(row.Source), weight, uses, last, row.Verdict, reason)
 		}
 	}
 }
 
-// groupByVerdict splits rows by verdict, preserving REAP→REVIEW→KEEP→INFO order.
+// groupByVerdict splits rows by verdict, preserving REAP→MUTE→REVIEW→KEEP→INFO order.
 func groupByVerdict(rows []Row) map[string][]Row {
-	order := []string{VerdictReap, VerdictReview, VerdictKeep, VerdictInfo}
+	order := []string{VerdictReap, VerdictMute, VerdictReview, VerdictKeep, VerdictInfo}
 	m := make(map[string][]Row, len(order))
 	for _, v := range order {
 		m[v] = nil

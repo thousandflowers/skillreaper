@@ -128,6 +128,40 @@ func RenderGap(w io.Writer, r *Report, color bool) {
 	total := GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}
 	writeGapRow(w, "total", total, false, r.Sessions, paint)
 	fmt.Fprintln(w)
+
+	renderMuteSavings(w, r, paint)
+	renderBrokenSkills(w, r, paint)
+}
+
+// renderMuteSavings shows the per-session tokens recoverable by muting heavy,
+// rarely-fired skills.
+func renderMuteSavings(w io.Writer, r *Report, paint func(code, s string) string) {
+	if r.MuteCount == 0 {
+		return
+	}
+	fmt.Fprintf(w, "  %s %s\n",
+		paint(cBYell, "⟡ mute"),
+		paint(cDim, fmt.Sprintf("%d heavy low-use skills · ~%d tok/session recoverable via `reap mute`",
+			r.MuteCount, r.MuteTokensPerSession)))
+}
+
+// renderBrokenSkills lists skills that were invoked but only ever errored,
+// with their error counts — distinct from never-invoked cold skills.
+func renderBrokenSkills(w io.Writer, r *Report, paint func(code, s string) string) {
+	var broken []Row
+	for _, row := range r.Rows {
+		if row.Reason == ReasonBroken {
+			broken = append(broken, row)
+		}
+	}
+	if len(broken) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\n  %s\n", paint(cBRed, "Broken skills (invoked, only errored):"))
+	for _, row := range broken {
+		fmt.Fprintf(w, "    %-44s %s\n",
+			truncate(row.Name, 44), paint(cDim, fmt.Sprintf("%d errors", row.ErrorCount)))
+	}
 }
 
 // writeGapRow renders one aligned row, tinted by utilization. mcp marks the

@@ -89,6 +89,9 @@ reap unmute <name>            # restore description from backup
 reap unmute --all             # restore all muted skills
 reap keep <name>              # protect an item from pruning
 reap restore --all            # undo every prune
+reap why <name>               # explain in detail why an item got its verdict
+reap by-project               # skills bucketed by the project that fired them
+reap manifest <name>          # emit a release manifest for one skill
 reap install-hook             # install weekly nudge (SessionStart hook)
 reap install-hook --dry-run   # preview without writing
 reap uninstall-hook           # remove hook, other hooks untouched
@@ -189,7 +192,7 @@ files and session transcripts on disk — your data never leaves your machine.
 | **Claude Code** | ✅ |
 | **Codex CLI** | ✅ |
 | **Hermes** | ✅ |
-| **OpenCode** | Inventory only (SQLite transcripts not parsed yet) |
+| **OpenCode** | ✅ (usage evidence needs the `sqlite3` CLI; inventory-only without it) |
 | **Cursor** | Inventory only (no local transcripts) |
 | **OpenClaw** | Inventory only (no session history) |
 
@@ -203,7 +206,8 @@ files and session transcripts on disk — your data never leaves your machine.
    files across all detected platforms.
 3. **Evidence** — parses JSONL session transcripts (Claude Code, Codex CLI,
    Hermes). Counts `tool_use` blocks and command invocations with timestamps.
-   SQLite-backed transcripts (OpenCode) are not parsed yet.
+   OpenCode's SQLite history is read via the `sqlite3` CLI (read-only) when it
+   is on `PATH`; without it, OpenCode stays inventory-only.
 4. **Cost** — character weight (`ceil(chars / 3.7)`) + init parser tool
    declarations. Model pricing auto-resolves by model name.
 5. **Verdict** — REAP / KEEP / REVIEW with machine-readable reason.
@@ -225,12 +229,13 @@ Parser updates are an ongoing maintenance reality. The project is architected
 for easy fixes (one struct per platform in `internal/platform/`), but format
 changes can lag by days to weeks after a platform update.
 
-**OpenCode evidence is not read yet.** OpenCode stores session history in a
-SQLite database, which skillreaper does not parse yet. OpenCode items are
-inventoried but have no usage evidence, so they are reported as **REVIEW
-(never REAP)** and skillreaper prints a warning at scan time. Until the SQLite
-reader lands, judge OpenCode items manually. The same safety net applies to any
-platform with no session transcripts on disk.
+**OpenCode evidence needs the `sqlite3` CLI.** OpenCode stores session history
+in a SQLite database. skillreaper reads it through the system `sqlite3` binary
+in read-only mode — the real engine, so WAL-mode databases and overflow pages
+are handled correctly (a hand-rolled parser would not). No Go dependency is
+added. When `sqlite3` is **not** on `PATH`, OpenCode items have no usage
+evidence: they stay **REVIEW (never REAP)** with a warning at scan time. The
+same safety net applies to any platform with no readable session transcripts.
 
 **Not a tool declaration fix.** Claude Code's deferred tools reduce the
 *init-time tool declaration* overhead. Skillreaper addresses a different

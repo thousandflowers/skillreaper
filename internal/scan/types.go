@@ -21,7 +21,7 @@ const (
 type Item struct {
 	Category    Category
 	Name        string // invocation key: "graphify", "ecc:plan", mcp server name
-	Platform    string   // platform ID: "claude-code", "opencode", "cursor", etc.
+	Platform    string // platform ID: "claude-code", "opencode", "cursor", etc.
 	Source      string // "personal", "plugin:<name@mkt>", "user-config", "project:<path>"
 	Path        string
 	Description string    // text injected into context (skills/agents) or display string
@@ -29,7 +29,18 @@ type Item struct {
 	BodyChars   int       // chars loaded on invocation (SKILL.md body)
 	InstalledAt time.Time // zero when unknown
 	Removable   bool      // safe to prune automatically
+	// ToolSurface is the permission breadth of a skill/agent: the count of
+	// tools it is restricted to via the "allowed-tools" (skill) or "tools"
+	// (agent) frontmatter field. ToolSurfaceAll means no restriction — the
+	// item may use every tool, the widest and most prune-worthy surface.
+	// Zero for categories where it does not apply (MCP, hook, prose).
+	ToolSurface int
 }
+
+// ToolSurfaceAll marks an item with no allowed-tools restriction: it can use
+// every tool. It is the widest permission surface, so an unused item with
+// ToolSurfaceAll is the first thing worth pruning.
+const ToolSurfaceAll = -1
 
 // Warning records a non-fatal problem found while scanning.
 type Warning struct {

@@ -12,6 +12,7 @@
   <a href="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml"><img src="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/v/release/thousandflowers/skillreaper" alt="Release"></a>
   <a href="https://github.com/thousandflowers/skillreaper/issues"><img src="https://img.shields.io/github/issues/thousandflowers/skillreaper" alt="Issues"></a>
+  <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/downloads/thousandflowers/skillreaper/total?color=success" alt="Downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
 
@@ -80,15 +81,22 @@ Upgrading, uninstalling, and platform-specific tips →
 ### Usage
 
 ```bash
-reap                     # scan + report (read-only)
-reap gap                 # loaded-vs-fired utilization breakdown
-reap prune               # quarantine unused items (reversible)
-reap keep <name>         # protect an item from pruning
-reap restore --all       # undo every prune
-reap --json              # structured JSON output
-reap --md                # markdown report
-reap --days 7            # shorter evidence window
-reap version             # print version
+reap                          # scan + report (read-only)
+reap gap                      # loaded-vs-fired utilization breakdown
+reap prune                    # quarantine REAP items (reversible)
+reap mute <name>              # strip description, keep skill available
+reap unmute <name>            # restore description from backup
+reap unmute --all             # restore all muted skills
+reap keep <name>              # protect an item from pruning
+reap restore --all            # undo every prune
+reap install-hook             # install weekly nudge (SessionStart hook)
+reap install-hook --dry-run   # preview without writing
+reap uninstall-hook           # remove hook, other hooks untouched
+reap --json                   # structured JSON output
+reap --md                     # markdown report
+reap --days 7                 # shorter evidence window
+reap --mute-threshold 0.20    # firing rate below which MUTE triggers (default 20%)
+reap version                  # print version
 ```
 
 Everything is **reversible**. `reap prune` moves files to a `reaped/`
@@ -101,7 +109,9 @@ directory with a versioned manifest. Nothing is ever deleted. Run
 
 | Label | Meaning |
 |---|---|
+| **`REAP(broken)`** | Invoked but errored — broken, not just cold |
 | **`REAP`** | Zero uses — safe to quarantine |
+| **`MUTE`** | Used rarely + heavy — description stripped, skill stays available |
 | **`KEEP`** | Used, tiny, or manually protected |
 | **`REVIEW`** | Too new or not enough sessions |
 
@@ -145,6 +155,26 @@ reap gap --md     # markdown table</pre>
 
 <br>
 
+### Weekly nudge
+
+```bash
+reap install-hook
+```
+
+Installs a `SessionStart` hook that runs a passive audit at the start of each
+Claude Code session. If 7 days have passed and the REAP or MUTE count has grown
+since the last check, it prints a single line to stderr:
+
+```
+skillreaper: 3 skills flagged for pruning since last check. Run reap to review.
+```
+
+Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.
+
+`reap uninstall-hook` removes only the skillreaper entry — other hooks untouched.
+
+<br>
+
 ### Privacy
 
 **100 % local.** Zero telemetry, zero network, zero uploads. Reads config
@@ -157,9 +187,9 @@ files and session transcripts on disk — your data never leaves your machine.
 | Platform | Full support |
 |---|---|
 | **Claude Code** | ✅ |
-| **OpenCode** | ✅ |
 | **Codex CLI** | ✅ |
 | **Hermes** | ✅ |
+| **OpenCode** | Inventory only (SQLite transcripts not parsed yet) |
 | **Cursor** | Inventory only (no local transcripts) |
 | **OpenClaw** | Inventory only (no session history) |
 
@@ -171,8 +201,9 @@ files and session transcripts on disk — your data never leaves your machine.
    platforms are scanned. No flags needed.
 2. **Inventory** — scans skills, agents, MCP servers, hooks, and prose
    files across all detected platforms.
-3. **Evidence** — parses session transcripts (JSONL or SQLite). Counts
-   `tool_use` blocks and command invocations with timestamps.
+3. **Evidence** — parses JSONL session transcripts (Claude Code, Codex CLI,
+   Hermes). Counts `tool_use` blocks and command invocations with timestamps.
+   SQLite-backed transcripts (OpenCode) are not parsed yet.
 4. **Cost** — character weight (`ceil(chars / 3.7)`) + init parser tool
    declarations. Model pricing auto-resolves by model name.
 5. **Verdict** — REAP / KEEP / REVIEW with machine-readable reason.
@@ -194,6 +225,13 @@ Parser updates are an ongoing maintenance reality. The project is architected
 for easy fixes (one struct per platform in `internal/platform/`), but format
 changes can lag by days to weeks after a platform update.
 
+**OpenCode evidence is not read yet.** OpenCode stores session history in a
+SQLite database, which skillreaper does not parse yet. OpenCode items are
+inventoried but have no usage evidence, so they are reported as **REVIEW
+(never REAP)** and skillreaper prints a warning at scan time. Until the SQLite
+reader lands, judge OpenCode items manually. The same safety net applies to any
+platform with no session transcripts on disk.
+
 **Not a tool declaration fix.** Claude Code's deferred tools reduce the
 *init-time tool declaration* overhead. Skillreaper addresses a different
 problem: **always-loaded skill/agent/prose files.** If a skill description
@@ -214,10 +252,12 @@ lazy tool loading. These two optimizations are complementary, not competing.
 cmd/reap/       CLI entry point
 internal/
   platform/     platform definitions + auto-detection
-  scan/         inventory scanners
-  usage/        transcript parser (JSONL + SQLite)
-  report/       verdict logic + ANSI/JSON/MD renderers
+  scan/         inventory scanners (claudemd.go: CLAUDE.md protection)
+  usage/        transcript parser — tool_use + error tracking
+  report/       verdict logic (REAP/MUTE/KEEP/REVIEW) + ANSI/JSON/MD renderers
   prune/        reversible quarantine
+  mute/         description strip + backup/restore
+  hook/         SessionStart install/uninstall + nudge state
   cost/         model pricing
 docs/           demo assets
 ```
@@ -225,6 +265,16 @@ docs/           demo assets
 <br>
 
 ---
+
+### Acknowledgements
+
+v0.2.0 ideas were inspired by work from the r/claudeskills community:
+
+- **[groundskeeper](https://github.com/zvoque/groundskeeper)** — SessionStart weekly nudge pattern and live usage tracking approach
+- **[optimize](https://github.com/codeprakhar25/optimize)** — name-only middle state (implemented as MUTE) and CLAUDE.md reference protection
+- Broken-vs-cold distinction direction inspired by discussion on r/claudeskills
+
+<br>
 
 <p align="center">
   <a href="https://github.com/thousandflowers/skillreaper/issues">Issues</a>

@@ -7,6 +7,8 @@
   Your AI agent reads 187 skill descriptions every session.<br>
   You use 4. Reap the rest.
 </h1>
+<p>Numbers above are illustrative, run `reap` to see yours.<p>
+
 
 <p align="center">
   <a href="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml"><img src="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml/badge.svg" alt="CI"></a>

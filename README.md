@@ -10,14 +10,14 @@
   skillreaper proves which — from your own transcripts — and prunes the dead
   weight, so your agent stops wading through tools it never picks.
 </p>
-<p align="center"><em>Numbers above are illustrative — run <code>reap</code> to see yours.</em></p>
+
 
 
 <p align="center">
   <a href="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml"><img src="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/v/release/thousandflowers/skillreaper" alt="Release"></a>
-  <a href="https://github.com/thousandflowers/skillreaper/issues"><img src="https://img.shields.io/github/issues/thousandflowers/skillreaper" alt="Issues"></a>
-  <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/downloads/thousandflowers/skillreaper/total?color=success" alt="Downloads"></a>
+  <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/v/release/thousandflowers/skillreaper?cacheSeconds=86400" alt="Release"></a>
+  <a href="https://github.com/thousandflowers/skillreaper/issues"><img src="https://img.shields.io/github/issues/thousandflowers/skillreaper?cacheSeconds=86400" alt="Issues"></a>
+  <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/downloads/thousandflowers/skillreaper/total?cacheSeconds=86400&color=success" alt="Downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
 
@@ -47,6 +47,8 @@ prompt-cache hit rate. A typical setup:
 - 142 never used (76 %)
 - 8 000 tok/session dead
 - ~2 160 000 tok/month burned on irrelevant instructions
+
+<p align="center"><em>Numbers above are illustrative — run <code>reap</code> to see yours.</em></p>
 
 skillreaper measures both, from evidence — no guessing.
 

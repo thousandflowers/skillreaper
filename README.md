@@ -15,7 +15,6 @@
 
 <p align="center">
   <a href="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml"><img src="https://github.com/thousandflowers/skillreaper/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://badgen.net/github/release/thousandflowers/skillreaper" alt="Release"></a>
   <a href="https://github.com/thousandflowers/skillreaper/issues"><img src="https://badgen.net/github/open-issues/thousandflowers/skillreaper" alt="Issues"></a>
   <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/downloads/thousandflowers/skillreaper/total?cacheSeconds=86400&color=success" alt="Downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>

@@ -93,3 +93,52 @@ func TestUnmuteAll(t *testing.T) {
 		}
 	}
 }
+
+func TestListEmpty(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	list, err := List(claudeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 0 {
+		t.Errorf("expected empty list, got %v", list)
+	}
+}
+
+func TestListAfterMute(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	skillPath := writeSkill(t, claudeDir, "test-skill")
+	if err := Mute(claudeDir, "test-skill", skillPath); err != nil {
+		t.Fatal(err)
+	}
+	list, err := List(claudeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0] != "test-skill" {
+		t.Errorf("list = %v, want [test-skill]", list)
+	}
+}
+
+func TestUnmuteNotMuted(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	if err := Unmute(claudeDir, "never-muted"); err == nil {
+		t.Error("expected error for not-muted skill")
+	}
+}
+
+func TestMuteInvalidPath(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	if err := Mute(claudeDir, "ghost", "/nonexistent/SKILL.md"); err == nil {
+		t.Error("expected error for invalid path")
+	}
+}
+
+func TestStripDescriptionEdgeCases(t *testing.T) {
+	if _, ok := stripDescription([]byte("just a normal line\nwithout frontmatter\n")); ok {
+		t.Error("should report nothing stripped")
+	}
+	if _, ok := stripDescription([]byte("")); ok {
+		t.Error("empty input should report nothing stripped")
+	}
+}

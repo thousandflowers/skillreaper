@@ -292,3 +292,37 @@ func TestRenderJSON(t *testing.T) {
 		t.Error("json output missing DeadCount")
 	}
 }
+
+func TestVerdictProportional(t *testing.T) {
+	cutoff := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
+	installed := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	opts := VerdictOpts{MinSessions: 10, GraceDays: 14, MinTokens: 3, WindowDays: 30, Cutoff: cutoff}
+	v, r := Verdict(0, 3, 100, installed, opts)
+	if v != VerdictReview || r != ReasonNeedsData {
+		t.Errorf("3 sessions out of 60 days: verdict=%s reason=%s", v, r)
+	}
+}
+
+func TestVerdictMinSessionsExact(t *testing.T) {
+	cutoff := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
+	installed := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	opts := VerdictOpts{MinSessions: 5, GraceDays: 14, MinTokens: 3, WindowDays: 30, Cutoff: cutoff}
+	v, r := Verdict(0, 5, 100, installed, opts)
+	if v != VerdictReap || r != ReasonUnused {
+		t.Errorf("5 sessions at min=5: verdict=%s reason=%s", v, r)
+	}
+}
+
+
+func TestBuildEmptyItems(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 10
+	r := Build(nil, st, nil, Opts{MinSessions: 10, Cutoff: time.Now()})
+	if r == nil {
+		t.Fatal("Build returned nil")
+	}
+	if len(r.Rows) != 0 {
+		t.Errorf("Rows = %d, want 0", len(r.Rows))
+	}
+}
+

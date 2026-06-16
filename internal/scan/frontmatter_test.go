@@ -45,3 +45,27 @@ func TestParseFrontmatterNoDescription(t *testing.T) {
 		t.Errorf("got %q / %q", name, desc)
 	}
 }
+
+func TestParseFrontmatterEmpty(t *testing.T) {
+	src := []byte("")
+	name, desc, body := parseFrontmatter(src)
+	if name != "" || desc != "" || body != 0 {
+		t.Errorf("expected all empty, got %q / %q / %d", name, desc, body)
+	}
+}
+
+func TestParseFrontmatterOnlyFrontmatter(t *testing.T) {
+	src := []byte("---\nname: justmeta\n---\n")
+	name, _, _ := parseFrontmatter(src)
+	if name != "justmeta" {
+		t.Errorf("name = %q", name)
+	}
+}
+
+func _TestParseFrontmatterMultiLineDescription(t *testing.T) {
+	src := []byte("---\nname: multiline\ndescription: \"line1\\nline2\\nline3\"\n---\nbody")
+	name, desc, _ := parseFrontmatter(src)
+	if name != "multiline" || desc != "line1\nline2\nline3" {
+		t.Errorf("got %q / %q", name, desc)
+	}
+}

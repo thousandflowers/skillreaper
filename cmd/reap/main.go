@@ -43,6 +43,7 @@ Usage:
   reap mute <name>          strip a heavy skill's description (reversible)
   reap unmute <name>|--all  restore a muted skill's description
   reap restore <id>|--all   undo prune actions
+  reap share [flags]        print a ready-to-share message about your savings
   reap install-hook         add a weekly SessionStart nudge to settings.json
   reap uninstall-hook       remove skillreaper's SessionStart nudge
   reap version              print version
@@ -66,6 +67,7 @@ type options struct {
 	all           bool
 	dryRun        bool
 	quiet         bool
+	noNudge       bool
 	listKeep      bool
 	removeKeep    string
 	claudeDir     string
@@ -97,6 +99,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&opts.asJSON, "json", false, "output JSON")
 	fs.BoolVar(&opts.asMarkdown, "md", false, "output Markdown")
 	fs.BoolVar(&opts.noColor, "no-color", false, "disable colors")
+	fs.BoolVar(&opts.noNudge, "no-nudge", false, "suppress the star-CTA prompt")
 	fs.BoolVar(&opts.yes, "yes", false, "prune: apply without confirmation")
 	fs.BoolVar(&opts.all, "all", false, "restore/unmute: act on every recorded action")
 	fs.BoolVar(&opts.dryRun, "dry-run", false, "install-hook: print the change without writing")
@@ -150,6 +153,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdInstallHook(opts, stdout, stderr)
 	case "uninstall-hook":
 		return cmdUninstallHook(opts, stdout, stderr)
+	case "share":
+		return cmdShare(opts, stdout, stderr)
 	case "nudge":
 		return cmdNudge(opts, stdout, stderr)
 	case "version":
@@ -373,7 +378,9 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 	case opts.quiet:
 		// audit silently — used to warm caches without printing
 	default:
-		report.RenderText(stdout, r, colorEnabled(opts, stdout))
+		col := colorEnabled(opts, stdout)
+		report.RenderText(stdout, r, col)
+		tryShowStarCta(opts, stdout, r, col)
 	}
 	return 0
 }
@@ -531,6 +538,10 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "reaped %s %s (id %s)\n", row.Category, row.Name, e.ID)
 	}
 	fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore --all (or a single id)\n")
+	col := colorEnabled(opts, stdout)
+	report.RenderValueFeedback(stdout, "pruned", len(candidates), totalTok, r.SessionsPerMonth, opts.price, col)
+	tryShowShareHint(opts, stdout, col)
+	tryShowStarCta(opts, stdout, r, col)
 	return 0
 }
 
@@ -596,6 +607,9 @@ func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "muted %s — description stripped (~%d tok/session saved)\n", row.Name, row.Tokens)
 	fmt.Fprintf(stdout, "Undo: reap unmute %s\n", row.Name)
+	col := colorEnabled(opts, stdout)
+	report.RenderValueFeedback(stdout, "muted", 1, row.Tokens, r.SessionsPerMonth, opts.price, col)
+	tryShowShareHint(opts, stdout, col)
 	return 0
 }
 
@@ -777,6 +791,51 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+func cmdShare(opts options, stdout, stderr io.Writer) int {
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	total := r.DeadTokensPerSession + r.MuteTokensPerSession
+	switch {
+	case opts.asJSON:
+		report.RenderShareJSON(stdout, total)
+	case opts.asMarkdown:
+		report.RenderShareMarkdown(stdout, total)
+	default:
+		report.RenderShareText(stdout, total)
+	}
+	return 0
+}
+
+// tryShowShareHint prints the share-command hint when conditions are met:
+// not disabled, not json/md, TTY+color, and throttled to 30 days.
+// It shares throttle state between prune and mute via NudgeState.
+func tryShowShareHint(opts options, stdout io.Writer, color bool) {
+	if isNudgeDisabled(opts) {
+		return
+	}
+	if opts.asJSON || opts.asMarkdown {
+		return
+	}
+	if !color {
+		return
+	}
+	st, err := hook.LoadNudgeState(opts.claudeDir)
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	if !hook.ShouldShowShareHint(now, st) {
+		return
+	}
+	report.RenderShareHint(stdout, true)
+	st.LastShareHintAt = now
+	st.ShareHintCount++
+	_ = hook.SaveNudgeState(opts.claudeDir, st)
+}
+
 func humanTok(n int) string {
 	switch {
 	case n >= 1000:
@@ -784,4 +843,40 @@ func humanTok(n int) string {
 	default:
 		return fmt.Sprintf("%d", n)
 	}
+}
+
+// isNudgeDisabled checks whether the user has opted out of the star-CTA
+// via the --no-nudge flag or the SKILLREAPER_NO_NUDGE env var.
+func isNudgeDisabled(opts options) bool {
+	if opts.noNudge {
+		return true
+	}
+	return os.Getenv("SKILLREAPER_NO_NUDGE") != ""
+}
+
+func tryShowStarCta(opts options, stdout io.Writer, r *report.Report, color bool) {
+	if isNudgeDisabled(opts) {
+		return
+	}
+	if opts.asJSON || opts.asMarkdown {
+		return
+	}
+	if !color {
+		return
+	}
+	if r.DeadTokensPerSession < report.MinStarCtaTokens {
+		return
+	}
+	st, err := hook.LoadNudgeState(opts.claudeDir)
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	if !hook.ShouldShowStarCta(now, st) {
+		return
+	}
+	report.RenderStarCta(stdout, r.DeadTokensPerSession, true)
+	st.LastStarCtaAt = now
+	st.StarCtaCount++
+	_ = hook.SaveNudgeState(opts.claudeDir, st)
 }

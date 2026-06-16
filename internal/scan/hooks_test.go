@@ -65,3 +65,11 @@ func TestScanProse(t *testing.T) {
 		t.Errorf("total chars = %d, want %d", total, want)
 	}
 }
+
+func TestScanHooksMissingFile(t *testing.T) {
+	home := t.TempDir()
+	items, warns := ScanHooks(home, "test")
+	if len(items) != 0 || len(warns) != 0 {
+		t.Errorf("expected empty for missing file, got %d items %d warns", len(items), len(warns))
+	}
+}

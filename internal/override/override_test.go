@@ -87,3 +87,27 @@ func TestEmptyList(t *testing.T) {
 		t.Fatalf("expected empty, got %v", items)
 	}
 }
+
+func TestKeepSetEmpty(t *testing.T) {
+	dir := t.TempDir()
+	set, err := KeepSet(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(set) != 0 {
+		t.Errorf("expected empty set, got %v", set)
+	}
+}
+
+func TestItemKeyEmptyName(t *testing.T) {
+	if k := ItemKey("skill", ""); k != "skill:" {
+		t.Errorf("ItemKey = %q", k)
+	}
+}
+
+func TestRemoveKeepFromEmpty(t *testing.T) {
+	dir := t.TempDir()
+	if err := RemoveKeep(dir, "skill:ghost"); err == nil {
+		t.Error("expected error for empty keep list")
+	}
+}

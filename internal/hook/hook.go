@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+// starCtaCooldownDays limits the star-CTA to at most once per 30 days.
+const starCtaCooldownDays = 30
+
+// shareHintCooldownDays limits the share-command hint to at most once per 30 days.
+const shareHintCooldownDays = 30
+
 // Marker identifies skillreaper's hook command so Uninstall can find it
 // without disturbing other hooks. It rides as a shell comment, ignored at run.
 const Marker = "skillreaper-weekly-nudge"
@@ -173,11 +179,22 @@ func marshalTop(top map[string]json.RawMessage) ([]byte, error) {
 	return json.MarshalIndent(top, "", "  ")
 }
 
-// NudgeState is persisted between sessions to throttle the nudge to weekly.
+// NudgeState is persisted between sessions to throttle the nudge to weekly
+// and the star-CTA to at-most-monthly.
 type NudgeState struct {
 	LastNudgeAt   time.Time `json:"last_nudge_at"`
 	LastReapCount int       `json:"last_reap_count"`
 	LastMuteCount int       `json:"last_mute_count"`
+
+	// LastStarCtaAt is when the star-CTA was last shown. Zero = never shown.
+	LastStarCtaAt time.Time `json:"last_star_cta_at,omitempty"`
+	// StarCtaCount tracks how many times it has been shown across months.
+	StarCtaCount int `json:"star_cta_count,omitempty"`
+
+	// LastShareHintAt is when the share-command hint was last shown. Zero = never shown.
+	LastShareHintAt time.Time `json:"last_share_hint_at,omitempty"`
+	// ShareHintCount tracks how many times the share hint has been shown.
+	ShareHintCount int `json:"share_hint_count,omitempty"`
 }
 
 func nudgeStatePath(claudeDir string) string {
@@ -220,4 +237,24 @@ func ShouldNudge(now time.Time, reapCount, muteCount int, st NudgeState) bool {
 		return false
 	}
 	return reapCount > st.LastReapCount || muteCount > st.LastMuteCount
+}
+
+// ShouldShowStarCta reports whether the star-CTA should be shown now.
+// It appears at most once unless at least starCtaCooldownDays have passed
+// since the last showing.
+func ShouldShowStarCta(now time.Time, st NudgeState) bool {
+	if st.LastStarCtaAt.IsZero() {
+		return true // never shown
+	}
+	return now.Sub(st.LastStarCtaAt) >= starCtaCooldownDays*24*time.Hour
+}
+
+// ShouldShowShareHint reports whether the share-command hint should be
+// shown now. It follows the same throttle as the star CTA: at most once
+// unless at least shareHintCooldownDays have passed.
+func ShouldShowShareHint(now time.Time, st NudgeState) bool {
+	if st.LastShareHintAt.IsZero() {
+		return true // never shown
+	}
+	return now.Sub(st.LastShareHintAt) >= shareHintCooldownDays*24*time.Hour
 }

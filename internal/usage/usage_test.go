@@ -146,3 +146,81 @@ func TestParseEmptyDir(t *testing.T) {
 		t.Errorf("Sessions = %d, want 0", st.Sessions)
 	}
 }
+
+func TestNewStatsInit(t *testing.T) {
+	st := NewStats(30)
+	if st.WindowDays != 30 {
+		t.Errorf("WindowDays = %d", st.WindowDays)
+	}
+	if st.Uses == nil || st.Errors == nil || st.Last == nil {
+		t.Error("maps should be initialized")
+	}
+}
+
+func TestRecord(t *testing.T) {
+	st := NewStats(30)
+	now := time.Now()
+	st.record(scan.CatSkill, "test-skill", now)
+	if st.Uses[scan.CatSkill]["test-skill"] != 1 {
+		t.Error("record did not increment use count")
+	}
+	if !st.Last[scan.CatSkill]["test-skill"].Equal(now) {
+		t.Error("record did not update Last")
+	}
+	// Second call with later timestamp.
+	later := now.Add(time.Hour)
+	st.record(scan.CatSkill, "test-skill", later)
+	if st.Uses[scan.CatSkill]["test-skill"] != 2 {
+		t.Error("record did not increment again")
+	}
+	if !st.Last[scan.CatSkill]["test-skill"].Equal(later) {
+		t.Error("Last should be the later timestamp")
+	}
+}
+
+func TestRecordEmptyKey(t *testing.T) {
+	st := NewStats(30)
+	st.record(scan.CatSkill, "", time.Now())
+	if len(st.Uses[scan.CatSkill]) != 0 {
+		t.Error("empty key should not be recorded")
+	}
+}
+
+func TestRecordError(t *testing.T) {
+	st := NewStats(30)
+	now := time.Now()
+	st.recordError(scan.CatMCP, "broken-mcp", now)
+	if st.Errors[scan.CatMCP]["broken-mcp"] != 1 {
+		t.Error("recordError did not increment error count")
+	}
+	if !st.LastAttempt[scan.CatMCP]["broken-mcp"].Equal(now) {
+		t.Error("recordError did not update LastAttempt")
+	}
+}
+
+func TestRecordSkillProjectEmptyKey(t *testing.T) {
+	st := NewStats(30)
+	st.recordSkillProject("", "repo")
+	if len(st.SkillProjects) != 0 {
+		t.Error("empty skill key should not create project entry")
+	}
+	st.recordSkillProject("skill", "")
+	if _, ok := st.SkillProjects["skill"]; ok {
+		t.Error("empty project should not create entry")
+	}
+}
+
+func TestProjectFor(t *testing.T) {
+	cases := []struct {
+		path, want string
+	}{
+		{"/root/proj-a/s1.jsonl", "proj-a"},
+		{"/root/s1.jsonl", ""},
+		{"/root//s1.jsonl", ""},
+	}
+	for _, c := range cases {
+		if got := projectFor("/root", c.path); got != c.want {
+			t.Errorf("projectFor(%q) = %q, want %q", c.path, got, c.want)
+		}
+	}
+}

@@ -156,3 +156,70 @@ func TestRestoreUnknownID(t *testing.T) {
 		t.Error("expected error for unknown id")
 	}
 }
+
+func TestQuarantineNonRemovable(t *testing.T) {
+	claudeDir := t.TempDir()
+	item := scan.Item{Category: scan.CatMCP, Name: "srv", Removable: false}
+	if _, err := QuarantineItem(claudeDir, item); err == nil {
+		t.Error("expected error for non-removable item")
+	}
+}
+
+func TestRestoreAllEmpty(t *testing.T) {
+	n, err := RestoreAll(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("RestoreAll on empty manifest = %d, want 0", n)
+	}
+}
+
+func TestLoadManifestNone(t *testing.T) {
+	entries, err := LoadManifest(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries != nil {
+		t.Errorf("expected nil, got %v", entries)
+	}
+}
+
+func TestRemoveMCPProjectScope(t *testing.T) {
+	claudeDir := t.TempDir()
+	cfg := filepath.Join(claudeDir, "claude.json")
+	mustWrite(t, cfg, `{"mcpServers": {"keep": {"command": "x"}}, "projects": {"/p": {"mcpServers": {"proj": {"command": "y"}}}}}`)
+
+	e, err := RemoveMCP(claudeDir, cfg, "/p", "proj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.JSONScope != "/p" || e.Name != "proj" {
+		t.Errorf("entry = %+v", e)
+	}
+
+	// Verify top-level servers untouched.
+	var top map[string]json.RawMessage
+	b, _ := os.ReadFile(cfg)
+	json.Unmarshal(b, &top)
+	var servers map[string]json.RawMessage
+	json.Unmarshal(top["mcpServers"], &servers)
+	if _, ok := servers["keep"]; !ok {
+		t.Error("top-level server was removed")
+	}
+}
+
+func TestSanitizeName(t *testing.T) {
+	claudeDir := t.TempDir()
+	skillMd := filepath.Join(claudeDir, "skills", "my:skill", "SKILL.md")
+	mustWrite(t, skillMd, "---\nname: my:skill\n---\nbody")
+
+	item := scan.Item{Category: scan.CatSkill, Name: "my:skill", Path: skillMd, Removable: true}
+	e, err := QuarantineItem(claudeDir, item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Name != "my:skill" {
+		t.Errorf("entry name = %q", e.Name)
+	}
+}

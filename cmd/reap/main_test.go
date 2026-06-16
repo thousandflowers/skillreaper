@@ -7,6 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/thousandflowers/skillreaper/internal/hook"
+	"github.com/thousandflowers/skillreaper/internal/report"
 )
 
 // buildFixture creates a minimal but complete fake installation:
@@ -401,6 +405,326 @@ func TestRunGap(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("gap output missing %q", want)
 		}
+	}
+}
+
+// buildStarCtaFixture extends buildFixture with a heavy dead skill so
+// DeadTokensPerSession ≥ MinStarCtaTokens (200), triggering the star-CTA.
+func buildStarCtaFixture(t *testing.T) (claudeDir, claudeJSON string) {
+	t.Helper()
+	claudeDir, claudeJSON = buildFixture(t)
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// DescChars = len("heavyskill") + len(desc) => need ≥ 740 for ≥200 tok.
+	// 20× "this is a very heavy skill description " = 720; +deadskill's ~7
+	// tok gives 205 total → above MinStarCtaTokens.
+	desc := strings.Repeat("this is a very heavy skill description ", 20)
+	write(filepath.Join(claudeDir, "skills", "heavyskill", "SKILL.md"),
+		"---\nname: heavyskill\ndescription: "+desc+"\n---\nbody")
+	return claudeDir, claudeJSON
+}
+
+func TestTryShowStarCta_ShowsOnSufficientSavings(t *testing.T) {
+	claudeDir, _ := buildStarCtaFixture(t)
+	var buf bytes.Buffer
+	r := &report.Report{DeadTokensPerSession: 250}
+
+	tryShowStarCta(options{claudeDir: claudeDir}, &buf, r, true)
+	if !strings.Contains(buf.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should show with color=true and DeadTokensPerSession ≥ 200")
+	}
+}
+
+func TestTryShowStarCta_NoColorSuppresses(t *testing.T) {
+	var buf bytes.Buffer
+	r := &report.Report{DeadTokensPerSession: 250}
+
+	tryShowStarCta(options{}, &buf, r, false)
+	if strings.Contains(buf.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should not show with color=false")
+	}
+}
+
+func TestTryShowStarCta_NoNudgeFlagSuppresses(t *testing.T) {
+	var buf bytes.Buffer
+	r := &report.Report{DeadTokensPerSession: 250}
+
+	tryShowStarCta(options{noNudge: true}, &buf, r, true)
+	if strings.Contains(buf.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should not show with --no-nudge")
+	}
+}
+
+func TestTryShowStarCta_JSONModeSuppresses(t *testing.T) {
+	var buf bytes.Buffer
+	r := &report.Report{DeadTokensPerSession: 250}
+
+	tryShowStarCta(options{asJSON: true}, &buf, r, true)
+	if strings.Contains(buf.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should not show in JSON mode")
+	}
+}
+
+func TestTryShowStarCta_MarkdownModeSuppresses(t *testing.T) {
+	var buf bytes.Buffer
+	r := &report.Report{DeadTokensPerSession: 250}
+
+	tryShowStarCta(options{asMarkdown: true}, &buf, r, true)
+	if strings.Contains(buf.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should not show in Markdown mode")
+	}
+}
+
+func TestTryShowStarCta_InsufficientTokensSuppresses(t *testing.T) {
+	claudeDir, _ := buildStarCtaFixture(t)
+	var buf bytes.Buffer
+	r := &report.Report{DeadTokensPerSession: 10} // below MinStarCtaTokens
+
+	tryShowStarCta(options{claudeDir: claudeDir}, &buf, r, true)
+	if strings.Contains(buf.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should not show with insufficient dead tokens")
+	}
+}
+
+func TestTryShowStarCta_ThrottleSuppresses(t *testing.T) {
+	claudeDir, _ := buildStarCtaFixture(t)
+	var buf bytes.Buffer
+	r := &report.Report{DeadTokensPerSession: 250}
+
+	// Seed nudge state with a recent CTA (now = throttled).
+	st := hook.NudgeState{LastStarCtaAt: time.Now(), StarCtaCount: 1}
+	if err := hook.SaveNudgeState(claudeDir, st); err != nil {
+		t.Fatal(err)
+	}
+
+	tryShowStarCta(options{claudeDir: claudeDir}, &buf, r, true)
+	if strings.Contains(buf.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should be throttled when LastStarCtaAt is within 30 days")
+	}
+}
+
+func TestTryShowStarCta_EnvVarSuppresses(t *testing.T) {
+	t.Setenv("SKILLREAPER_NO_NUDGE", "1")
+	var buf bytes.Buffer
+	r := &report.Report{DeadTokensPerSession: 250}
+
+	tryShowStarCta(options{}, &buf, r, true)
+	if strings.Contains(buf.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should not show with SKILLREAPER_NO_NUDGE env var")
+	}
+}
+
+func TestTryShowStarCta_PersistsStateOnShow(t *testing.T) {
+	claudeDir, _ := buildStarCtaFixture(t)
+	var buf bytes.Buffer
+	r := &report.Report{DeadTokensPerSession: 250}
+
+	tryShowStarCta(options{claudeDir: claudeDir}, &buf, r, true)
+
+	st, err := hook.LoadNudgeState(claudeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.LastStarCtaAt.IsZero() {
+		t.Error("LastStarCtaAt should be set after CTA is shown")
+	}
+	if st.StarCtaCount != 1 {
+		t.Errorf("StarCtaCount = %d, want 1", st.StarCtaCount)
+	}
+}
+
+func TestRunReportJSONModeSkipsCta(t *testing.T) {
+	claudeDir, claudeJSON := buildStarCtaFixture(t)
+	var out, errOut bytes.Buffer
+	code := run([]string{
+		"--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--json",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if strings.Contains(out.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should not appear in JSON output")
+	}
+}
+
+func TestRunReportMDModeSkipsCta(t *testing.T) {
+	claudeDir, claudeJSON := buildStarCtaFixture(t)
+	var out, errOut bytes.Buffer
+	code := run([]string{
+		"--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--md",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if strings.Contains(out.String(), "github.com/thousandflowers/skillreaper") {
+		t.Error("CTA should not appear in Markdown output")
+	}
+}
+
+func TestPruneShowsValueFeedback(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	code := run([]string{
+		"prune", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--yes",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("prune exit = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "✓ pruned") {
+		t.Errorf("prune output missing value feedback: %s", out.String())
+	}
+}
+
+func TestMuteShowsValueFeedback(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	code := run([]string{
+		"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "usedskill",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "✓ muted") {
+		t.Errorf("mute output missing value feedback: %s", out.String())
+	}
+}
+
+func TestShareSubcommand(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	code := run([]string{
+		"share", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("share exit = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "skillreaper") {
+		t.Errorf("share output missing skillreaper: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "brew install") {
+		t.Errorf("share output missing install instructions: %s", out.String())
+	}
+}
+
+func TestShareSubcommandJSON(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	code := run([]string{
+		"share", "--json", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("share --json exit = %d, stderr: %s", code, errOut.String())
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, ok := decoded["message"]; !ok {
+		t.Errorf("share json missing message key: %s", out.String())
+	}
+	if _, ok := decoded["install"]; !ok {
+		t.Errorf("share json missing install key: %s", out.String())
+	}
+}
+
+func TestShareSubcommandMarkdown(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	code := run([]string{
+		"share", "--md", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("share --md exit = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.HasPrefix(out.String(), "```") {
+		t.Errorf("share --md should be a code block, got: %s", out.String())
+	}
+}
+
+func TestTryShowShareHint_Shows(t *testing.T) {
+	claudeDir, _ := buildFixture(t)
+	var buf bytes.Buffer
+
+	tryShowShareHint(options{claudeDir: claudeDir}, &buf, true)
+	if !strings.Contains(buf.String(), "reap share") {
+		t.Error("share hint should show with color=true")
+	}
+}
+
+func TestTryShowShareHint_Throttle(t *testing.T) {
+	claudeDir, _ := buildFixture(t)
+	var buf bytes.Buffer
+
+	// Seed nudge state with a recent hint (now = throttled).
+	st := hook.NudgeState{LastShareHintAt: time.Now(), ShareHintCount: 1}
+	if err := hook.SaveNudgeState(claudeDir, st); err != nil {
+		t.Fatal(err)
+	}
+
+	tryShowShareHint(options{claudeDir: claudeDir}, &buf, true)
+	if strings.Contains(buf.String(), "reap share") {
+		t.Error("share hint should be throttled when LastShareHintAt is within 30 days")
+	}
+}
+
+func TestTryShowShareHint_NoNudgeFlag(t *testing.T) {
+	var buf bytes.Buffer
+	tryShowShareHint(options{noNudge: true}, &buf, true)
+	if strings.Contains(buf.String(), "reap share") {
+		t.Error("share hint should not show with --no-nudge")
+	}
+}
+
+func TestTryShowShareHint_NoColor(t *testing.T) {
+	var buf bytes.Buffer
+	tryShowShareHint(options{}, &buf, false)
+	if strings.Contains(buf.String(), "reap share") {
+		t.Error("share hint should not show with color=false")
+	}
+}
+
+func TestTryShowShareHint_EnvVar(t *testing.T) {
+	t.Setenv("SKILLREAPER_NO_NUDGE", "1")
+	var buf bytes.Buffer
+	tryShowShareHint(options{}, &buf, true)
+	if strings.Contains(buf.String(), "reap share") {
+		t.Error("share hint should not show with SKILLREAPER_NO_NUDGE env var")
+	}
+}
+
+func TestTryShowShareHint_PersistsState(t *testing.T) {
+	claudeDir, _ := buildFixture(t)
+	var buf bytes.Buffer
+
+	tryShowShareHint(options{claudeDir: claudeDir}, &buf, true)
+
+	st, err := hook.LoadNudgeState(claudeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.LastShareHintAt.IsZero() {
+		t.Error("LastShareHintAt should be set after hint is shown")
+	}
+	if st.ShareHintCount != 1 {
+		t.Errorf("ShareHintCount = %d, want 1", st.ShareHintCount)
 	}
 }
 

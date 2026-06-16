@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/thousandflowers/skillreaper/internal/cost"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
@@ -35,6 +36,108 @@ func painter(color bool) func(code, s string) string {
 		}
 		return code + s + cReset
 	}
+}
+
+// MinStarCtaTokens is the minimum DeadTokensPerSession for the star-CTA to
+// show on a plain reap report.
+const MinStarCtaTokens = 200
+
+// RenderStarCta prints a single sober line asking for a GitHub star,
+// personalized with the saved-token figure. It must only be called when
+// the throttling and output-format gates have already passed.
+func RenderStarCta(w io.Writer, deadTokens int, color bool) {
+	paint := painter(color)
+	tokStr := fmt.Sprintf("%d", deadTokens)
+	if deadTokens >= 1000 {
+		tokStr = fmt.Sprintf("%.1fk", float64(deadTokens)/1000)
+	}
+	line := "⭐ reap saved you ~" + tokStr + " tok/session. If it helps: github.com/thousandflowers/skillreaper"
+	fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, line))
+}
+
+// RenderValueFeedback prints a single line after a successful prune or mute
+// operation, showing real savings with a conservative annualised money estimate.
+func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, sessionsPerMonth int, price float64, color bool) {
+	if items == 0 {
+		return
+	}
+	paint := painter(color)
+	tokStr := fmt.Sprintf("%d", tokensPerSession)
+	if tokensPerSession >= 1000 {
+		tokStr = fmt.Sprintf("%.1fk", float64(tokensPerSession)/1000)
+	}
+	money := ""
+	if sessionsPerMonth > 0 && price > 0 {
+		mPerM := cost.MoneyPerMonth(tokensPerSession, sessionsPerMonth, price)
+		yr := mPerM * 12
+		if yr < 1.0 {
+			money = " (< $1/yr at your usage)"
+		} else {
+			money = fmt.Sprintf(" (≈$%.0f/yr at your usage)", yr)
+		}
+	}
+	fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ") + paint(cDim, fmt.Sprintf("%s %d items · saving ~%s tok/session%s", verb, items, tokStr, money)))
+}
+
+// RenderShareHint prints a single sober line pointing users at reap share.
+// It must only be called when the throttling and output-format gates have
+// already passed.
+func RenderShareHint(w io.Writer, color bool) {
+	paint := painter(color)
+	fmt.Fprintf(w, "  %s\n", paint(cDim, "↗ help your team save context too → reap share"))
+}
+
+// RenderShareText prints a ready-to-paste share message for team channels.
+func RenderShareText(w io.Writer, tokensPerSession int) {
+	line := shareMessage(tokensPerSession)
+	fmt.Fprintln(w, line)
+}
+
+// RenderShareMarkdown prints a share message formatted as a Markdown code block.
+func RenderShareMarkdown(w io.Writer, tokensPerSession int) {
+	line := shareMessage(tokensPerSession)
+	fmt.Fprintf(w, "```\n%s\n```\n", line)
+}
+
+// RenderShareJSON prints the share message as structured JSON.
+func RenderShareJSON(w io.Writer, tokensPerSession int) {
+	type shareJSON struct {
+		Message             string `json:"message"`
+		TokensSavedPerSession int  `json:"tokens_saved_per_session"`
+		URL                 string `json:"url"`
+		Install             string `json:"install"`
+	}
+	msg := shareMessage(tokensPerSession)
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(shareJSON{
+		Message:               msg,
+		TokensSavedPerSession: tokensPerSession,
+		URL:                 "https://github.com/thousandflowers/skillreaper",
+		Install:             "brew install thousandflowers/tap/skillreaper",
+	})
+}
+
+// shareMessage builds the human-readable share text.
+// When tokens are available, it includes the real savings figure.
+// When no data is available (0), it falls back to a generic message.
+func shareMessage(tokensPerSession int) string {
+	if tokensPerSession > 0 {
+		tokStr := fmt.Sprintf("%d", tokensPerSession)
+		if tokensPerSession >= 1000 {
+			tokStr = fmt.Sprintf("%.1fk", float64(tokensPerSession)/1000)
+		}
+		return fmt.Sprintf(`Just cut ~%s tokens/session of dead context from my AI agent with skillreaper.
+One read-only command, 100%% local:
+
+  brew install thousandflowers/tap/skillreaper
+  github.com/thousandflowers/skillreaper`, tokStr)
+	}
+	return `Check your AI agent's context diet with skillreaper.
+One read-only command, 100% local:
+
+  brew install thousandflowers/tap/skillreaper
+  github.com/thousandflowers/skillreaper`
 }
 
 var sectionTitles = []struct {
@@ -103,10 +206,26 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		}
 	}
 
+	var muteNames []string
+	var muteTokens int
+	for _, row := range r.Rows {
+		if row.Verdict == VerdictMute {
+			muteNames = append(muteNames, row.Name)
+			muteTokens += row.Tokens
+		}
+	}
+	if r.DeadCount > 0 || len(muteNames) > 0 {
+		fmt.Fprintln(w)
+	}
 	if r.DeadCount > 0 {
-		fmt.Fprintf(w, "\n  %s  %s",
+		fmt.Fprintf(w, "  %s  %s\n",
 			paint(cBRed, "▸ reap prune"),
 			paint(cDim, fmt.Sprintf("— %d items · ~%d tok/session reclaimed", r.DeadCount, r.DeadTokensPerSession)))
+	}
+	if len(muteNames) > 0 {
+		fmt.Fprintf(w, "  %s  %s",
+			paint(cBYell, "▸ reap mute"),
+			paint(cDim, fmt.Sprintf("— %s (~%d tok total)", strings.Join(muteNames, ", "), muteTokens)))
 		fmt.Fprintln(w)
 	}
 	fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, "All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all"))

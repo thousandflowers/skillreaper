@@ -110,3 +110,29 @@ func TestDirExists(t *testing.T) {
 		t.Error("expected true for existing dir")
 	}
 }
+
+func TestAllProperNames(t *testing.T) {
+	all := All()
+	for _, p := range all {
+		if p.ID == "" || p.Name == "" {
+			t.Errorf("platform with empty ID or Name: %+v", p)
+		}
+	}
+}
+
+func TestExpandHomeNoChange(t *testing.T) {
+	if got := expandHome("/abs/path"); got != "/abs/path" {
+		t.Errorf("expandHome('/abs/path') = %q", got)
+	}
+}
+
+func TestDirExistsOnFile(t *testing.T) {
+	tmp := t.TempDir()
+	f := filepath.Join(tmp, "afile")
+	if err := os.WriteFile(f, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if dirExists(f) {
+		t.Error("dirExists should return false for a file")
+	}
+}

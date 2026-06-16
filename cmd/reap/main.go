@@ -40,7 +40,7 @@ Usage:
   reap keep <name>          mark item as keep (never prune)
   reap keep --list          show all kept items
   reap keep --remove <name>  remove item from keep list
-  reap mute <name>|--all    strip heavy skill descriptions (reversible)
+  reap mute <name>|--all    strip skill/agent descriptions (reversible)
   reap unmute <name>|--all  restore a muted skill's description
   reap restore <id>|--all   undo prune actions
   reap share [flags]        print a ready-to-share message about your savings
@@ -587,7 +587,8 @@ func findSkill(r *report.Report, name string) (report.Row, bool) {
 }
 
 func muteEligible(row report.Row) bool {
-	return row.Category == scan.CatSkill && row.Path != "" &&
+	return row.Path != "" &&
+		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
 		(row.Verdict == report.VerdictReap || row.Verdict == report.VerdictMute)
 }
 

@@ -4,10 +4,13 @@
 </p>
 
 <h1 align="center">
-  Your AI agent reads 187 skill descriptions every session.<br>
-  You use 4. Reap the rest.
+  Half of what your AI agent loads, it never uses.
 </h1>
-<p>Numbers above are illustrative, run `reap` to see yours.<p>
+<p align="center">
+  skillreaper proves which — from your own transcripts — and prunes the dead
+  weight, so your agent stops wading through tools it never picks.
+</p>
+<p align="center"><em>Numbers above are illustrative — run <code>reap</code> to see yours.</em></p>
 
 
 <p align="center">
@@ -25,26 +28,36 @@ brew install thousandflowers/tap/skillreaper
 reap
 ```
 
-**One command. Zero config. Read-only.** It scans your transcripts, finds
-every skill/agent/MCP your AI loads but never uses, and tells you exactly
-what it costs in context window, latency, and money.
+**One command. Zero config. Read-only.** It reads your real session transcripts,
+finds every skill / MCP / agent your AI loads but never fires, and shows you
+exactly what it costs you.
 
 <br>
 
-### The problem
+### Two problems, one cause
 
-Every Claude Code session loads 150–300 skill descriptions, agent configs,
-and rule files into context. Most of it is dead weight:
+**Wrong-tool picks.** Buried in a wall of irrelevant options, your agent
+wastes turns reaching for the wrong tool. More turns = slower, costlier,
+sloppier runs. This isn't about pennies — it's about work quality.
 
-- 187 items scanned
+**Wasted tokens.** Dead instructions eat context every session and hurt
+prompt-cache hit rate. A typical setup:
+
+- 187 items loaded
 - 142 never used (76 %)
-- 8 000 tok/session wasted
+- 8 000 tok/session dead
 - ~2 160 000 tok/month burned on irrelevant instructions
 
-Your agent scrolls through a wall of irrelevant tools looking for the right
-one. Wrong picks cost turns. Turns cost tokens. Tokens cost money.
+skillreaper measures both, from evidence — no guessing.
 
 > `reap` points at the waste. You decide what goes.
+
+<br>
+
+### Privacy
+
+**100 % local.** Zero telemetry, zero network, zero uploads. Reads config
+files and session transcripts on disk — your data never leaves your machine.
 
 <br>
 
@@ -179,14 +192,7 @@ Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.
 
 `reap uninstall-hook` removes only the skillreaper entry — other hooks untouched.
 
-<br>
 
-### Privacy
-
-**100 % local.** Zero telemetry, zero network, zero uploads. Reads config
-files and session transcripts on disk — your data never leaves your machine.
-
-<br>
 
 ### Platform support
 

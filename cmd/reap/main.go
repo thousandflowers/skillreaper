@@ -80,11 +80,6 @@ func main() {
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	cmd := ""
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		cmd, args = args[0], args[1:]
-	}
-
 	fs := flag.NewFlagSet("reap", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var opts options
@@ -113,8 +108,18 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, usageText)
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
+	// Go's flag.Parse stops at the first positional argument, so flags placed
+	// after a subcommand or its name (e.g. `reap mute foo --claude-dir X`) would
+	// be silently dropped and defaults used instead. parseInterspersed allows
+	// flags anywhere; the leftover positionals are the subcommand and its args.
+	positionals, err := parseInterspersed(fs, args)
+	if err != nil {
 		return 2
+	}
+	cmd := ""
+	var rest []string
+	if len(positionals) > 0 {
+		cmd, rest = positionals[0], positionals[1:]
 	}
 
 	if err := fillDefaults(&opts); err != nil {
@@ -130,9 +135,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "by-project":
 		return cmdByProject(opts, stdout, stderr)
 	case "manifest":
-		return cmdManifest(opts, fs.Args(), stdout, stderr)
+		return cmdManifest(opts, rest, stdout, stderr)
 	case "why":
-		return cmdWhy(opts, fs.Args(), stdout, stderr)
+		return cmdWhy(opts, rest, stdout, stderr)
 	case "keep":
 		if opts.listKeep {
 			return cmdKeepList(opts, stdout, stderr)
@@ -140,15 +145,15 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if opts.removeKeep != "" {
 			return cmdKeepRemove(opts, opts.removeKeep, stdout, stderr)
 		}
-		return cmdKeep(opts, fs.Args(), stdout, stderr)
+		return cmdKeep(opts, rest, stdout, stderr)
 	case "mute":
-		return cmdMute(opts, fs.Args(), stdout, stderr)
+		return cmdMute(opts, rest, stdout, stderr)
 	case "unmute":
-		return cmdUnmute(opts, fs.Args(), stdout, stderr)
+		return cmdUnmute(opts, rest, stdout, stderr)
 	case "prune":
 		return cmdPrune(opts, stdin, stdout, stderr)
 	case "restore":
-		return cmdRestore(opts, fs.Args(), stdout, stderr)
+		return cmdRestore(opts, rest, stdout, stderr)
 	case "install-hook":
 		return cmdInstallHook(opts, stdout, stderr)
 	case "uninstall-hook":
@@ -164,6 +169,25 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		fs.Usage()
 		return 2
+	}
+}
+
+// parseInterspersed parses flags that may appear before, between, or after
+// positional arguments. flag.Parse stops at the first non-flag token, so we
+// loop: parse, peel off one positional, parse the remainder, until no args are
+// left. Returns the positional arguments in order.
+func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
+	var positionals []string
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		args = fs.Args()
+		if len(args) == 0 {
+			return positionals, nil
+		}
+		positionals = append(positionals, args[0])
+		args = args[1:]
 	}
 }
 

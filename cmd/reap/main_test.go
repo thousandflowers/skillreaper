@@ -259,6 +259,50 @@ func TestRunMuteUnmute(t *testing.T) {
 	}
 }
 
+// TestRunMuteFlagOrdering guards the parser bug where flags placed after the
+// subcommand's positional argument (or a flag placed before the subcommand)
+// were silently dropped, so mute ran against the default ~/.claude instead of
+// the fixture and reported "no skill found".
+func TestRunMuteFlagOrdering(t *testing.T) {
+	hasDesc := func(t *testing.T, path string) bool {
+		t.Helper()
+		b, _ := os.ReadFile(path)
+		return strings.Contains(string(b), "description:")
+	}
+
+	t.Run("flags after positional", func(t *testing.T) {
+		claudeDir, claudeJSON := buildFixture(t)
+		skill := filepath.Join(claudeDir, "skills", "usedskill", "SKILL.md")
+		var out, errOut bytes.Buffer
+		code := run([]string{
+			"mute", "usedskill",
+			"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--no-nudge",
+		}, strings.NewReader(""), &out, &errOut)
+		if code != 0 {
+			t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
+		}
+		if hasDesc(t, skill) {
+			t.Errorf("description not stripped — flags after positional were dropped")
+		}
+	})
+
+	t.Run("flag before subcommand", func(t *testing.T) {
+		claudeDir, claudeJSON := buildFixture(t)
+		skill := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+		var out, errOut bytes.Buffer
+		code := run([]string{
+			"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--no-nudge",
+			"mute", "deadskill",
+		}, strings.NewReader(""), &out, &errOut)
+		if code != 0 {
+			t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
+		}
+		if hasDesc(t, skill) {
+			t.Errorf("description not stripped — leading flag hid the subcommand")
+		}
+	})
+}
+
 func TestRunInstallUninstallHook(t *testing.T) {
 	claudeDir, _ := buildFixture(t)
 	settings := filepath.Join(claudeDir, "settings.json")

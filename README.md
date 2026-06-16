@@ -81,6 +81,7 @@ Upgrading, uninstalling, and platform-specific tips →
 <br>
 
 ### Usage
+💬 **Curious what `reap` finds in other setups?** [Share your output →](https://github.com/thousandflowers/skillreaper/discussions)
 
 ```bash
 reap                          # scan + report (read-only)

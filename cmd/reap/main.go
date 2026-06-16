@@ -40,7 +40,7 @@ Usage:
   reap keep <name>          mark item as keep (never prune)
   reap keep --list          show all kept items
   reap keep --remove <name>  remove item from keep list
-  reap mute <name>|--all    strip skill/agent descriptions (reversible)
+  reap mute [<name>]        strip skill/agent descriptions (reversible)
   reap unmute <name>|--all  restore a muted skill's description
   reap restore <id>|--all   undo prune actions
   reap share [flags]        print a ready-to-share message about your savings
@@ -593,60 +593,60 @@ func muteEligible(row report.Row) bool {
 }
 
 func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
+	if !opts.all && len(args) > 0 {
+		r, err := gather(opts)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		row, ok := findSkill(r, args[0])
+		if !ok {
+			fmt.Fprintf(stderr, "no skill found: %s\n", args[0])
+			return 1
+		}
+		if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "muted %s — description stripped (~%d tok/session saved)\n", row.Name, row.Tokens)
+		fmt.Fprintf(stdout, "Undo: reap unmute %s\n", row.Name)
+		col := colorEnabled(opts, stdout)
+		report.RenderValueFeedback(stdout, "muted", 1, row.Tokens, r.SessionsPerMonth, opts.price, col)
+		tryShowShareHint(opts, stdout, col)
+		return 0
+	}
+
 	r, err := gather(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-
-	if opts.all {
-		var candidates []report.Row
-		for _, row := range r.Rows {
-			if muteEligible(row) {
-				candidates = append(candidates, row)
-			}
+	var candidates []report.Row
+	for _, row := range r.Rows {
+		if muteEligible(row) {
+			candidates = append(candidates, row)
 		}
-		if len(candidates) == 0 {
-			fmt.Fprintln(stdout, "Nothing to mute.")
-			return 0
-		}
-		muted, totalTok := 0, 0
-		for _, row := range candidates {
-			if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
-				if err.Error() == "already muted: "+row.Name {
-					continue
-				}
-				fmt.Fprintf(stderr, "error muting %s: %v\n", row.Name, err)
-				return 1
-			}
-			fmt.Fprintf(stdout, "muted %s (~%d tok/session)\n", row.Name, row.Tokens)
-			muted++
-			totalTok += row.Tokens
-		}
-		fmt.Fprintf(stdout, "\nmuted %d items · ~%s tok/session reclaimed\n", muted, humanTok(totalTok))
-		col := colorEnabled(opts, stdout)
-		report.RenderValueFeedback(stdout, "muted", muted, totalTok, r.SessionsPerMonth, opts.price, col)
-		tryShowShareHint(opts, stdout, col)
+	}
+	if len(candidates) == 0 {
+		fmt.Fprintln(stdout, "Nothing to mute.")
 		return 0
 	}
-
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: reap mute <name>|--all")
-		return 2
+	muted, totalTok := 0, 0
+	for _, row := range candidates {
+		if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
+			if err.Error() == "already muted: "+row.Name {
+				continue
+			}
+			fmt.Fprintf(stderr, "error muting %s: %v\n", row.Name, err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "muted %s (~%d tok/session)\n", row.Name, row.Tokens)
+		muted++
+		totalTok += row.Tokens
 	}
-	row, ok := findSkill(r, args[0])
-	if !ok {
-		fmt.Fprintf(stderr, "no skill found: %s\n", args[0])
-		return 1
-	}
-	if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
-	fmt.Fprintf(stdout, "muted %s — description stripped (~%d tok/session saved)\n", row.Name, row.Tokens)
-	fmt.Fprintf(stdout, "Undo: reap unmute %s\n", row.Name)
+	fmt.Fprintf(stdout, "\nmuted %d items · ~%s tok/session reclaimed\n", muted, humanTok(totalTok))
 	col := colorEnabled(opts, stdout)
-	report.RenderValueFeedback(stdout, "muted", 1, row.Tokens, r.SessionsPerMonth, opts.price, col)
+	report.RenderValueFeedback(stdout, "muted", muted, totalTok, r.SessionsPerMonth, opts.price, col)
 	tryShowShareHint(opts, stdout, col)
 	return 0
 }

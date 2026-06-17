@@ -3,6 +3,8 @@ package scan
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // maxFileSize caps how large a config or markdown file the scanner reads into
@@ -22,4 +24,19 @@ func readCapped(path string) ([]byte, error) {
 		return nil, fmt.Errorf("%s is %d bytes, over the %d-byte scan limit", path, fi.Size(), maxFileSize)
 	}
 	return os.ReadFile(path)
+}
+
+// withinDir reports whether target is at or under root. Both should already be
+// symlink-resolved by the caller when that matters.
+func withinDir(root, target string) bool {
+	ra, err1 := filepath.Abs(root)
+	ta, err2 := filepath.Abs(target)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	rel, err := filepath.Rel(ra, ta)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }

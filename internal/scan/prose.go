@@ -35,8 +35,15 @@ func ScanProse(dir, cwd, platformID string) ([]Item, []Warning) {
 	addFile(filepath.Join(dir, "CLAUDE.md"), "global")
 
 	rulesDir := filepath.Join(dir, "rules")
+	realRules, _ := filepath.EvalSymlinks(rulesDir) // "" when rulesDir is absent
 	err := filepath.WalkDir(rulesDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		// Skip symlinks that resolve outside the rules tree, so a planted link
+		// cannot make reap stat and surface a file elsewhere on disk.
+		real, err := filepath.EvalSymlinks(path)
+		if err != nil || (realRules != "" && !withinDir(realRules, real)) {
 			return nil
 		}
 		addFile(path, "rules")

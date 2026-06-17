@@ -82,7 +82,7 @@ func saveManifest(claudeDir string, entries []Entry) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(manifestPath(claudeDir), b, 0o644)
+	return os.WriteFile(manifestPath(claudeDir), b, 0o600)
 }
 
 func nextID(entries []Entry) string {
@@ -316,12 +316,26 @@ func Restore(claudeDir, id string) error {
 		if entries[i].Restored {
 			return fmt.Errorf("entry %s already restored", id)
 		}
-		if err := restoreEntry(&entries[i]); err != nil {
+		if err := restoreEntry(claudeDir, &entries[i]); err != nil {
 			return err
 		}
 		return saveManifest(claudeDir, entries)
 	}
 	return fmt.Errorf("no manifest entry with id %s", id)
+}
+
+// withinDir reports whether target resolves to a path at or under root.
+func withinDir(root, target string) bool {
+	ra, err1 := filepath.Abs(root)
+	ta, err2 := filepath.Abs(target)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	rel, err := filepath.Rel(ra, ta)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // RestoreAll undoes every non-restored prune action.
@@ -335,7 +349,7 @@ func RestoreAll(claudeDir string) (int, error) {
 		if entries[i].Restored {
 			continue
 		}
-		if err := restoreEntry(&entries[i]); err != nil {
+		if err := restoreEntry(claudeDir, &entries[i]); err != nil {
 			// Persist the entries already restored so progress is not lost.
 			_ = saveManifest(claudeDir, entries)
 			return n, err
@@ -345,8 +359,14 @@ func RestoreAll(claudeDir string) (int, error) {
 	return n, saveManifest(claudeDir, entries)
 }
 
-func restoreEntry(e *Entry) error {
+func restoreEntry(claudeDir string, e *Entry) error {
 	if len(e.Payload) > 0 {
+		// Bound the config write to the install tree (covers ~/.claude.json and
+		// plugin .mcp.json under the home dir) so a tampered manifest cannot
+		// redirect the write to an arbitrary file.
+		if !withinDir(filepath.Dir(claudeDir), e.ConfigPath) {
+			return fmt.Errorf("refusing to restore to a path outside %s: %s", filepath.Dir(claudeDir), e.ConfigPath)
+		}
 		b, err := os.ReadFile(e.ConfigPath)
 		if err != nil {
 			return err
@@ -369,6 +389,12 @@ func restoreEntry(e *Entry) error {
 		return nil
 	}
 
+	// File move: both the quarantine source and the restore destination must
+	// stay within the Claude directory, so a tampered manifest cannot move a
+	// file to (or from) an arbitrary location.
+	if !withinDir(claudeDir, e.From) || !withinDir(claudeDir, e.To) {
+		return fmt.Errorf("refusing to restore outside %s: %s -> %s", claudeDir, e.To, e.From)
+	}
 	if err := os.MkdirAll(filepath.Dir(e.From), 0o755); err != nil {
 		return err
 	}

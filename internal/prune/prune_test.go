@@ -93,6 +93,23 @@ func TestRestoreAllPersistsPartialProgress(t *testing.T) {
 	}
 }
 
+func TestRestoreRefusesPathOutsideClaudeDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	// A quarantined file that a tampered manifest tries to move outside the tree.
+	to := filepath.Join(reapedDir(claudeDir), "skill", "payload")
+	mustWrite(t, to, "payload")
+	outside := filepath.Join(t.TempDir(), "victim") // not under claudeDir
+	if err := saveManifest(claudeDir, []Entry{{ID: "001", Category: "skill", Name: "x", From: outside, To: to}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restore(claudeDir, "001"); err == nil {
+		t.Fatal("expected Restore to refuse a destination outside the claude dir")
+	}
+	if _, err := os.Stat(outside); !os.IsNotExist(err) {
+		t.Error("restore moved a file to a location outside the claude dir")
+	}
+}
+
 func TestQuarantineAndRestoreSkill(t *testing.T) {
 	claudeDir := t.TempDir()
 	skillMd := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")

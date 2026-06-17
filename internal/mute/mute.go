@@ -73,7 +73,7 @@ func saveState(claudeDir string, s *State) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(statePath(claudeDir), b, 0o644)
+	return os.WriteFile(statePath(claudeDir), b, 0o600)
 }
 
 // Mute strips the description field from a skill's SKILL.md frontmatter,

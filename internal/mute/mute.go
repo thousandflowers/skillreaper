@@ -12,6 +12,7 @@ import (
 	"hash/fnv"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -105,7 +106,13 @@ func Mute(claudeDir, name, skillPath string) error {
 		return err
 	}
 	s.Muted[name] = Entry{Path: skillPath, Backup: backup}
-	return saveState(claudeDir, s)
+	if err := saveState(claudeDir, s); err != nil {
+		// The skill was stripped but the mute cannot be recorded; restore the
+		// original so it is not left silently degraded with no way to unmute.
+		_ = os.WriteFile(skillPath, b, 0o644)
+		return fmt.Errorf("save mute state: %w", err)
+	}
+	return nil
 }
 
 // Unmute restores one muted skill's SKILL.md from its backup.
@@ -131,9 +138,16 @@ func UnmuteAll(claudeDir string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	names := make([]string, 0, len(s.Muted))
+	for name := range s.Muted {
+		names = append(names, name)
+	}
+	sort.Strings(names) // deterministic order
 	n := 0
-	for name, e := range s.Muted {
-		if err := restore(e); err != nil {
+	for _, name := range names {
+		if err := restore(s.Muted[name]); err != nil {
+			// Persist the skills already restored so progress is not lost.
+			_ = saveState(claudeDir, s)
 			return n, err
 		}
 		delete(s.Muted, name)

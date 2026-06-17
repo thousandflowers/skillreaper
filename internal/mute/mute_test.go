@@ -127,6 +127,57 @@ func TestUnmuteAll(t *testing.T) {
 	}
 }
 
+func TestMuteRollbackOnStateFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission-based write-failure injection does not work as root")
+	}
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	skillPath := writeSkill(t, claudeDir, "heavy")
+	// Pre-create a read-only state file: loadState succeeds, saveState fails.
+	if err := os.MkdirAll(mutedDir(claudeDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath(claudeDir), []byte(`{"muted":{}}`), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := Mute(claudeDir, "heavy", skillPath); err == nil {
+		t.Fatal("expected Mute to fail when state cannot be saved")
+	}
+	b, _ := os.ReadFile(skillPath)
+	if !strings.Contains(string(b), "description:") {
+		t.Errorf("skill was stripped but mute not recorded — should have rolled back:\n%s", b)
+	}
+}
+
+func TestUnmuteAllPersistsPartialProgress(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	a := writeSkill(t, claudeDir, "a")
+	b := writeSkill(t, claudeDir, "b")
+	if err := Mute(claudeDir, "a", a); err != nil {
+		t.Fatal(err)
+	}
+	if err := Mute(claudeDir, "b", b); err != nil {
+		t.Fatal(err)
+	}
+	// Break "b"'s restore by removing its backup; "a" (sorted first) restores.
+	if err := os.Remove(filepath.Join(mutedDir(claudeDir), backupName("b"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UnmuteAll(claudeDir); err == nil {
+		t.Fatal("expected UnmuteAll to fail on the broken backup")
+	}
+	s, err := loadState(claudeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.Muted["a"]; ok {
+		t.Error("\"a\" restored but progress not persisted before the error")
+	}
+	if _, ok := s.Muted["b"]; !ok {
+		t.Error("\"b\" failed to restore but was dropped from state")
+	}
+}
+
 func TestListEmpty(t *testing.T) {
 	claudeDir := filepath.Join(t.TempDir(), ".claude")
 	list, err := List(claudeDir)

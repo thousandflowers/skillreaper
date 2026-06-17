@@ -129,7 +129,12 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		Timestamp: time.Now(),
 	}
 	if err := saveManifest(claudeDir, append(entries, e)); err != nil {
-		return Entry{}, err
+		// The item was moved but cannot be recorded; move it back so it is not
+		// lost without a manifest entry to restore it.
+		if rbErr := os.Rename(dest, src); rbErr != nil {
+			return Entry{}, fmt.Errorf("save manifest: %w (rollback also failed: %v; item left at %s)", err, rbErr, dest)
+		}
+		return Entry{}, fmt.Errorf("save manifest: %w", err)
 	}
 	return e, nil
 }
@@ -168,12 +173,14 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
-	if err := os.WriteFile(configPath, out, 0o600); err != nil {
-		return Entry{}, err
-	}
 
+	// Read the manifest before mutating the config so a manifest-read failure
+	// cannot leave the server removed with no record.
 	entries, err := LoadManifest(claudeDir)
 	if err != nil {
+		return Entry{}, err
+	}
+	if err := os.WriteFile(configPath, out, 0o600); err != nil {
 		return Entry{}, err
 	}
 	e := Entry{
@@ -186,7 +193,10 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 		Timestamp:  time.Now(),
 	}
 	if err := saveManifest(claudeDir, append(entries, e)); err != nil {
-		return Entry{}, err
+		// Restore the original config so the server is not lost without a
+		// manifest entry to restore it.
+		_ = os.WriteFile(configPath, b, 0o600)
+		return Entry{}, fmt.Errorf("save manifest: %w", err)
 	}
 	return e, nil
 }
@@ -325,6 +335,8 @@ func RestoreAll(claudeDir string) (int, error) {
 			continue
 		}
 		if err := restoreEntry(&entries[i]); err != nil {
+			// Persist the entries already restored so progress is not lost.
+			_ = saveManifest(claudeDir, entries)
 			return n, err
 		}
 		n++

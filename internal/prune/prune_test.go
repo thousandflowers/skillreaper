@@ -19,6 +19,80 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
+// freezeManifest pre-creates a read-only manifest so LoadManifest succeeds but
+// saveManifest fails, simulating a write failure after the file mutation.
+func freezeManifest(t *testing.T, claudeDir string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("permission-based write-failure injection does not work as root")
+	}
+	p := filepath.Join(claudeDir, "reaped", "manifest.json")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(`{"version":1,"entries":[]}`), 0o400); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestQuarantineItemRollbackOnManifestFailure(t *testing.T) {
+	claudeDir := t.TempDir()
+	skillMd := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+	mustWrite(t, skillMd, "---\nname: deadskill\n---\nbody")
+	freezeManifest(t, claudeDir)
+
+	item := scan.Item{Category: scan.CatSkill, Name: "deadskill", Path: skillMd, Removable: true}
+	if _, err := QuarantineItem(claudeDir, item); err == nil {
+		t.Fatal("expected QuarantineItem to fail when the manifest cannot be written")
+	}
+	if _, err := os.Stat(filepath.Dir(skillMd)); err != nil {
+		t.Errorf("skill was moved but not recorded — should have rolled back: %v", err)
+	}
+}
+
+func TestRemoveMCPRollbackOnManifestFailure(t *testing.T) {
+	claudeDir := t.TempDir()
+	configPath := filepath.Join(claudeDir, "config.json")
+	const cfg = `{"mcpServers":{"keep":{"command":"a"},"drop":{"command":"b"}}}`
+	mustWrite(t, configPath, cfg)
+	freezeManifest(t, claudeDir)
+
+	if _, err := RemoveMCP(claudeDir, configPath, "", "drop"); err == nil {
+		t.Fatal("expected RemoveMCP to fail when the manifest cannot be written")
+	}
+	b, _ := os.ReadFile(configPath)
+	var top map[string]map[string]any
+	if err := json.Unmarshal(b, &top); err != nil {
+		t.Fatalf("config corrupted: %v", err)
+	}
+	if _, ok := top["mcpServers"]["drop"]; !ok {
+		t.Error("server removed from config but not recorded — should have rolled back the config edit")
+	}
+}
+
+func TestRestoreAllPersistsPartialProgress(t *testing.T) {
+	claudeDir := t.TempDir()
+	for _, name := range []string{"a", "b"} {
+		md := filepath.Join(claudeDir, "skills", name, "SKILL.md")
+		mustWrite(t, md, "---\nname: "+name+"\n---\nbody")
+		if _, err := QuarantineItem(claudeDir, scan.Item{Category: scan.CatSkill, Name: name, Path: md, Removable: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, _ := LoadManifest(claudeDir)
+	// Break the second entry's restore by removing its quarantined copy.
+	if err := os.RemoveAll(entries[1].To); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RestoreAll(claudeDir); err == nil {
+		t.Fatal("expected RestoreAll to fail on the broken entry")
+	}
+	reloaded, _ := LoadManifest(claudeDir)
+	if !reloaded[0].Restored {
+		t.Error("first entry restored but progress not persisted before the error")
+	}
+}
+
 func TestQuarantineAndRestoreSkill(t *testing.T) {
 	claudeDir := t.TempDir()
 	skillMd := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")

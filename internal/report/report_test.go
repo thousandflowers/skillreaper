@@ -10,6 +10,25 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/usage"
 )
 
+func TestSessionsPerMonthLowActivityNotZero(t *testing.T) {
+	// A user with one session in a 31-day window projects to ~0.97/month.
+	// Integer truncation floored that to 0, silently zeroing the cost estimate.
+	st := usage.NewStats(31)
+	st.Sessions = 1
+	r := Build(nil, st, nil, Opts{})
+	if r.SessionsPerMonth < 1 {
+		t.Errorf("SessionsPerMonth = %d, want >= 1 for an active (low-frequency) user", r.SessionsPerMonth)
+	}
+}
+
+func TestSessionsPerMonthZeroWhenNoSessions(t *testing.T) {
+	st := usage.NewStats(30)
+	r := Build(nil, st, nil, Opts{})
+	if r.SessionsPerMonth != 0 {
+		t.Errorf("SessionsPerMonth = %d, want 0 with no sessions", r.SessionsPerMonth)
+	}
+}
+
 func TestVerdict(t *testing.T) {
 	cutoff := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
 	older := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -313,7 +332,6 @@ func TestVerdictMinSessionsExact(t *testing.T) {
 	}
 }
 
-
 func TestBuildEmptyItems(t *testing.T) {
 	st := usage.NewStats(30)
 	st.Sessions = 10
@@ -325,4 +343,3 @@ func TestBuildEmptyItems(t *testing.T) {
 		t.Errorf("Rows = %d, want 0", len(r.Rows))
 	}
 }
-

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,15 @@ func statePath(claudeDir string) string { return filepath.Join(mutedDir(claudeDi
 
 func sanitize(name string) string {
 	return strings.NewReplacer(":", "-", "/", "-", "\\", "-").Replace(name)
+}
+
+// backupName is the backup filename for a muted skill. Distinct names can
+// sanitize to the same string (e.g. "a:b" and "a-b"); a hash of the original
+// name keeps their backups distinct so muting one never clobbers the other's.
+func backupName(name string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(name))
+	return fmt.Sprintf("%s-%08x.md.bak", sanitize(name), h.Sum32())
 }
 
 // Entry records one muted skill so it can be restored.
@@ -82,7 +92,7 @@ func Mute(claudeDir, name, skillPath string) error {
 	if err := os.MkdirAll(mutedDir(claudeDir), 0o755); err != nil {
 		return err
 	}
-	backup := filepath.Join(mutedDir(claudeDir), sanitize(name)+".md.bak")
+	backup := filepath.Join(mutedDir(claudeDir), backupName(name))
 	if err := os.WriteFile(backup, b, 0o644); err != nil {
 		return err
 	}
@@ -163,6 +173,8 @@ func stripDescription(b []byte) ([]byte, bool) {
 	first := true
 	inHeader := false
 	found := false
+	dropping := false // dropping continuation lines of a removed description
+	keyIndent := 0
 	for sc.Scan() {
 		line := sc.Text()
 		trimmed := strings.TrimSpace(line)
@@ -176,6 +188,15 @@ func stripDescription(b []byte) ([]byte, bool) {
 			continue
 		}
 		if inHeader {
+			if dropping {
+				// A block/folded scalar's value sits on continuation lines
+				// indented deeper than the key (blank lines belong to it too).
+				// A line at the key's indent or shallower ends the value.
+				if trimmed == "" || indentOf(line) > keyIndent {
+					continue
+				}
+				dropping = false
+			}
 			if trimmed == "---" {
 				inHeader = false
 				out.WriteString(line)
@@ -184,11 +205,18 @@ func stripDescription(b []byte) ([]byte, bool) {
 			}
 			if strings.HasPrefix(trimmed, "description:") {
 				found = true
-				continue // drop the description line
+				keyIndent = indentOf(line)
+				dropping = true // also drop any continuation lines that follow
+				continue
 			}
 		}
 		out.WriteString(line)
 		out.WriteByte('\n')
 	}
 	return out.Bytes(), found
+}
+
+// indentOf returns the number of leading whitespace characters in line.
+func indentOf(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " \t"))
 }

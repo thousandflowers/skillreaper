@@ -216,6 +216,18 @@ func fillDefaults(opts *options) error {
 	return nil
 }
 
+// requireClaudeDir guards commands that read or write skillreaper state under
+// the Claude directory. When nothing was detected and none was given, claudeDir
+// is empty and filepath.Join would resolve state paths relative to the current
+// working directory. Fail clearly instead of silently polluting the cwd.
+func requireClaudeDir(opts options, stderr io.Writer) bool {
+	if strings.TrimSpace(opts.claudeDir) == "" {
+		fmt.Fprintln(stderr, "error: no Claude Code directory found; pass --claude-dir <path>")
+		return false
+	}
+	return true
+}
+
 // gather runs every scanner plus transcript parsers across all
 // detected platforms and joins the result into a report.
 func gather(opts options) (*report.Report, error) {
@@ -442,6 +454,9 @@ func colorEnabled(opts options, w io.Writer) bool {
 }
 
 func cmdKeepRemove(opts options, name string, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	if err := override.RemoveKeep(opts.claudeDir, name); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
@@ -471,6 +486,9 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: reap keep <name>")
 		return 2
+	}
+	if !requireClaudeDir(opts, stderr) {
+		return 1
 	}
 
 	itemKey := strings.ToLower(args[0])
@@ -570,6 +588,9 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	if opts.all {
 		n, err := prune.RestoreAll(opts.claudeDir)
 		if err != nil {
@@ -617,6 +638,9 @@ func muteEligible(row report.Row) bool {
 }
 
 func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	if !opts.all && len(args) > 0 {
 		r, err := gather(opts)
 		if err != nil {
@@ -676,6 +700,9 @@ func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdUnmute(opts options, args []string, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	if opts.all {
 		n, err := mute.UnmuteAll(opts.claudeDir)
 		if err != nil {
@@ -698,6 +725,9 @@ func cmdUnmute(opts options, args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdInstallHook(opts options, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	settings := filepath.Join(opts.claudeDir, "settings.json")
 	exe, err := os.Executable()
 	if err != nil || exe == "" {
@@ -718,6 +748,9 @@ func cmdInstallHook(opts options, stdout, stderr io.Writer) int {
 }
 
 func cmdUninstallHook(opts options, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	settings := filepath.Join(opts.claudeDir, "settings.json")
 	if err := hook.Uninstall(settings); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)

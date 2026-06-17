@@ -3,6 +3,7 @@
 package report
 
 import (
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -82,7 +83,12 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		Warnings:       warns,
 	}
 	if st.WindowDays > 0 {
-		r.SessionsPerMonth = st.Sessions * 30 / st.WindowDays
+		// Round rather than truncate, and never floor an active user to 0:
+		// a low-frequency user (e.g. 1 session in 31 days) still costs money.
+		r.SessionsPerMonth = int(math.Round(float64(st.Sessions) * 30 / float64(st.WindowDays)))
+		if r.SessionsPerMonth == 0 && st.Sessions > 0 {
+			r.SessionsPerMonth = 1
+		}
 	}
 
 	itemKey := func(it scan.Item) string {

@@ -13,6 +13,24 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/report"
 )
 
+func TestStateCommandsRequireClaudeDir(t *testing.T) {
+	// With no Claude dir resolved, filepath.Join("", ...) yields a relative
+	// path that writes into the cwd. State-mutating commands must fail loudly
+	// instead of polluting the working directory.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	var out, errb bytes.Buffer
+	if code := cmdInstallHook(options{claudeDir: ""}, &out, &errb); code == 0 {
+		t.Error("install-hook with no claude dir should fail, not write to cwd")
+	}
+	if !strings.Contains(strings.ToLower(errb.String()), "claude") {
+		t.Errorf("expected a clear error mentioning the claude dir, got %q", errb.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "settings.json")); !os.IsNotExist(err) {
+		t.Error("install-hook polluted the cwd with settings.json")
+	}
+}
+
 // buildFixture creates a minimal but complete fake installation:
 // a used skill, a dead skill, a dead MCP server, and one transcript.
 func buildFixture(t *testing.T) (claudeDir, claudeJSON string) {

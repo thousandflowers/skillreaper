@@ -39,7 +39,21 @@ type group struct {
 // Running `reap nudge` performs the audit and weekly comparison internally,
 // so the hook needs no external dependencies.
 func Command(exe string) string {
-	return exe + " nudge  # " + Marker
+	return shellQuote(exe) + " nudge  # " + Marker
+}
+
+// shellQuote wraps s in single quotes so a path with spaces or shell
+// metacharacters is passed to the shell as a single, literal argument.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// isOurHook reports whether a hook command is skillreaper's nudge entry. The
+// marker rides as a trailing shell comment, so match it as a suffix rather
+// than a substring — a foreign command that merely mentions the marker text
+// must not be treated as ours.
+func isOurHook(command string) bool {
+	return strings.HasSuffix(strings.TrimSpace(command), "# "+Marker)
 }
 
 // Install adds the SessionStart nudge hook to settings.json (creating the file
@@ -56,7 +70,7 @@ func Install(settingsPath, command string, dryRun bool) ([]byte, error) {
 	}
 	for _, g := range hooks["SessionStart"] {
 		for _, h := range g.Hooks {
-			if strings.Contains(h.Command, Marker) {
+			if isOurHook(h.Command) {
 				return marshalTop(top) // already installed
 			}
 		}
@@ -104,7 +118,7 @@ func Uninstall(settingsPath string) error {
 	for _, g := range hooks["SessionStart"] {
 		var kc []cmdEntry
 		for _, h := range g.Hooks {
-			if strings.Contains(h.Command, Marker) {
+			if isOurHook(h.Command) {
 				continue
 			}
 			kc = append(kc, h)

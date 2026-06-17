@@ -25,6 +25,39 @@ func TestStripDescription(t *testing.T) {
 	}
 }
 
+func TestStripDescriptionMultiLine(t *testing.T) {
+	// A folded/block scalar description spans several indented continuation
+	// lines. Dropping only the "description:" line leaves the continuation
+	// lines behind as malformed frontmatter.
+	in := "---\nname: foo\ndescription: >\n  line one\n  line two\ntools: Read\n---\nbody\n"
+	out, ok := stripDescription([]byte(in))
+	if !ok {
+		t.Fatal("expected a description to strip")
+	}
+	s := string(out)
+	if strings.Contains(s, "line one") || strings.Contains(s, "line two") {
+		t.Errorf("continuation lines of the description were left behind:\n%s", s)
+	}
+	for _, want := range []string{"name: foo", "tools: Read", "body"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("stripped output missing %q:\n%s", want, s)
+		}
+	}
+}
+
+func TestBackupNameUniquePerName(t *testing.T) {
+	// Names that collapse to the same sanitized form must not share a backup
+	// file, or muting both would clobber the first's backup.
+	seen := map[string]string{}
+	for _, name := range []string{"a:b", "a/b", "a-b", "a\\b"} {
+		bn := backupName(name)
+		if prev, ok := seen[bn]; ok {
+			t.Errorf("backupName(%q) collides with backupName(%q) = %q", name, prev, bn)
+		}
+		seen[bn] = name
+	}
+}
+
 func TestStripDescriptionNoFrontmatter(t *testing.T) {
 	if _, ok := stripDescription([]byte("no frontmatter here\n")); ok {
 		t.Error("should report nothing stripped")

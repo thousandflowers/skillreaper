@@ -222,8 +222,35 @@ func TestShouldShowShareHintBoundary(t *testing.T) {
 
 func TestCommandFormat(t *testing.T) {
 	cmd := Command("/usr/local/bin/reap")
-	if cmd != "/usr/local/bin/reap nudge  # "+Marker {
+	if cmd != "'/usr/local/bin/reap' nudge  # "+Marker {
 		t.Errorf("Command() = %q", cmd)
+	}
+}
+
+func TestCommandQuotesPathWithSpaces(t *testing.T) {
+	cmd := Command("/Users/me/My Tools/reap")
+	if !strings.HasPrefix(cmd, "'/Users/me/My Tools/reap' nudge") {
+		t.Errorf("path with spaces not safely quoted: %q", cmd)
+	}
+	if !strings.HasSuffix(cmd, "# "+Marker) {
+		t.Errorf("marker comment lost: %q", cmd)
+	}
+}
+
+func TestUninstallIgnoresForeignMarkerSubstring(t *testing.T) {
+	// A foreign hook whose command merely contains the marker text (not as our
+	// trailing comment) must be left alone — substring matching would remove it.
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	foreign := `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo ` + Marker + ` is great"}]}]}}`
+	if err := os.WriteFile(settings, []byte(foreign), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Uninstall(settings); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(settings)
+	if !strings.Contains(string(b), "echo "+Marker+" is great") {
+		t.Errorf("uninstall removed a foreign hook that only mentioned the marker: %s", b)
 	}
 }
 

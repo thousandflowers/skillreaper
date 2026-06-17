@@ -335,7 +335,11 @@ func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string
 				continue
 			}
 			delete(pending, b.ToolUseID)
-			if b.IsError || bytes.Contains(b.Content, []byte("error")) {
+			// is_error is the authoritative signal that the tool itself failed.
+			// A substring scan for "error" in the content misfires on successful
+			// output that merely mentions the word (e.g. a linter reporting
+			// "no errors found"), wrongly marking a working skill as broken.
+			if b.IsError {
 				st.recordError(scan.CatSkill, ps.key, ps.ts)
 			} else {
 				rec(ps.key, ps.ts)

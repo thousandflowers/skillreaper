@@ -76,7 +76,7 @@ func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, sess
 			money = fmt.Sprintf(" (≈$%.0f/yr at your usage)", yr)
 		}
 	}
-	fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ") + paint(cDim, fmt.Sprintf("%s %d items · saving ~%s tok/session%s", verb, items, tokStr, money)))
+	fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ")+paint(cDim, fmt.Sprintf("%s %d items · saving ~%s tok/session%s", verb, items, tokStr, money)))
 }
 
 // RenderShareHint prints a single sober line pointing users at reap share.
@@ -102,10 +102,10 @@ func RenderShareMarkdown(w io.Writer, tokensPerSession int) {
 // RenderShareJSON prints the share message as structured JSON.
 func RenderShareJSON(w io.Writer, tokensPerSession int) {
 	type shareJSON struct {
-		Message             string `json:"message"`
-		TokensSavedPerSession int  `json:"tokens_saved_per_session"`
-		URL                 string `json:"url"`
-		Install             string `json:"install"`
+		Message               string `json:"message"`
+		TokensSavedPerSession int    `json:"tokens_saved_per_session"`
+		URL                   string `json:"url"`
+		Install               string `json:"install"`
 	}
 	msg := shareMessage(tokensPerSession)
 	enc := json.NewEncoder(w)
@@ -113,8 +113,8 @@ func RenderShareJSON(w io.Writer, tokensPerSession int) {
 	_ = enc.Encode(shareJSON{
 		Message:               msg,
 		TokensSavedPerSession: tokensPerSession,
-		URL:                 "https://github.com/thousandflowers/skillreaper",
-		Install:             "brew install thousandflowers/tap/skillreaper",
+		URL:                   "https://github.com/thousandflowers/skillreaper",
+		Install:               "brew install thousandflowers/tap/skillreaper",
 	})
 }
 
@@ -185,7 +185,13 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		paint(cBold+cBRed, shockMid),
 		paint(cBRed, shockBot))
 	if r.DeadToolChars > 0 {
-		fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf("(init: ~%d chars of tool descriptions unused per session)", r.DeadToolChars)))
+		// DeadToolChars is a total summed across every session; divide to show
+		// the per-session average the label promises.
+		perSession := r.DeadToolChars
+		if r.Sessions > 1 {
+			perSession = r.DeadToolChars / r.Sessions
+		}
+		fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf("(init: ~%d chars of tool descriptions unused per session)", perSession)))
 	}
 
 	renderGapLine(w, r, color)

@@ -110,6 +110,28 @@ func TestParseErrorTracking(t *testing.T) {
 	}
 }
 
+func TestParseSuccessfulResultMentioningErrorIsNotBroken(t *testing.T) {
+	dir := t.TempDir()
+	writeTranscript(t, filepath.Join(dir, "p", "s.jsonl"),
+		// Succeeds (is_error absent/false) but the output text contains the word
+		// "error". This must count as a use, not an error: a linter/review skill
+		// reporting "no errors found" is working correctly.
+		`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Skill","input":{"skill":"lintskill"}}]}}`,
+		`{"type":"user","timestamp":"2026-06-01T10:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"no error found in your code"}]}}`,
+	)
+
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Uses[scan.CatSkill]["lintskill"]; got != 1 {
+		t.Errorf("lintskill uses = %d, want 1 (success that merely mentions 'error' is still a use)", got)
+	}
+	if got := st.Errors[scan.CatSkill]["lintskill"]; got != 0 {
+		t.Errorf("lintskill errors = %d, want 0 (is_error was not set)", got)
+	}
+}
+
 func TestParseSkillProjects(t *testing.T) {
 	dir := t.TempDir()
 	writeTranscript(t, filepath.Join(dir, "repo-a", "s1.jsonl"),

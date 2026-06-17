@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thousandflowers/skillreaper/internal/atomicfile"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
@@ -180,7 +181,7 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
-	if err := os.WriteFile(configPath, out, 0o600); err != nil {
+	if err := atomicfile.Write(configPath, out, 0o600); err != nil {
 		return Entry{}, err
 	}
 	e := Entry{
@@ -195,7 +196,7 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 	if err := saveManifest(claudeDir, append(entries, e)); err != nil {
 		// Restore the original config so the server is not lost without a
 		// manifest entry to restore it.
-		_ = os.WriteFile(configPath, b, 0o600)
+		_ = atomicfile.Write(configPath, b, 0o600)
 		return Entry{}, fmt.Errorf("save manifest: %w", err)
 	}
 	return e, nil
@@ -361,7 +362,7 @@ func restoreEntry(e *Entry) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(e.ConfigPath, out, 0o600); err != nil {
+		if err := atomicfile.Write(e.ConfigPath, out, 0o600); err != nil {
 			return err
 		}
 		e.Restored = true

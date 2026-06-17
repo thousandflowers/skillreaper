@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/thousandflowers/skillreaper/internal/atomicfile"
 )
 
 // starCtaCooldownDays limits the star-CTA to at most once per 30 days.
@@ -91,7 +93,7 @@ func Install(settingsPath, command string, dryRun bool) ([]byte, error) {
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(settingsPath, out, 0o644); err != nil {
+	if err := atomicfile.Write(settingsPath, out, 0o644); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -141,7 +143,7 @@ func Uninstall(settingsPath string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(settingsPath, out, 0o644)
+	return atomicfile.Write(settingsPath, out, 0o644)
 }
 
 func readTop(path string) (map[string]json.RawMessage, error) {

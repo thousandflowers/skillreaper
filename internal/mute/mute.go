@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"os"
@@ -29,6 +30,10 @@ func backupName(name string) string {
 	_, _ = h.Write([]byte(name))
 	return fmt.Sprintf("%s-%08x.md.bak", sanitize(name), h.Sum32())
 }
+
+// ErrAlreadyMuted is returned by Mute when the named skill is already muted,
+// so bulk callers can skip it with errors.Is rather than matching a string.
+var ErrAlreadyMuted = errors.New("already muted")
 
 // Entry records one muted skill so it can be restored.
 type Entry struct {
@@ -79,7 +84,7 @@ func Mute(claudeDir, name, skillPath string) error {
 		return err
 	}
 	if _, ok := s.Muted[name]; ok {
-		return fmt.Errorf("already muted: %s", name)
+		return fmt.Errorf("%w: %s", ErrAlreadyMuted, name)
 	}
 	b, err := os.ReadFile(skillPath)
 	if err != nil {

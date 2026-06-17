@@ -62,6 +62,61 @@ func buildFixture(t *testing.T) (claudeDir, claudeJSON string) {
 	return claudeDir, claudeJSON
 }
 
+func TestMuteNamedAgent(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	agent := filepath.Join(claudeDir, "agents", "myagent.md")
+	if err := os.MkdirAll(filepath.Dir(agent), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(agent, []byte("---\nname: myagent\ndescription: an agent description\n---\nbody"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	code := run([]string{"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "myagent"},
+		strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("mute agent exit = %d, stderr: %s", code, errOut.String())
+	}
+	b, _ := os.ReadFile(agent)
+	if strings.Contains(string(b), "description:") {
+		t.Errorf("named agent was not muted: %s", b)
+	}
+}
+
+func TestMuteBareAbortsOnDecline(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	dead := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+	var out, errOut bytes.Buffer
+	// Bare `reap mute` must prompt; answering no leaves files untouched.
+	code := run([]string{"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"},
+		strings.NewReader("n\n"), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	b, _ := os.ReadFile(dead)
+	if !strings.Contains(string(b), "description:") {
+		t.Errorf("declined bulk mute still stripped the description: %s", b)
+	}
+	if !strings.Contains(out.String(), "aborted") {
+		t.Errorf("expected an abort message, got: %s", out.String())
+	}
+}
+
+func TestMuteBareProceedsOnYes(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	dead := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+	var out, errOut bytes.Buffer
+	code := run([]string{"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"},
+		strings.NewReader("y\n"), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	b, _ := os.ReadFile(dead)
+	if strings.Contains(string(b), "description:") {
+		t.Errorf("confirmed bulk mute did not strip the description: %s", b)
+	}
+}
+
 func TestRunReport(t *testing.T) {
 	claudeDir, claudeJSON := buildFixture(t)
 	var out, errOut bytes.Buffer

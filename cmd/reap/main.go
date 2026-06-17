@@ -147,7 +147,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return cmdKeep(opts, rest, stdout, stderr)
 	case "mute":
-		return cmdMute(opts, rest, stdout, stderr)
+		return cmdMute(opts, rest, stdin, stdout, stderr)
 	case "unmute":
 		return cmdUnmute(opts, rest, stdout, stderr)
 	case "prune":
@@ -546,14 +546,8 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if !opts.yes {
-		fmt.Fprintf(stdout, "\nPrune all %d items? This quarantines them (reversible). [Y/n] ", len(candidates))
-		sc := bufio.NewScanner(stdin)
-		if !sc.Scan() {
-			fmt.Fprintln(stdout, "aborted")
-			return 0
-		}
-		line := strings.TrimSpace(sc.Text())
-		if line != "" && strings.ToLower(line) != "y" && strings.ToLower(line) != "yes" {
+		prompt := fmt.Sprintf("\nPrune all %d items? This quarantines them (reversible). [Y/n] ", len(candidates))
+		if !confirm(stdin, stdout, prompt) {
 			fmt.Fprintln(stdout, "aborted")
 			return 0
 		}
@@ -612,16 +606,20 @@ func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// findSkill locates a skill row by its exact invocation key, then by the bare
-// suffix of a namespaced key (so "plan" matches "ecc:plan").
-func findSkill(r *report.Report, name string) (report.Row, bool) {
+// findItem locates a skill or agent row by its exact invocation key, then by
+// the bare suffix of a namespaced key (so "plan" matches "ecc:plan"). Both
+// categories are mutable, so `reap mute <name>` resolves either.
+func findItem(r *report.Report, name string) (report.Row, bool) {
+	mutable := func(c scan.Category) bool {
+		return c == scan.CatSkill || c == scan.CatAgent
+	}
 	for _, row := range r.Rows {
-		if row.Category == scan.CatSkill && row.Name == name {
+		if mutable(row.Category) && row.Name == name {
 			return row, true
 		}
 	}
 	for _, row := range r.Rows {
-		if row.Category != scan.CatSkill {
+		if !mutable(row.Category) {
 			continue
 		}
 		if i := strings.LastIndexByte(row.Name, ':'); i >= 0 && row.Name[i+1:] == name {
@@ -631,25 +629,40 @@ func findSkill(r *report.Report, name string) (report.Row, bool) {
 	return report.Row{}, false
 }
 
+// confirm prints prompt to stdout and reads a yes/no answer from stdin. A bare
+// Enter (empty line) counts as yes; anything other than y/yes is a no.
+func confirm(stdin io.Reader, stdout io.Writer, prompt string) bool {
+	fmt.Fprint(stdout, prompt)
+	sc := bufio.NewScanner(stdin)
+	if !sc.Scan() {
+		return false
+	}
+	line := strings.ToLower(strings.TrimSpace(sc.Text()))
+	return line == "" || line == "y" || line == "yes"
+}
+
 func muteEligible(row report.Row) bool {
 	return row.Path != "" &&
 		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
 		(row.Verdict == report.VerdictReap || row.Verdict == report.VerdictMute)
 }
 
-func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
+func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if !requireClaudeDir(opts, stderr) {
 		return 1
 	}
-	if !opts.all && len(args) > 0 {
-		r, err := gather(opts)
-		if err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
-			return 1
-		}
-		row, ok := findSkill(r, args[0])
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+
+	// Named single mute: reap mute <name>. Mutes the named skill or agent
+	// regardless of verdict (the user asked for it explicitly).
+	if len(args) > 0 {
+		row, ok := findItem(r, args[0])
 		if !ok {
-			fmt.Fprintf(stderr, "no skill found: %s\n", args[0])
+			fmt.Fprintf(stderr, "no skill or agent found: %s\n", args[0])
 			return 1
 		}
 		if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
@@ -664,11 +677,8 @@ func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	r, err := gather(opts)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
+	// Bulk mute: reap mute (bare) or reap mute --all. Like prune, this rewrites
+	// many files, so preview the candidates and confirm before acting.
 	var candidates []report.Row
 	for _, row := range r.Rows {
 		if muteEligible(row) {
@@ -679,10 +689,20 @@ func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "Nothing to mute.")
 		return 0
 	}
+	fmt.Fprintf(stdout, "\n%d items eligible to mute (strips the injected description; reversible):\n", len(candidates))
+	for _, row := range candidates {
+		fmt.Fprintf(stdout, "  %-6s  %-40s  ~%d tok/session\n", row.Category, row.Name, row.Tokens)
+	}
+	if !opts.yes {
+		if !confirm(stdin, stdout, fmt.Sprintf("\nMute all %d items? This strips their descriptions (reversible). [Y/n] ", len(candidates))) {
+			fmt.Fprintln(stdout, "aborted")
+			return 0
+		}
+	}
 	muted, totalTok := 0, 0
 	for _, row := range candidates {
 		if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
-			if err.Error() == "already muted: "+row.Name {
+			if errors.Is(err, mute.ErrAlreadyMuted) {
 				continue
 			}
 			fmt.Fprintf(stderr, "error muting %s: %v\n", row.Name, err)

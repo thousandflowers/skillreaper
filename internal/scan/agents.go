@@ -47,10 +47,10 @@ func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			continue
 		}
 		stem := strings.TrimSuffix(e.Name(), ".md")
-		name, desc, bodyChars := parseFrontmatter(b)
-		if name == "" {
-			name = stem
-		}
+		// The subagent_type recorded in transcripts is the file name (plus any
+		// plugin prefix); by convention it equals the stem. Frontmatter name is
+		// metadata and intentionally not used as the key.
+		_, desc, bodyChars := parseFrontmatter(b)
 		key := namePrefix + stem
 		items = append(items, Item{
 			Category:    CatAgent,

@@ -118,6 +118,59 @@ func TestScanSkillsCorruptRegistry(t *testing.T) {
 	}
 }
 
+func TestScanSkillsSkipsPluginInstallPathOutsidePluginRoot(t *testing.T) {
+	home := t.TempDir()
+	mustWrite(t, filepath.Join(home, "skills", "ok", "SKILL.md"),
+		"---\nname: ok\ndescription: still works\n---\n")
+
+	outside := filepath.Join(t.TempDir(), "evilplug")
+	mustWrite(t, filepath.Join(outside, "skills", "outside", "SKILL.md"),
+		"---\nname: outside\ndescription: should not load\n---\n")
+	reg := map[string]any{
+		"version": 2,
+		"plugins": map[string]any{
+			"evil@mkt": []map[string]any{{
+				"installPath": outside,
+				"installedAt": "2026-05-15T22:41:04.874Z",
+			}},
+		},
+	}
+	b, _ := json.Marshal(reg)
+	mustWrite(t, filepath.Join(home, "plugins", "installed_plugins.json"), string(b))
+
+	items, warns := ScanSkills(home, "test")
+	if findItem(items, "evil:outside") != nil {
+		t.Fatal("plugin skill outside plugin root should not be loaded")
+	}
+	if findItem(items, "ok") == nil {
+		t.Fatal("personal skill should still be loaded")
+	}
+	if len(warns) != 1 {
+		t.Fatalf("warnings = %d, want 1", len(warns))
+	}
+}
+
+func TestScanSkillsSkipsSymlinkedSkillOutsideSkillsRoot(t *testing.T) {
+	home := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.md")
+	mustWrite(t, outside, "---\nname: outside\ndescription: should not load\n---\n")
+	link := filepath.Join(home, "skills", "linked", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	items, warns := ScanSkills(home, "test")
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if findItem(items, "linked") != nil {
+		t.Fatal("symlinked skill outside skills root should not be loaded")
+	}
+}
+
 func TestScanAgents(t *testing.T) {
 	home := buildFixtureHome(t)
 	items, warns := ScanAgents(home, "test")
@@ -132,5 +185,26 @@ func TestScanAgents(t *testing.T) {
 	}
 	if a := findItem(items, "coolplug:worker"); a == nil || a.Removable {
 		t.Errorf("plugin agent wrong: %+v", a)
+	}
+}
+
+func TestScanAgentsSkipsSymlinkedAgentOutsideAgentsRoot(t *testing.T) {
+	home := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "helper.md")
+	mustWrite(t, outside, "---\nname: helper\ndescription: should not load\n---\n")
+	link := filepath.Join(home, "agents", "helper.md")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	items, warns := ScanAgents(home, "test")
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if findItem(items, "helper") != nil {
+		t.Fatal("symlinked agent outside agents root should not be loaded")
 	}
 }

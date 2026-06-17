@@ -41,12 +41,22 @@ func installedPlugins(claudeDir string) ([]pluginInfo, []Warning) {
 	if err := json.Unmarshal(b, &f); err != nil {
 		return nil, []Warning{{Path: path, Msg: "unreadable JSON: " + err.Error()}}
 	}
+	pluginRoot := filepath.Join(claudeDir, "plugins")
 	var out []pluginInfo
+	var warns []Warning
 	for full, installs := range f.Plugins {
 		if len(installs) == 0 {
 			continue
 		}
 		ins := installs[0]
+		installPath, ok := resolveWithin(pluginRoot, ins.InstallPath)
+		if !ok {
+			warns = append(warns, Warning{
+				Path: ins.InstallPath,
+				Msg:  "plugin install path escapes plugin root; skipping",
+			})
+			continue
+		}
 		short := full
 		if i := strings.IndexByte(full, '@'); i >= 0 {
 			short = full[:i]
@@ -55,9 +65,9 @@ func installedPlugins(claudeDir string) ([]pluginInfo, []Warning) {
 		out = append(out, pluginInfo{
 			Name:        short,
 			FullName:    full,
-			InstallPath: ins.InstallPath,
+			InstallPath: installPath,
 			InstalledAt: ts,
 		})
 	}
-	return out, nil
+	return out, warns
 }

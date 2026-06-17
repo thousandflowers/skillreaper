@@ -32,8 +32,12 @@ type Stats struct {
 	FilesScanned   int
 	MalformedLines int
 	WindowDays     int
-	Uses           map[scan.Category]map[string]int
-	Last           map[scan.Category]map[string]time.Time
+	// IncompleteEvidence is set when a parser hit a bounded-read error after
+	// it may already have seen earlier records. Callers may still use positive
+	// evidence, but must not make absence-of-use REAP/MUTE decisions from it.
+	IncompleteEvidence bool
+	Uses               map[scan.Category]map[string]int
+	Last               map[scan.Category]map[string]time.Time
 
 	// Errors counts invocations that resulted in an error, and LastAttempt
 	// records the most recent attempt (success or error). Together with Uses
@@ -258,6 +262,7 @@ func parseFile(path, project string, st *Stats) {
 	}
 	if sc.Err() != nil {
 		st.MalformedLines++
+		st.IncompleteEvidence = true
 	}
 
 	// A Skill invocation with no matching tool_result (session ended, or the

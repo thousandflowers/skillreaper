@@ -139,15 +139,19 @@ func TestBuild(t *testing.T) {
 func TestEvidenceBlindNotReaped(t *testing.T) {
 	st := usage.NewStats(30)
 	st.Sessions = 60 // ample Claude Code evidence
+	st.Uses[scan.CatSkill]["oc-rare"] = 1
 
 	items := []scan.Item{
 		{Category: scan.CatSkill, Name: "oc-only", Platform: "opencode", Source: "personal", DescChars: 370, Removable: true},
+		{Category: scan.CatSkill, Name: "oc-rare", Platform: "opencode", Source: "personal", DescChars: 370, Removable: true},
 		{Category: scan.CatSkill, Name: "cc-dead", Platform: "claude-code", Source: "personal", DescChars: 370, Removable: true},
 	}
 	r := Build(items, st, nil, Opts{
 		MinSessions:   10,
 		Cutoff:        time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC),
 		EvidenceBlind: map[string]bool{"opencode": true},
+		MuteThreshold: 0.20,
+		MuteMinTokens: 50,
 	})
 
 	byName := map[string]Row{}
@@ -159,6 +163,12 @@ func TestEvidenceBlindNotReaped(t *testing.T) {
 	}
 	if rsn := byName["oc-only"].Reason; rsn != ReasonNoEvidence {
 		t.Errorf("evidence-blind item: reason = %s, want %s", rsn, ReasonNoEvidence)
+	}
+	if v := byName["oc-rare"].Verdict; v != VerdictReview {
+		t.Errorf("evidence-blind rare item: verdict = %s, want REVIEW instead of MUTE", v)
+	}
+	if rsn := byName["oc-rare"].Reason; rsn != ReasonNoEvidence {
+		t.Errorf("evidence-blind rare item: reason = %s, want %s", rsn, ReasonNoEvidence)
 	}
 	if v := byName["cc-dead"].Verdict; v != VerdictReap {
 		t.Errorf("covered dead item: verdict = %s, want REAP", v)

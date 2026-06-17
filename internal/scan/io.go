@@ -2,6 +2,7 @@ package scan
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,10 +21,47 @@ func readCapped(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
 	if fi.Size() > maxFileSize {
 		return nil, fmt.Errorf("%s is %d bytes, over the %d-byte scan limit", path, fi.Size(), maxFileSize)
 	}
-	return os.ReadFile(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	fi, err = f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	if fi.Size() > maxFileSize {
+		return nil, fmt.Errorf("%s is %d bytes, over the %d-byte scan limit", path, fi.Size(), maxFileSize)
+	}
+	b, err := io.ReadAll(io.LimitReader(f, maxFileSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > maxFileSize {
+		return nil, fmt.Errorf("%s is over the %d-byte scan limit", path, maxFileSize)
+	}
+	return b, nil
+}
+
+func resolveWithin(root, target string) (string, bool) {
+	rr, err1 := filepath.EvalSymlinks(root)
+	tr, err2 := filepath.EvalSymlinks(target)
+	if err1 != nil || err2 != nil {
+		return "", false
+	}
+	if !withinDir(rr, tr) {
+		return "", false
+	}
+	return tr, true
 }
 
 // withinDir reports whether target is at or under root. Both should already be

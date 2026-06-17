@@ -16,6 +16,16 @@ func TestReadCappedRejectsOversizedFile(t *testing.T) {
 	}
 }
 
+func TestReadCappedRejectsNonRegularFile(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "not-a-file")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readCapped(dir); err == nil {
+		t.Error("expected readCapped to reject a non-regular file")
+	}
+}
+
 func TestReadCappedReadsNormalFile(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "ok.md")
 	if err := os.WriteFile(p, []byte("hello"), 0o644); err != nil {

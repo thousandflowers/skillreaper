@@ -1,42 +1,38 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { createWriteStream, existsSync } from 'node:fs';
-import { platform, arch } from 'node:os';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { downloadVerifiedReleaseAsset, platformTarget } from '../lib/release.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const bin = resolve(__dirname, 'skillreaper');
+const { version } = JSON.parse(readFileSync(resolve(__dirname, '..', 'package.json'), 'utf-8'));
+const { os, archName, binaryName, tarball } = platformTarget();
+const bin = resolve(__dirname, binaryName);
+
+function run(command, args) {
+  const result = spawnSync(command, args, { stdio: 'inherit' });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`${command} exited with status ${result.status}`);
+  }
+}
 
 async function download() {
-  const osMap = { darwin: 'darwin', linux: 'linux', win32: 'windows' };
-  const archMap = { x64: 'amd64', arm64: 'arm64' };
-  const os = osMap[platform()];
-  const archName = archMap[arch()];
-
-  if (!os || !archName) {
-    console.error(`unsupported platform: ${platform()} ${arch()}`);
-    process.exit(1);
-  }
-
-  const tarball = `skillreaper_${os}_${archName}.tar.gz`;
-  const url = `https://github.com/thousandflowers/skillreaper/releases/latest/download/${tarball}`;
-  console.error(`downloading skillreaper for ${os}/${archName}...`);
-
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    console.error(`download failed: HTTP ${resp.status}`);
-    process.exit(1);
-  }
-
   const tmp = resolve(__dirname, tarball);
-  const { pipeline } = await import('node:stream/promises');
-  await pipeline(resp.body, createWriteStream(tmp));
+  console.error(`downloading skillreaper ${version} for ${os}/${archName}...`);
 
-  spawnSync('tar', ['-xzf', tmp, '-C', __dirname], { stdio: 'inherit' });
-  if (os !== 'windows') spawnSync('chmod', ['+x', bin], { stdio: 'inherit' });
-  spawnSync('rm', ['-f', tmp], { stdio: 'inherit' });
-  console.error(`installed skillreaper at ${bin}`);
+  try {
+    await downloadVerifiedReleaseAsset({ version, assetName: tarball, destination: tmp });
+    run('tar', ['-xzf', tmp, '-C', __dirname, binaryName]);
+    if (os !== 'windows') run('chmod', ['+x', bin]);
+    unlinkSync(tmp);
+    console.error(`installed skillreaper ${version} at ${bin}`);
+  } catch (err) {
+    if (existsSync(tmp)) unlinkSync(tmp);
+    console.error(`download failed: ${err.message}`);
+    process.exit(1);
+  }
 }
 
 if (!existsSync(bin)) {

@@ -1,11 +1,13 @@
 package usage
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -19,9 +21,14 @@ import (
 // database cannot hang reap indefinitely.
 const sqliteTimeout = 60 * time.Second
 
+// sqliteOutputLimit bounds total sqlite3 stdout even though rows are streamed.
+var sqliteOutputLimit int64 = 50 << 20
+
 // ErrNoSQLite means the sqlite3 CLI is not on PATH, so OpenCode's SQLite
 // session history cannot be read. Callers fall back to REVIEW(no-transcript).
 var ErrNoSQLite = errors.New("sqlite3 CLI not found in PATH")
+
+var errSQLiteOutputLimit = errors.New("sqlite3 query output exceeded byte limit")
 
 const sqlite3Bin = "sqlite3"
 
@@ -63,15 +70,65 @@ func ParseSQLite(path string, cutoff time.Time, windowDays int) (*Stats, error) 
 	if tmp := os.Getenv("TMPDIR"); tmp != "" {
 		cmd.Env = append(cmd.Env, "TMPDIR="+tmp)
 	}
-	out, err := cmd.Output()
+
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("sqlite3 query timed out after %s for %s", sqliteTimeout, path)
-		}
-		return nil, fmt.Errorf("sqlite3 query failed for %s: %w", path, err)
+		return nil, fmt.Errorf("sqlite3 stdout pipe failed for %s: %w", path, err)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("sqlite3 start failed for %s: %w", path, err)
 	}
 
 	st := NewStats(windowDays)
+	limitedStdout := &byteLimitReader{r: stdout, limit: sqliteOutputLimit}
+	sessionCount, scanErr := parseSQLiteRows(limitedStdout, st, cutoff)
+	if scanErr != nil && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	waitErr := cmd.Wait()
+	if ctx.Err() == context.DeadlineExceeded {
+		return nil, fmt.Errorf("sqlite3 query timed out after %s for %s", sqliteTimeout, path)
+	}
+	if scanErr != nil {
+		if errors.Is(scanErr, errSQLiteOutputLimit) {
+			return nil, fmt.Errorf("sqlite3 query output exceeded %d bytes for %s", sqliteOutputLimit, path)
+		}
+		return nil, fmt.Errorf("sqlite3 query output could not be parsed for %s: %w", path, scanErr)
+	}
+	if waitErr != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("sqlite3 query timed out after %s for %s", sqliteTimeout, path)
+		}
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			return nil, fmt.Errorf("sqlite3 query failed for %s: %w: %s", path, waitErr, msg)
+		}
+		return nil, fmt.Errorf("sqlite3 query failed for %s: %w", path, waitErr)
+	}
+
+	st.Sessions = sessionCount
+	st.FilesScanned = 1
+	return st, nil
+}
+
+type byteLimitReader struct {
+	r     io.Reader
+	limit int64
+	read  int64
+}
+
+func (r *byteLimitReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	r.read += int64(n)
+	if r.read > r.limit {
+		return n, errSQLiteOutputLimit
+	}
+	return n, err
+}
+
+func parseSQLiteRows(r io.Reader, st *Stats, cutoff time.Time) (int, error) {
 	sessions := map[string]bool{}
 	pending := map[string]pendingSkill{}
 	curSession := ""
@@ -85,7 +142,11 @@ func ParseSQLite(path string, cutoff time.Time, windowDays int) (*Stats, error) 
 		}
 	}
 
-	for _, raw := range bytes.Split(out, []byte(sqliteRowSep)) {
+	sc := bufio.NewScanner(r)
+	sc.Split(splitSQLiteRows)
+	sc.Buffer(make([]byte, 0, 256*1024), maxLineBytes)
+	for sc.Scan() {
+		raw := sc.Bytes()
 		if len(bytes.TrimSpace(raw)) == 0 {
 			continue
 		}
@@ -114,11 +175,25 @@ func ParseSQLite(path string, cutoff time.Time, windowDays int) (*Stats, error) 
 		// no init block, so no dead-tool weight.
 		recordBlocks(st, blocks, ts, "", pending, nil)
 	}
+	if err := sc.Err(); err != nil {
+		return 0, err
+	}
 	flush()
 
-	st.Sessions = len(sessions)
-	st.FilesScanned = 1
-	return st, nil
+	return len(sessions), nil
+}
+
+func splitSQLiteRows(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if i := bytes.IndexByte(data, sqliteRowSep[0]); i >= 0 {
+		return i + 1, data[:i], nil
+	}
+	if atEOF {
+		if len(data) == 0 {
+			return 0, nil, nil
+		}
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }
 
 // parseSQLiteTime reads created_at, which OpenCode may store as RFC3339 or as

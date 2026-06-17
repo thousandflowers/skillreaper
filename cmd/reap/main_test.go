@@ -154,6 +154,54 @@ func TestRunReportJSON(t *testing.T) {
 	}
 }
 
+func TestRunReportOverlongTranscriptHoldsAbsenceDecisionsAtReview(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	transcript := filepath.Join(claudeDir, "projects", "p1", "s1.jsonl")
+	overlong := `{"type":"assistant","timestamp":"2026-06-09T10:01:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"missedskill"}}],"pad":"` +
+		strings.Repeat("x", 10*1024*1024+1) + `"}}`
+	f, err := os.OpenFile(transcript, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(overlong + "\n"); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := run([]string{
+		"--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--json",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+
+	var r report.Report
+	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
+		t.Fatalf("invalid JSON output: %v", err)
+	}
+	if r.MalformedLines != 1 {
+		t.Errorf("MalformedLines = %d, want 1", r.MalformedLines)
+	}
+	byName := map[string]report.Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+	if row := byName["usedskill"]; row.Verdict != report.VerdictKeep {
+		t.Errorf("usedskill verdict = %s(%s), want KEEP from positive evidence", row.Verdict, row.Reason)
+	}
+	if row := byName["deadskill"]; row.Verdict != report.VerdictReview || row.Reason != report.ReasonNoEvidence {
+		t.Errorf("deadskill verdict = %s(%s), want REVIEW(%s)", row.Verdict, row.Reason, report.ReasonNoEvidence)
+	}
+	if len(r.Warnings) == 0 || !strings.Contains(r.Warnings[0].Msg, "incomplete") {
+		t.Errorf("expected incomplete-evidence warning, got %+v", r.Warnings)
+	}
+}
+
 func TestRunMissingDir(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := run([]string{"--claude-dir", "/nonexistent/nope"},

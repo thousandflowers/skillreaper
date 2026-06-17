@@ -24,8 +24,8 @@ type Opts struct {
 	KeepSet      map[string]bool // items manually marked as keep
 	// EvidenceBlind holds platform IDs whose session transcripts could not
 	// be parsed (e.g. OpenCode's SQLite store, or a platform with no session
-	// files). Zero-use items from these platforms are held at REVIEW instead
-	// of REAP, because absence of evidence is not evidence of absence.
+	// files). REAP/MUTE candidates from these platforms are held at REVIEW,
+	// because absence of evidence is not evidence of absence.
 	EvidenceBlind map[string]bool
 	// ClaudeMDLines holds the non-comment lines of every detected CLAUDE.md.
 	// A skill whose name appears here is held at KEEP(claude-md-ref).
@@ -132,9 +132,9 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 			}
 			// Absence of evidence is not evidence of absence: an item from a
 			// platform whose transcripts we could not parse (e.g. OpenCode's
-			// SQLite store) has no usage signal, so a zero-use REAP here would
+			// SQLite store) has no complete usage signal, so REAP or MUTE would
 			// be unsafe. Hold it at REVIEW and let the user decide.
-			if row.Verdict == VerdictReap && opts.EvidenceBlind[it.Platform] {
+			if (row.Verdict == VerdictReap || row.Verdict == VerdictMute) && opts.EvidenceBlind[it.Platform] {
 				row.Verdict = VerdictReview
 				row.Reason = ReasonNoEvidence
 			}

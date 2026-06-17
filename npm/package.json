@@ -6,7 +6,8 @@
     "skillreaper": "bin/skillreaper.js"
   },
   "scripts": {
-    "postinstall": "node install.js"
+    "postinstall": "node install.js",
+    "test": "node --test"
   },
   "repository": {
     "type": "git",

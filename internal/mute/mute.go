@@ -32,6 +32,107 @@ func backupName(name string) string {
 	return fmt.Sprintf("%s-%08x.md.bak", sanitize(name), h.Sum32())
 }
 
+func withinDir(root, target string) bool {
+	ra, err1 := filepath.Abs(root)
+	ta, err2 := filepath.Abs(target)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	rel, err := filepath.Rel(ra, ta)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+func resolveExistingWithin(root, target string) (string, error) {
+	rr, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	tr, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		return "", err
+	}
+	if !withinDir(rr, tr) {
+		return "", fmt.Errorf("refusing to use path outside %s: %s", root, target)
+	}
+	info, err := os.Stat(tr)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("refusing to use non-regular file %s", target)
+	}
+	return tr, nil
+}
+
+func resolveMutableExisting(claudeDir, target string) (string, error) {
+	tr, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(tr)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("refusing to use non-regular file %s", target)
+	}
+	if rel, ok := resolvedRel(filepath.Join(claudeDir, "skills"), tr); ok && isPersonalSkillPath(rel) {
+		return tr, nil
+	}
+	if rel, ok := resolvedRel(filepath.Join(claudeDir, "agents"), tr); ok && isPersonalAgentPath(rel) {
+		return tr, nil
+	}
+	if rel, ok := resolvedRel(filepath.Join(claudeDir, "plugins"), tr); ok && isPluginSkillOrAgentPath(rel) {
+		return tr, nil
+	}
+	return "", fmt.Errorf("refusing to use path outside mutable skill, agent, or plugin roots: %s", target)
+}
+
+func resolvedRel(root, target string) (string, bool) {
+	rr, err := filepath.EvalSymlinks(root)
+	if err != nil || !withinDir(rr, target) {
+		return "", false
+	}
+	rel, err := filepath.Rel(rr, target)
+	if err != nil {
+		return "", false
+	}
+	return rel, true
+}
+
+func relParts(rel string) []string {
+	if rel == "." {
+		return nil
+	}
+	return strings.Split(rel, string(filepath.Separator))
+}
+
+func isPersonalSkillPath(rel string) bool {
+	parts := relParts(rel)
+	return len(parts) == 2 && parts[1] == "SKILL.md"
+}
+
+func isPersonalAgentPath(rel string) bool {
+	parts := relParts(rel)
+	return len(parts) == 1 && strings.HasSuffix(parts[0], ".md")
+}
+
+func isPluginSkillOrAgentPath(rel string) bool {
+	parts := relParts(rel)
+	for i := 0; i < len(parts); i++ {
+		if parts[i] == "skills" && i+2 == len(parts)-1 && parts[len(parts)-1] == "SKILL.md" {
+			return true
+		}
+		if parts[i] == "agents" && i+1 == len(parts)-1 && strings.HasSuffix(parts[len(parts)-1], ".md") {
+			return true
+		}
+	}
+	return false
+}
+
 // ErrAlreadyMuted is returned by Mute when the named skill is already muted,
 // so bulk callers can skip it with errors.Is rather than matching a string.
 var ErrAlreadyMuted = errors.New("already muted")
@@ -80,6 +181,10 @@ func saveState(claudeDir string, s *State) error {
 // backing up the original first. It errors if the skill is already muted or
 // has no description to strip.
 func Mute(claudeDir, name, skillPath string) error {
+	resolvedSkillPath, err := resolveMutableExisting(claudeDir, skillPath)
+	if err != nil {
+		return err
+	}
 	s, err := loadState(claudeDir)
 	if err != nil {
 		return err
@@ -87,7 +192,7 @@ func Mute(claudeDir, name, skillPath string) error {
 	if _, ok := s.Muted[name]; ok {
 		return fmt.Errorf("%w: %s", ErrAlreadyMuted, name)
 	}
-	b, err := os.ReadFile(skillPath)
+	b, err := os.ReadFile(resolvedSkillPath)
 	if err != nil {
 		return err
 	}
@@ -102,14 +207,14 @@ func Mute(claudeDir, name, skillPath string) error {
 	if err := os.WriteFile(backup, b, 0o644); err != nil {
 		return err
 	}
-	if err := os.WriteFile(skillPath, stripped, 0o644); err != nil {
+	if err := os.WriteFile(resolvedSkillPath, stripped, 0o644); err != nil {
 		return err
 	}
-	s.Muted[name] = Entry{Path: skillPath, Backup: backup}
+	s.Muted[name] = Entry{Path: resolvedSkillPath, Backup: backup}
 	if err := saveState(claudeDir, s); err != nil {
 		// The skill was stripped but the mute cannot be recorded; restore the
 		// original so it is not left silently degraded with no way to unmute.
-		_ = os.WriteFile(skillPath, b, 0o644)
+		_ = os.WriteFile(resolvedSkillPath, b, 0o644)
 		return fmt.Errorf("save mute state: %w", err)
 	}
 	return nil
@@ -125,7 +230,7 @@ func Unmute(claudeDir, name string) error {
 	if !ok {
 		return fmt.Errorf("not muted: %s", name)
 	}
-	if err := restore(e); err != nil {
+	if err := restoreWithin(claudeDir, e); err != nil {
 		return err
 	}
 	delete(s.Muted, name)
@@ -145,7 +250,7 @@ func UnmuteAll(claudeDir string) (int, error) {
 	sort.Strings(names) // deterministic order
 	n := 0
 	for _, name := range names {
-		if err := restore(s.Muted[name]); err != nil {
+		if err := restoreWithin(claudeDir, s.Muted[name]); err != nil {
 			// Persist the skills already restored so progress is not lost.
 			_ = saveState(claudeDir, s)
 			return n, err
@@ -169,15 +274,23 @@ func List(claudeDir string) ([]string, error) {
 	return names, nil
 }
 
-func restore(e Entry) error {
-	b, err := os.ReadFile(e.Backup)
+func restoreWithin(claudeDir string, e Entry) error {
+	path, err := resolveMutableExisting(claudeDir, e.Path)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(e.Path, b, 0o644); err != nil {
+	backup, err := resolveExistingWithin(mutedDir(claudeDir), e.Backup)
+	if err != nil {
 		return err
 	}
-	return os.Remove(e.Backup)
+	b, err := os.ReadFile(backup)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		return err
+	}
+	return os.Remove(backup)
 }
 
 // stripDescription removes the "description:" line(s) from a Markdown file's

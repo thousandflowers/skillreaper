@@ -1,6 +1,7 @@
 package mute
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,6 +100,146 @@ func TestMuteUnmuteRoundtrip(t *testing.T) {
 	b, _ = os.ReadFile(skillPath)
 	if string(b) != skillMD {
 		t.Errorf("unmute did not restore original:\n%q", string(b))
+	}
+}
+
+func TestMuteRefusesSymlinkOutsideClaudeDir(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	outside := filepath.Join(t.TempDir(), "victim.md")
+	if err := os.WriteFile(outside, []byte(skillMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(claudeDir, "skills", "heavy", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if err := Mute(claudeDir, "heavy", link); err == nil {
+		t.Fatal("expected Mute to refuse a symlink target outside claudeDir")
+	}
+	b, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != skillMD {
+		t.Fatalf("outside file was modified:\n%s", b)
+	}
+}
+
+func TestUnmuteRefusesTamperedStateOutsidePaths(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	outsideDir := t.TempDir()
+	backup := filepath.Join(outsideDir, "backup.md")
+	target := filepath.Join(outsideDir, "target.md")
+	if err := os.WriteFile(backup, []byte(skillMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state := State{Muted: map[string]Entry{
+		"tampered": {Path: target, Backup: backup},
+	}}
+	b, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(mutedDir(claudeDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath(claudeDir), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Unmute(claudeDir, "tampered"); err == nil {
+		t.Fatal("expected Unmute to refuse outside state paths")
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("outside target should not be written, stat err: %v", err)
+	}
+	if _, err := os.Stat(backup); err != nil {
+		t.Fatalf("outside backup should not be removed: %v", err)
+	}
+}
+
+func TestUnmuteRefusesTamperedStateToNonSkillFile(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	settings := filepath.Join(claudeDir, "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settings), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settings, []byte(`{"keep":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(mutedDir(claudeDir), "backup.md")
+	if err := os.MkdirAll(filepath.Dir(backup), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(backup, []byte(skillMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state := State{Muted: map[string]Entry{
+		"tampered": {Path: settings, Backup: backup},
+	}}
+	b, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath(claudeDir), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Unmute(claudeDir, "tampered"); err == nil {
+		t.Fatal("expected Unmute to refuse a non-skill restore target")
+	}
+	got, err := os.ReadFile(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"keep":true}` {
+		t.Fatalf("settings file was overwritten:\n%s", got)
+	}
+	if _, err := os.Stat(backup); err != nil {
+		t.Fatalf("backup should not be removed: %v", err)
+	}
+}
+
+func TestUnmuteRefusesTamperedStateToPluginRegistry(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	registry := filepath.Join(claudeDir, "plugins", "installed_plugins.json")
+	if err := os.MkdirAll(filepath.Dir(registry), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(registry, []byte(`{"version":2}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(mutedDir(claudeDir), "backup.md")
+	if err := os.MkdirAll(filepath.Dir(backup), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(backup, []byte(skillMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state := State{Muted: map[string]Entry{
+		"tampered": {Path: registry, Backup: backup},
+	}}
+	b, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath(claudeDir), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Unmute(claudeDir, "tampered"); err == nil {
+		t.Fatal("expected Unmute to refuse plugin registry restore target")
+	}
+	got, err := os.ReadFile(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"version":2}` {
+		t.Fatalf("plugin registry was overwritten:\n%s", got)
 	}
 }
 

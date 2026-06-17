@@ -3,6 +3,7 @@ package usage
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,6 +79,33 @@ func TestParse(t *testing.T) {
 	wantLast, _ := time.Parse(time.RFC3339, "2026-06-02T11:00:00Z")
 	if !st.Last[scan.CatSkill]["ecc:plan"].Equal(wantLast) {
 		t.Errorf("last use = %v, want %v", st.Last[scan.CatSkill]["ecc:plan"], wantLast)
+	}
+}
+
+func TestParseOverlongLineMarksEvidenceIncomplete(t *testing.T) {
+	dir := t.TempDir()
+	overlong := `{"type":"assistant","timestamp":"2026-06-01T10:01:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"hidden-skill"}}],"pad":"` +
+		strings.Repeat("x", maxLineBytes) + `"}}`
+	writeTranscript(t, filepath.Join(dir, "proj-a", "s1.jsonl"),
+		`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"seen-skill"}}]}}`,
+		overlong,
+	)
+
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.IncompleteEvidence {
+		t.Fatal("overlong transcript line should mark evidence incomplete")
+	}
+	if st.MalformedLines != 1 {
+		t.Errorf("MalformedLines = %d, want 1", st.MalformedLines)
+	}
+	if got := st.Uses[scan.CatSkill]["seen-skill"]; got != 1 {
+		t.Errorf("seen-skill uses = %d, want 1", got)
+	}
+	if got := st.Uses[scan.CatSkill]["hidden-skill"]; got != 0 {
+		t.Errorf("hidden-skill uses = %d, want 0 because the overlong record was not parsed", got)
 	}
 }
 

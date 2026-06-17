@@ -43,6 +43,9 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			continue
 		}
 		skillPath := filepath.Join(dir, e.Name(), "SKILL.md")
+		if _, ok := resolveWithin(dir, skillPath); !ok {
+			continue
+		}
 		b, err := readCapped(skillPath)
 		if err != nil {
 			continue // directory without SKILL.md is not a skill

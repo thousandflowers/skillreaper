@@ -70,7 +70,7 @@ func LoadManifest(claudeDir string) ([]Entry, error) {
 }
 
 func saveManifest(claudeDir string, entries []Entry) error {
-	if err := os.MkdirAll(reapedDir(claudeDir), 0o755); err != nil {
+	if err := parentWithinForWrite(claudeDir, manifestPath(claudeDir)); err != nil {
 		return err
 	}
 	m := Manifest{
@@ -82,7 +82,7 @@ func saveManifest(claudeDir string, entries []Entry) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(manifestPath(claudeDir), b, 0o600)
+	return writeFileNoSymlink(manifestPath(claudeDir), b, 0o600)
 }
 
 func nextID(entries []Entry) string {
@@ -96,10 +96,16 @@ func sanitize(name string) string {
 // QuarantineItem moves a skill directory or agent file into the
 // quarantine area and records it in the manifest.
 func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
+	if !it.Removable {
+		return Entry{}, fmt.Errorf("%s %q is not removable", it.Category, it.Name)
+	}
 	src := it.Path
 	// A skill is its whole directory, not just SKILL.md.
 	if filepath.Base(src) == "SKILL.md" {
 		src = filepath.Dir(src)
+	}
+	if err := existingPathWithin(claudeDir, src); err != nil {
+		return Entry{}, err
 	}
 	if _, err := os.Stat(src); err != nil {
 		return Entry{}, err
@@ -114,7 +120,7 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 	if _, err := os.Stat(dest); err == nil {
 		dest = fmt.Sprintf("%s.%d", dest, time.Now().Unix())
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	if err := parentWithinForWrite(claudeDir, dest); err != nil {
 		return Entry{}, err
 	}
 	if err := os.Rename(src, dest); err != nil {
@@ -145,18 +151,21 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 // the manifest for restore. scope "" targets the top-level mcpServers;
 // otherwise it names a project path under "projects".
 func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
+	if err := existingRegularFileWithin(filepath.Dir(claudeDir), configPath); err != nil {
+		return Entry{}, err
+	}
 	b, err := os.ReadFile(configPath)
 	if err != nil {
 		return Entry{}, err
 	}
 
 	backupDir := filepath.Join(reapedDir(claudeDir), "backups")
-	if err := os.MkdirAll(backupDir, 0o755); err != nil {
-		return Entry{}, err
-	}
 	backup := filepath.Join(backupDir,
 		fmt.Sprintf("%s.%d", filepath.Base(configPath), time.Now().UnixNano()))
-	if err := os.WriteFile(backup, b, 0o600); err != nil {
+	if err := parentWithinForWrite(claudeDir, backup); err != nil {
+		return Entry{}, err
+	}
+	if err := writeFileNoSymlink(backup, b, 0o600); err != nil {
 		return Entry{}, err
 	}
 
@@ -338,6 +347,108 @@ func withinDir(root, target string) bool {
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
+func realDir(path string) (string, error) {
+	return filepath.EvalSymlinks(path)
+}
+
+func existingPathWithin(root, target string) error {
+	rr, err := realDir(root)
+	if err != nil {
+		return err
+	}
+	tr, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		return err
+	}
+	if !withinDir(rr, tr) {
+		return fmt.Errorf("refusing to use path outside %s: %s", root, target)
+	}
+	return nil
+}
+
+func existingRegularFileWithin(root, target string) error {
+	if err := existingPathWithin(root, target); err != nil {
+		return err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("refusing to use non-regular file %s", target)
+	}
+	return nil
+}
+
+func nearestExistingAncestor(path string) (string, error) {
+	cur := filepath.Clean(path)
+	for {
+		if _, err := os.Lstat(cur); err == nil {
+			return cur, nil
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		next := filepath.Dir(cur)
+		if next == cur {
+			return "", fmt.Errorf("no existing ancestor for %s", path)
+		}
+		cur = next
+	}
+}
+
+func parentWithinForWrite(root, target string) error {
+	rr, err := realDir(root)
+	if err != nil {
+		return err
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	if !withinDir(absRoot, absTarget) {
+		return fmt.Errorf("refusing to write outside %s: %s", root, target)
+	}
+
+	parent := filepath.Dir(absTarget)
+	existing, err := nearestExistingAncestor(parent)
+	if err != nil {
+		return err
+	}
+	er, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return err
+	}
+	if !withinDir(rr, er) {
+		return fmt.Errorf("refusing to write through path outside %s: %s", root, target)
+	}
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return err
+	}
+	pr, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		return err
+	}
+	if !withinDir(rr, pr) {
+		return fmt.Errorf("refusing to write through path outside %s: %s", root, target)
+	}
+	return nil
+}
+
+func writeFileNoSymlink(path string, b []byte, perm os.FileMode) error {
+	info, err := os.Lstat(path)
+	if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to write through symlink %s", path)
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.WriteFile(path, b, perm)
+}
+
 // RestoreAll undoes every non-restored prune action.
 func RestoreAll(claudeDir string) (int, error) {
 	entries, err := LoadManifest(claudeDir)
@@ -364,8 +475,8 @@ func restoreEntry(claudeDir string, e *Entry) error {
 		// Bound the config write to the install tree (covers ~/.claude.json and
 		// plugin .mcp.json under the home dir) so a tampered manifest cannot
 		// redirect the write to an arbitrary file.
-		if !withinDir(filepath.Dir(claudeDir), e.ConfigPath) {
-			return fmt.Errorf("refusing to restore to a path outside %s: %s", filepath.Dir(claudeDir), e.ConfigPath)
+		if err := existingPathWithin(filepath.Dir(claudeDir), e.ConfigPath); err != nil {
+			return err
 		}
 		b, err := os.ReadFile(e.ConfigPath)
 		if err != nil {
@@ -392,10 +503,10 @@ func restoreEntry(claudeDir string, e *Entry) error {
 	// File move: both the quarantine source and the restore destination must
 	// stay within the Claude directory, so a tampered manifest cannot move a
 	// file to (or from) an arbitrary location.
-	if !withinDir(claudeDir, e.From) || !withinDir(claudeDir, e.To) {
-		return fmt.Errorf("refusing to restore outside %s: %s -> %s", claudeDir, e.To, e.From)
+	if err := existingPathWithin(claudeDir, e.To); err != nil {
+		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(e.From), 0o755); err != nil {
+	if err := parentWithinForWrite(claudeDir, e.From); err != nil {
 		return err
 	}
 	if err := os.Rename(e.To, e.From); err != nil {

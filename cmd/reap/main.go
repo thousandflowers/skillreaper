@@ -284,9 +284,17 @@ func gather(opts options) (*report.Report, error) {
 	var st *usage.Stats
 	evidenceBlind := map[string]bool{}
 	for _, p := range platforms {
+		pid := string(p.ID)
 		parsedAny := false
 		mergeParsed := func(parsed *usage.Stats) {
 			parsedAny = true
+			if parsed.IncompleteEvidence && !evidenceBlind[pid] {
+				evidenceBlind[pid] = true
+				warns = append(warns, scan.Warning{
+					Path: p.ConfigDirAbs,
+					Msg:  fmt.Sprintf("%s usage evidence is incomplete because at least one transcript record exceeded the parser limit or could not be read; its items are shown as REVIEW, not REAP/MUTE.", p.Name),
+				})
+			}
 			if st == nil {
 				st = parsed
 			} else {
@@ -319,10 +327,10 @@ func gather(opts options) (*report.Report, error) {
 		}
 		// A platform that advertises transcripts but yielded no usable
 		// evidence — OpenCode without the sqlite3 CLI, or no session files on
-		// disk — is "evidence-blind". Its items must not be REAP'd on missing
-		// data, so flag the platform and tell the user why.
+		// disk — is "evidence-blind". Its items must not be REAP'd or MUTE'd
+		// on missing data, so flag the platform and tell the user why.
 		if !parsedAny && p.HasTranscripts {
-			evidenceBlind[string(p.ID)] = true
+			evidenceBlind[pid] = true
 			reason := "no session transcripts were found"
 			if p.TranscriptType == "sqlite" {
 				reason = "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH"
@@ -331,7 +339,7 @@ func gather(opts options) (*report.Report, error) {
 			}
 			warns = append(warns, scan.Warning{
 				Path: p.ConfigDirAbs,
-				Msg:  fmt.Sprintf("%s usage is not counted because %s; its items are shown as REVIEW, not REAP.", p.Name, reason),
+				Msg:  fmt.Sprintf("%s usage is not counted because %s; its items are shown as REVIEW, not REAP/MUTE.", p.Name, reason),
 			})
 		}
 	}
@@ -363,6 +371,7 @@ func mergeStats(dst, src *usage.Stats) {
 	dst.Sessions += src.Sessions
 	dst.FilesScanned += src.FilesScanned
 	dst.MalformedLines += src.MalformedLines
+	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
 	for cat, uses := range src.Uses {
 		for key, count := range uses {
 			dst.Uses[cat][key] += count
@@ -610,16 +619,16 @@ func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
 // the bare suffix of a namespaced key (so "plan" matches "ecc:plan"). Both
 // categories are mutable, so `reap mute <name>` resolves either.
 func findItem(r *report.Report, name string) (report.Row, bool) {
-	mutable := func(c scan.Category) bool {
-		return c == scan.CatSkill || c == scan.CatAgent
+	mutable := func(row report.Row) bool {
+		return row.Removable && (row.Category == scan.CatSkill || row.Category == scan.CatAgent)
 	}
 	for _, row := range r.Rows {
-		if mutable(row.Category) && row.Name == name {
+		if mutable(row) && row.Name == name {
 			return row, true
 		}
 	}
 	for _, row := range r.Rows {
-		if !mutable(row.Category) {
+		if !mutable(row) {
 			continue
 		}
 		if i := strings.LastIndexByte(row.Name, ':'); i >= 0 && row.Name[i+1:] == name {
@@ -643,6 +652,7 @@ func confirm(stdin io.Reader, stdout io.Writer, prompt string) bool {
 
 func muteEligible(row report.Row) bool {
 	return row.Path != "" &&
+		row.Removable &&
 		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
 		(row.Verdict == report.VerdictReap || row.Verdict == report.VerdictMute)
 }

@@ -70,6 +70,59 @@ func TestRemoveMCPRollbackOnManifestFailure(t *testing.T) {
 	}
 }
 
+func TestRemoveMCPRefusesConfigOutsideHome(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(base, "outside", "claude.json")
+	const cfg = `{"mcpServers":{"drop":{"command":"b"}}}`
+	mustWrite(t, configPath, cfg)
+
+	if _, err := RemoveMCP(claudeDir, configPath, "", "drop"); err == nil {
+		t.Fatal("expected RemoveMCP to refuse a config outside the Claude home")
+	}
+	b, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != cfg {
+		t.Fatalf("outside config was modified:\n%s", b)
+	}
+	if _, err := os.Stat(filepath.Join(reapedDir(claudeDir), "backups")); !os.IsNotExist(err) {
+		t.Fatalf("backup should not be written for rejected config, stat err: %v", err)
+	}
+}
+
+func TestRemoveMCPRefusesSymlinkedConfigOutsideHome(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outsideConfig := filepath.Join(base, "outside", "claude.json")
+	const cfg = `{"mcpServers":{"drop":{"command":"b"}}}`
+	mustWrite(t, outsideConfig, cfg)
+	configPath := filepath.Join(claudeDir, "linked-config.json")
+	if err := os.Symlink(outsideConfig, configPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if _, err := RemoveMCP(claudeDir, configPath, "", "drop"); err == nil {
+		t.Fatal("expected RemoveMCP to refuse a symlinked config outside the Claude home")
+	}
+	b, err := os.ReadFile(outsideConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != cfg {
+		t.Fatalf("outside config was modified:\n%s", b)
+	}
+}
+
 func TestRestoreAllPersistsPartialProgress(t *testing.T) {
 	claudeDir := t.TempDir()
 	for _, name := range []string{"a", "b"} {
@@ -107,6 +160,76 @@ func TestRestoreRefusesPathOutsideClaudeDir(t *testing.T) {
 	}
 	if _, err := os.Stat(outside); !os.IsNotExist(err) {
 		t.Error("restore moved a file to a location outside the claude dir")
+	}
+}
+
+func TestQuarantineRefusesSymlinkedParentOutsideClaudeDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	outside := t.TempDir()
+	skillDir := filepath.Join(outside, "deadskill")
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: deadskill\n---\nbody")
+	if err := os.Symlink(outside, filepath.Join(claudeDir, "skills")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	item := scan.Item{
+		Category:  scan.CatSkill,
+		Name:      "deadskill",
+		Path:      filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md"),
+		Removable: true,
+	}
+	if _, err := QuarantineItem(claudeDir, item); err == nil {
+		t.Fatal("expected QuarantineItem to refuse a symlinked parent outside claudeDir")
+	}
+	if _, err := os.Stat(skillDir); err != nil {
+		t.Fatalf("outside skill dir should not be moved: %v", err)
+	}
+}
+
+func TestQuarantineRefusesSymlinkedQuarantineParentOutsideClaudeDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	skillMd := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+	mustWrite(t, skillMd, "---\nname: deadskill\n---\nbody")
+	outside := t.TempDir()
+	if err := os.Symlink(outside, reapedDir(claudeDir)); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	item := scan.Item{Category: scan.CatSkill, Name: "deadskill", Path: skillMd, Removable: true}
+	if _, err := QuarantineItem(claudeDir, item); err == nil {
+		t.Fatal("expected QuarantineItem to refuse a symlinked quarantine parent")
+	}
+	if _, err := os.Stat(filepath.Dir(skillMd)); err != nil {
+		t.Fatalf("original skill dir should not be moved: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, string(scan.CatSkill), "deadskill")); !os.IsNotExist(err) {
+		t.Fatalf("quarantine should not write outside claudeDir, stat err: %v", err)
+	}
+}
+
+func TestRestoreRefusesSymlinkedIntermediateOutsideClaudeDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	outside := t.TempDir()
+	to := filepath.Join(reapedDir(claudeDir), "skill", "payload")
+	mustWrite(t, to, "payload")
+	if err := os.Symlink(outside, filepath.Join(claudeDir, "link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := saveManifest(claudeDir, []Entry{{
+		ID:       "001",
+		Category: "skill",
+		Name:     "x",
+		From:     filepath.Join(claudeDir, "link", "victim"),
+		To:       to,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Restore(claudeDir, "001"); err == nil {
+		t.Fatal("expected Restore to refuse a symlinked destination parent")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "victim")); !os.IsNotExist(err) {
+		t.Fatalf("restore should not write outside target, stat err: %v", err)
 	}
 }
 

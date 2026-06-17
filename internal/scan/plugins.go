@@ -30,7 +30,7 @@ type installedPluginsFile struct {
 // (no plugins installed); a corrupt one yields a Warning.
 func installedPlugins(claudeDir string) ([]pluginInfo, []Warning) {
 	path := filepath.Join(claudeDir, "plugins", "installed_plugins.json")
-	b, err := os.ReadFile(path)
+	b, err := readCapped(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

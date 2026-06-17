@@ -27,7 +27,7 @@ func ScanHooks(dir, platformID string) ([]Item, []Warning) {
 	var warns []Warning
 	for _, base := range []string{"settings.json", "settings.local.json"} {
 		path := filepath.Join(dir, base)
-		b, err := os.ReadFile(path)
+		b, err := readCapped(path)
 		if err != nil {
 			if !os.IsNotExist(err) {
 				warns = append(warns, Warning{Path: path, Msg: err.Error()})

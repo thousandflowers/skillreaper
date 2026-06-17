@@ -3,7 +3,6 @@ package scan
 import (
 	"bufio"
 	"bytes"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -31,7 +30,7 @@ func claudeMDPaths(cwd, home string) []string {
 func LoadClaudeMD(cwd, home string) []string {
 	var lines []string
 	for _, p := range claudeMDPaths(cwd, home) {
-		b, err := os.ReadFile(p)
+		b, err := readCapped(p)
 		if err != nil {
 			continue
 		}

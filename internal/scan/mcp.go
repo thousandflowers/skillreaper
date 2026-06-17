@@ -22,7 +22,7 @@ func ScanMCP(configPath, configDir, platformID string) ([]Item, []Warning) {
 	var items []Item
 	var warns []Warning
 
-	b, err := os.ReadFile(configPath)
+	b, err := readCapped(configPath)
 	if err == nil {
 		var top map[string]json.RawMessage
 		if jerr := json.Unmarshal(b, &top); jerr != nil {
@@ -52,7 +52,7 @@ func ScanMCP(configPath, configDir, platformID string) ([]Item, []Warning) {
 	warns = append(warns, pw...)
 	for _, p := range plugins {
 		path := filepath.Join(p.InstallPath, ".mcp.json")
-		pb, err := os.ReadFile(path)
+		pb, err := readCapped(path)
 		if err != nil {
 			continue
 		}

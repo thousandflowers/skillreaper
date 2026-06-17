@@ -41,7 +41,7 @@ func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			continue
 		}
 		path := filepath.Join(dir, e.Name())
-		b, err := os.ReadFile(path)
+		b, err := readCapped(path)
 		if err != nil {
 			warns = append(warns, Warning{Path: path, Msg: err.Error()})
 			continue

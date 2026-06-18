@@ -123,6 +123,10 @@ Everything is **reversible**. `reap prune` moves files to a `reaped/`
 directory with a versioned manifest. Nothing is ever deleted. Run
 `reap restore --all` and everything goes back exactly where it was.
 
+Every write is **atomic** (temp file + rename) and **confined** to your
+Claude directory, so an interrupted prune, mute, or hook edit leaves the
+original file intact — never a half-written mix.
+
 <br>
 
 ### Verdicts
@@ -247,6 +251,12 @@ added. When `sqlite3` is **not** on `PATH`, OpenCode items have no usage
 evidence: they stay **REVIEW (never REAP)** with a warning at scan time. The
 same safety net applies to any platform with no readable session transcripts.
 
+**Incomplete evidence never flags an item.** The scanner caps how much it
+reads per transcript record. If a record is oversized or unreadable, that
+platform's evidence is marked incomplete and its items stay **REVIEW (never
+REAP/MUTE)**, with a warning naming the platform — partial evidence can never
+mistakenly mark a tool as dead.
+
 **Not a tool declaration fix.** Claude Code's deferred tools reduce the
 *init-time tool declaration* overhead. Skillreaper addresses a different
 problem: **always-loaded skill/agent/prose files.** If a skill description
@@ -272,6 +282,8 @@ internal/
   report/       verdict logic (REAP/MUTE/KEEP/REVIEW) + ANSI/JSON/MD renderers
   prune/        reversible quarantine
   mute/         description strip + backup/restore
+  safepath/     shared path-confinement boundary (prune/mute/scan)
+  atomicfile/   crash-safe writes (temp file + rename)
   hook/         SessionStart install/uninstall + nudge state
   cost/         model pricing
 docs/           demo assets

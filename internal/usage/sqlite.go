@@ -63,13 +63,8 @@ func ParseSQLite(path string, cutoff time.Time, windowDays int) (*Stats, error) 
 	query := "SELECT session_id, created_at, content FROM messages ORDER BY session_id, created_at;"
 	cmd := exec.CommandContext(ctx, bin, "-readonly", "-noheader", "-init", os.DevNull,
 		"-separator", sqliteColSep, "-newline", sqliteRowSep, path, query)
-	// Run with a minimal environment so an inherited PATH or HOME cannot change
-	// which binary runs or which config files it reads. TMPDIR is kept so
-	// sqlite3 can spill a large sort to disk.
-	cmd.Env = []string{}
-	if tmp := os.Getenv("TMPDIR"); tmp != "" {
-		cmd.Env = append(cmd.Env, "TMPDIR="+tmp)
-	}
+	// Inherit the parent environment for platform runtime variables such as
+	// SystemRoot/TEMP/TMP; bin is already resolved and -init skips user config.
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

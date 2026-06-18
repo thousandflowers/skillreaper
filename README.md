@@ -86,7 +86,7 @@ npm install -g skillreaper
 # No install — one-shot via npx
 npx skillreaper
 
-# Any platform — Go (Go ≥ 1.22)
+# Any platform — Go (Go ≥ 1.26)
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```
 
@@ -277,7 +277,7 @@ lazy tool loading. These two optimizations are complementary, not competing.
 
 ### Design
 
-- **100 % local**, zero dependencies, single static binary (Go ≥ 1.22)
+- **100 % local**, zero dependencies, single static binary (Go ≥ 1.26)
 - **Multi-platform** — adding a new platform is one struct in
   `internal/platform/`
 - **Reversible quarantine** — never deletes, never destructive

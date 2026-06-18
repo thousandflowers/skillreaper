@@ -11,7 +11,35 @@ import (
 
 	"github.com/thousandflowers/skillreaper/internal/hook"
 	"github.com/thousandflowers/skillreaper/internal/report"
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
+
+func TestStateCommandsRequireClaudeDir(t *testing.T) {
+	// With no Claude dir resolved, filepath.Join("", ...) yields a relative
+	// path that writes into the cwd. State-mutating commands must fail loudly
+	// instead of polluting the working directory.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	var out, errb bytes.Buffer
+	if code := cmdInstallHook(options{claudeDir: ""}, &out, &errb); code == 0 {
+		t.Error("install-hook with no claude dir should fail, not write to cwd")
+	}
+	if !strings.Contains(strings.ToLower(errb.String()), "claude") {
+		t.Errorf("expected a clear error mentioning the claude dir, got %q", errb.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "settings.json")); !os.IsNotExist(err) {
+		t.Error("install-hook polluted the cwd with settings.json")
+	}
+
+	out.Reset()
+	errb.Reset()
+	if code := cmdPrune(options{claudeDir: ""}, strings.NewReader(""), &out, &errb); code == 0 {
+		t.Error("prune with no claude dir should fail, not write to cwd")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "reaped")); !os.IsNotExist(err) {
+		t.Error("prune polluted the cwd with reaped/")
+	}
+}
 
 // buildFixture creates a minimal but complete fake installation:
 // a used skill, a dead skill, a dead MCP server, and one transcript.
@@ -42,6 +70,61 @@ func buildFixture(t *testing.T) (claudeDir, claudeJSON string) {
 	write(filepath.Join(claudeDir, "projects", "p1", "s1.jsonl"),
 		`{"type":"assistant","timestamp":"2026-06-09T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"usedskill"}}]}}`+"\n")
 	return claudeDir, claudeJSON
+}
+
+func TestMuteNamedAgent(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	agent := filepath.Join(claudeDir, "agents", "myagent.md")
+	if err := os.MkdirAll(filepath.Dir(agent), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(agent, []byte("---\nname: myagent\ndescription: an agent description\n---\nbody"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	code := run([]string{"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "myagent"},
+		strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("mute agent exit = %d, stderr: %s", code, errOut.String())
+	}
+	b, _ := os.ReadFile(agent)
+	if strings.Contains(string(b), "description:") {
+		t.Errorf("named agent was not muted: %s", b)
+	}
+}
+
+func TestMuteBareAbortsOnDecline(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	dead := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+	var out, errOut bytes.Buffer
+	// Bare `reap mute` must prompt; answering no leaves files untouched.
+	code := run([]string{"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"},
+		strings.NewReader("n\n"), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	b, _ := os.ReadFile(dead)
+	if !strings.Contains(string(b), "description:") {
+		t.Errorf("declined bulk mute still stripped the description: %s", b)
+	}
+	if !strings.Contains(out.String(), "aborted") {
+		t.Errorf("expected an abort message, got: %s", out.String())
+	}
+}
+
+func TestMuteBareProceedsOnYes(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	dead := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+	var out, errOut bytes.Buffer
+	code := run([]string{"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"},
+		strings.NewReader("y\n"), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	b, _ := os.ReadFile(dead)
+	if strings.Contains(string(b), "description:") {
+		t.Errorf("confirmed bulk mute did not strip the description: %s", b)
+	}
 }
 
 func TestRunReport(t *testing.T) {
@@ -78,6 +161,82 @@ func TestRunReportJSON(t *testing.T) {
 	var decoded map[string]any
 	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
 		t.Fatalf("invalid JSON output: %v", err)
+	}
+}
+
+func TestRunReportOverlongTranscriptHoldsAbsenceDecisionsAtReview(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	transcript := filepath.Join(claudeDir, "projects", "p1", "s1.jsonl")
+	overlong := `{"type":"assistant","timestamp":"2026-06-09T10:01:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"missedskill"}}],"pad":"` +
+		strings.Repeat("x", 10*1024*1024+1) + `"}}`
+	f, err := os.OpenFile(transcript, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(overlong + "\n"); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := run([]string{
+		"--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--json",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+
+	var r report.Report
+	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
+		t.Fatalf("invalid JSON output: %v", err)
+	}
+	if r.MalformedLines != 1 {
+		t.Errorf("MalformedLines = %d, want 1", r.MalformedLines)
+	}
+	byName := map[string]report.Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+	if row := byName["usedskill"]; row.Verdict != report.VerdictKeep {
+		t.Errorf("usedskill verdict = %s(%s), want KEEP from positive evidence", row.Verdict, row.Reason)
+	}
+	if row := byName["deadskill"]; row.Verdict != report.VerdictReview || row.Reason != report.ReasonNoEvidence {
+		t.Errorf("deadskill verdict = %s(%s), want REVIEW(%s)", row.Verdict, row.Reason, report.ReasonNoEvidence)
+	}
+	foundIncomplete := false
+	for _, w := range r.Warnings {
+		if strings.Contains(w.Msg, "incomplete") {
+			foundIncomplete = true
+			break
+		}
+	}
+	if !foundIncomplete {
+		t.Errorf("expected incomplete-evidence warning, got %+v", r.Warnings)
+	}
+}
+
+func TestFindItemRejectsAmbiguousSuffixMatch(t *testing.T) {
+	r := &report.Report{Rows: []report.Row{
+		{Item: scan.Item{Category: scan.CatSkill, Name: "one:plan", Removable: true}},
+		{Item: scan.Item{Category: scan.CatSkill, Name: "two:plan", Removable: true}},
+	}}
+	if _, ok := findItem(r, "plan"); ok {
+		t.Fatal("ambiguous suffix match should not select an arbitrary item")
+	}
+}
+
+func TestFindItemAllowsUniqueSuffixMatch(t *testing.T) {
+	r := &report.Report{Rows: []report.Row{
+		{Item: scan.Item{Category: scan.CatSkill, Name: "one:plan", Removable: true}},
+		{Item: scan.Item{Category: scan.CatSkill, Name: "two:build", Removable: true}},
+	}}
+	row, ok := findItem(r, "plan")
+	if !ok || row.Name != "one:plan" {
+		t.Fatalf("unique suffix match = %+v, %v; want one:plan", row, ok)
 	}
 }
 

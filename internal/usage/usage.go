@@ -32,8 +32,12 @@ type Stats struct {
 	FilesScanned   int
 	MalformedLines int
 	WindowDays     int
-	Uses           map[scan.Category]map[string]int
-	Last           map[scan.Category]map[string]time.Time
+	// IncompleteEvidence is set when a parser hit a bounded-read error after
+	// it may already have seen earlier records. Callers may still use positive
+	// evidence, but must not make absence-of-use REAP/MUTE decisions from it.
+	IncompleteEvidence bool
+	Uses               map[scan.Category]map[string]int
+	Last               map[scan.Category]map[string]time.Time
 
 	// Errors counts invocations that resulted in an error, and LastAttempt
 	// records the most recent attempt (success or error). Together with Uses
@@ -152,14 +156,28 @@ type pendingSkill struct {
 
 // Parse scans every .jsonl transcript under projectsDir whose mtime is
 // at or after cutoff. windowDays is carried into Stats for reporting.
+//
+// A mid-walk failure (e.g. a permission-denied subdirectory) does not abort
+// the scan: the affected subtree is skipped and Stats.IncompleteEvidence is
+// set so callers do not treat cold items as safe to reap or mute.
 func Parse(projectsDir string, cutoff time.Time, windowDays int) (*Stats, error) {
 	st := NewStats(windowDays)
 	err := filepath.WalkDir(projectsDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".jsonl") {
+		if err != nil {
+			// Walk handed us a read/stat error for this path. Skip it but flag
+			// that evidence is missing — a whole subtree may be unreadable.
+			st.IncompleteEvidence = true
+			return nil
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".jsonl") {
 			return nil
 		}
 		info, ierr := d.Info()
-		if ierr != nil || info.ModTime().Before(cutoff) {
+		if ierr != nil {
+			st.IncompleteEvidence = true
+			return nil
+		}
+		if info.ModTime().Before(cutoff) {
 			return nil
 		}
 		st.FilesScanned++
@@ -167,10 +185,7 @@ func Parse(projectsDir string, cutoff time.Time, windowDays int) (*Stats, error)
 		parseFile(path, projectFor(projectsDir, path), st)
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return st, nil
+	return st, err
 }
 
 // parseFile reads one transcript. Unreadable files or lines count as
@@ -258,6 +273,7 @@ func parseFile(path, project string, st *Stats) {
 	}
 	if sc.Err() != nil {
 		st.MalformedLines++
+		st.IncompleteEvidence = true
 	}
 
 	// A Skill invocation with no matching tool_result (session ended, or the
@@ -335,7 +351,11 @@ func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string
 				continue
 			}
 			delete(pending, b.ToolUseID)
-			if b.IsError || bytes.Contains(b.Content, []byte("error")) {
+			// is_error is the authoritative signal that the tool itself failed.
+			// A substring scan for "error" in the content misfires on successful
+			// output that merely mentions the word (e.g. a linter reporting
+			// "no errors found"), wrongly marking a working skill as broken.
+			if b.IsError {
 				st.recordError(scan.CatSkill, ps.key, ps.ts)
 			} else {
 				rec(ps.key, ps.ts)

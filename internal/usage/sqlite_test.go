@@ -72,6 +72,87 @@ func TestParseSQLiteWindowFilter(t *testing.T) {
 	}
 }
 
+func TestParseSQLiteMultilineContent(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 CLI not available")
+	}
+	db := filepath.Join(t.TempDir(), "opencode.db")
+	seed := `
+CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, created_at INTEGER);
+INSERT INTO messages (session_id, role, content, created_at) VALUES
+ ('s1','assistant','[
+   {"type":"tool_use","name":"Skill","input":{"skill":"multiline-skill"}}
+ ]', 1717200000);
+`
+	cmd := exec.Command("sqlite3", db)
+	cmd.Stdin = strings.NewReader(seed)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("seed sqlite: %v\n%s", err, out)
+	}
+
+	st, err := ParseSQLite(db, time.Unix(1717100000, 0), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Uses[scan.CatSkill]["multiline-skill"]; got != 1 {
+		t.Errorf("multiline-skill uses = %d, want 1", got)
+	}
+}
+
+func TestParseSQLiteOverlongRowReturnsIncompletePartialStats(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 CLI not available")
+	}
+	db := filepath.Join(t.TempDir(), "opencode.db")
+	hugeInput := strings.Repeat("x", maxLineBytes)
+	seed := `
+CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, created_at INTEGER);
+INSERT INTO messages (session_id, role, content, created_at) VALUES
+ ('s1','assistant','[{"type":"tool_use","name":"Skill","input":{"skill":"before-overlong"}}]', 1717200000),
+ ('s1','assistant','[{"type":"tool_use","name":"Skill","input":{"skill":"overlong","pad":"` + hugeInput + `"}}]', 1717200001);
+`
+	cmd := exec.Command("sqlite3", db)
+	cmd.Stdin = strings.NewReader(seed)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("seed sqlite: %v\n%s", err, out)
+	}
+
+	st, err := ParseSQLite(db, time.Unix(1717100000, 0), 30)
+	if err == nil {
+		t.Fatal("expected ParseSQLite to report an overlong row")
+	}
+	if st == nil {
+		t.Fatal("expected partial stats to be returned")
+	}
+	if !st.IncompleteEvidence {
+		t.Fatal("expected partial stats to be marked incomplete")
+	}
+	if got := st.Uses[scan.CatSkill]["before-overlong"]; got != 1 {
+		t.Fatalf("before-overlong uses = %d, want 1", got)
+	}
+}
+
+func TestParseSQLiteOutputLimitReturnsIncompletePartialStats(t *testing.T) {
+	db := makeFixtureDB(t)
+	oldLimit := sqliteOutputLimit
+	sqliteOutputLimit = 64
+	defer func() { sqliteOutputLimit = oldLimit }()
+
+	st, err := ParseSQLite(db, time.Unix(1717100000, 0), 30)
+	if err == nil {
+		t.Fatal("expected ParseSQLite to reject output over the byte limit")
+	}
+	if !strings.Contains(err.Error(), "output exceeded") {
+		t.Fatalf("error = %v, want output limit error", err)
+	}
+	if st == nil {
+		t.Fatal("expected partial stats to be returned")
+	}
+	if !st.IncompleteEvidence {
+		t.Fatal("expected partial stats to be marked incomplete")
+	}
+}
+
 func TestParseSQLiteBadFile(t *testing.T) {
 	if _, err := exec.LookPath("sqlite3"); err != nil {
 		t.Skip("sqlite3 CLI not available")

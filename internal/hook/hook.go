@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/thousandflowers/skillreaper/internal/atomicfile"
 )
 
 // starCtaCooldownDays limits the star-CTA to at most once per 30 days.
@@ -39,7 +41,21 @@ type group struct {
 // Running `reap nudge` performs the audit and weekly comparison internally,
 // so the hook needs no external dependencies.
 func Command(exe string) string {
-	return exe + " nudge  # " + Marker
+	return shellQuote(exe) + " nudge  # " + Marker
+}
+
+// shellQuote wraps s in single quotes so a path with spaces or shell
+// metacharacters is passed to the shell as a single, literal argument.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// isOurHook reports whether a hook command is skillreaper's nudge entry. The
+// marker rides as a trailing shell comment, so match it as a suffix rather
+// than a substring — a foreign command that merely mentions the marker text
+// must not be treated as ours.
+func isOurHook(command string) bool {
+	return strings.HasSuffix(strings.TrimSpace(command), "# "+Marker)
 }
 
 // Install adds the SessionStart nudge hook to settings.json (creating the file
@@ -56,7 +72,7 @@ func Install(settingsPath, command string, dryRun bool) ([]byte, error) {
 	}
 	for _, g := range hooks["SessionStart"] {
 		for _, h := range g.Hooks {
-			if strings.Contains(h.Command, Marker) {
+			if isOurHook(h.Command) {
 				return marshalTop(top) // already installed
 			}
 		}
@@ -77,7 +93,7 @@ func Install(settingsPath, command string, dryRun bool) ([]byte, error) {
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(settingsPath, out, 0o644); err != nil {
+	if err := atomicfile.Write(settingsPath, out, 0o644); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -104,7 +120,7 @@ func Uninstall(settingsPath string) error {
 	for _, g := range hooks["SessionStart"] {
 		var kc []cmdEntry
 		for _, h := range g.Hooks {
-			if strings.Contains(h.Command, Marker) {
+			if isOurHook(h.Command) {
 				continue
 			}
 			kc = append(kc, h)
@@ -127,7 +143,7 @@ func Uninstall(settingsPath string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(settingsPath, out, 0o644)
+	return atomicfile.Write(settingsPath, out, 0o644)
 }
 
 func readTop(path string) (map[string]json.RawMessage, error) {
@@ -227,7 +243,7 @@ func SaveNudgeState(claudeDir string, s NudgeState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(nudgeStatePath(claudeDir), b, 0o644)
+	return atomicfile.Write(nudgeStatePath(claudeDir), b, 0o600)
 }
 
 // ShouldNudge reports whether a passive nudge should print now: at least

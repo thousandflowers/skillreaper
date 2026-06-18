@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/thousandflowers/skillreaper/internal/atomicfile"
 )
 
 // Keys use "category:name" format to disambiguate items that share a
@@ -105,5 +107,5 @@ func save(p string, f *File) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, data, 0o644)
+	return atomicfile.Write(p, data, 0o600)
 }

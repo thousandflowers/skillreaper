@@ -147,7 +147,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return cmdKeep(opts, rest, stdout, stderr)
 	case "mute":
-		return cmdMute(opts, rest, stdout, stderr)
+		return cmdMute(opts, rest, stdin, stdout, stderr)
 	case "unmute":
 		return cmdUnmute(opts, rest, stdout, stderr)
 	case "prune":
@@ -216,6 +216,18 @@ func fillDefaults(opts *options) error {
 	return nil
 }
 
+// requireClaudeDir guards commands that read or write skillreaper state under
+// the Claude directory. When nothing was detected and none was given, claudeDir
+// is empty and filepath.Join would resolve state paths relative to the current
+// working directory. Fail clearly instead of silently polluting the cwd.
+func requireClaudeDir(opts options, stderr io.Writer) bool {
+	if strings.TrimSpace(opts.claudeDir) == "" {
+		fmt.Fprintln(stderr, "error: no Claude Code directory found; pass --claude-dir <path>")
+		return false
+	}
+	return true
+}
+
 // gather runs every scanner plus transcript parsers across all
 // detected platforms and joins the result into a report.
 func gather(opts options) (*report.Report, error) {
@@ -272,9 +284,18 @@ func gather(opts options) (*report.Report, error) {
 	var st *usage.Stats
 	evidenceBlind := map[string]bool{}
 	for _, p := range platforms {
+		pid := string(p.ID)
 		parsedAny := false
+		var sqliteErr error
 		mergeParsed := func(parsed *usage.Stats) {
 			parsedAny = true
+			if parsed.IncompleteEvidence && !evidenceBlind[pid] {
+				evidenceBlind[pid] = true
+				warns = append(warns, scan.Warning{
+					Path: p.ConfigDirAbs,
+					Msg:  fmt.Sprintf("%s usage evidence is incomplete because at least one transcript record exceeded the parser limit or could not be read; its items are shown as REVIEW, not REAP/MUTE.", p.Name),
+				})
+			}
 			if st == nil {
 				st = parsed
 			} else {
@@ -293,9 +314,12 @@ func gather(opts options) (*report.Report, error) {
 		case "sqlite":
 			if p.TranscriptDB != "" {
 				parsed, err := usage.ParseSQLite(p.TranscriptDB, cutoff, opts.days)
+				sqliteErr = err
+				if parsed != nil {
+					mergeParsed(parsed)
+				}
 				switch {
 				case err == nil:
-					mergeParsed(parsed)
 				case errors.Is(err, usage.ErrNoSQLite):
 					// CLI missing — handled by the evidence-blind block below.
 				default:
@@ -307,19 +331,25 @@ func gather(opts options) (*report.Report, error) {
 		}
 		// A platform that advertises transcripts but yielded no usable
 		// evidence — OpenCode without the sqlite3 CLI, or no session files on
-		// disk — is "evidence-blind". Its items must not be REAP'd on missing
-		// data, so flag the platform and tell the user why.
+		// disk — is "evidence-blind". Its items must not be REAP'd or MUTE'd
+		// on missing data, so flag the platform and tell the user why.
 		if !parsedAny && p.HasTranscripts {
-			evidenceBlind[string(p.ID)] = true
+			evidenceBlind[pid] = true
 			reason := "no session transcripts were found"
 			if p.TranscriptType == "sqlite" {
-				reason = "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH"
+				if errors.Is(sqliteErr, usage.ErrNoSQLite) {
+					reason = "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH"
+				} else if sqliteErr != nil {
+					reason = fmt.Sprintf("its SQLite history could not be read: %v", sqliteErr)
+				} else {
+					reason = "no SQLite session history was found"
+				}
 			} else if p.TranscriptType != "jsonl" {
 				reason = fmt.Sprintf("its transcripts use a format skillreaper does not parse yet (%s)", p.TranscriptType)
 			}
 			warns = append(warns, scan.Warning{
 				Path: p.ConfigDirAbs,
-				Msg:  fmt.Sprintf("%s usage is not counted because %s; its items are shown as REVIEW, not REAP.", p.Name, reason),
+				Msg:  fmt.Sprintf("%s usage is not counted because %s; its items are shown as REVIEW, not REAP/MUTE.", p.Name, reason),
 			})
 		}
 	}
@@ -351,6 +381,7 @@ func mergeStats(dst, src *usage.Stats) {
 	dst.Sessions += src.Sessions
 	dst.FilesScanned += src.FilesScanned
 	dst.MalformedLines += src.MalformedLines
+	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
 	for cat, uses := range src.Uses {
 		for key, count := range uses {
 			dst.Uses[cat][key] += count
@@ -442,6 +473,9 @@ func colorEnabled(opts options, w io.Writer) bool {
 }
 
 func cmdKeepRemove(opts options, name string, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	if err := override.RemoveKeep(opts.claudeDir, name); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
@@ -472,6 +506,9 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "usage: reap keep <name>")
 		return 2
 	}
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 
 	itemKey := strings.ToLower(args[0])
 	if err := override.AddKeep(opts.claudeDir, itemKey); err != nil {
@@ -484,6 +521,9 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	r, err := gather(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -528,14 +568,8 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if !opts.yes {
-		fmt.Fprintf(stdout, "\nPrune all %d items? This quarantines them (reversible). [Y/n] ", len(candidates))
-		sc := bufio.NewScanner(stdin)
-		if !sc.Scan() {
-			fmt.Fprintln(stdout, "aborted")
-			return 0
-		}
-		line := strings.TrimSpace(sc.Text())
-		if line != "" && strings.ToLower(line) != "y" && strings.ToLower(line) != "yes" {
+		prompt := fmt.Sprintf("\nPrune all %d items? This quarantines them (reversible). [Y/n] ", len(candidates))
+		if !confirm(stdin, stdout, prompt) {
 			fmt.Fprintln(stdout, "aborted")
 			return 0
 		}
@@ -570,6 +604,9 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	if opts.all {
 		n, err := prune.RestoreAll(opts.claudeDir)
 		if err != nil {
@@ -591,41 +628,68 @@ func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// findSkill locates a skill row by its exact invocation key, then by the bare
-// suffix of a namespaced key (so "plan" matches "ecc:plan").
-func findSkill(r *report.Report, name string) (report.Row, bool) {
+// findItem locates a skill or agent row by its exact invocation key, then by
+// the bare suffix of a namespaced key (so "plan" matches "ecc:plan"). Both
+// categories are mutable, so `reap mute <name>` resolves either.
+func findItem(r *report.Report, name string) (report.Row, bool) {
+	mutable := func(row report.Row) bool {
+		return row.Removable && (row.Category == scan.CatSkill || row.Category == scan.CatAgent)
+	}
 	for _, row := range r.Rows {
-		if row.Category == scan.CatSkill && row.Name == name {
+		if mutable(row) && row.Name == name {
 			return row, true
 		}
 	}
+	matches := make([]report.Row, 0, 2)
 	for _, row := range r.Rows {
-		if row.Category != scan.CatSkill {
+		if !mutable(row) {
 			continue
 		}
 		if i := strings.LastIndexByte(row.Name, ':'); i >= 0 && row.Name[i+1:] == name {
-			return row, true
+			matches = append(matches, row)
 		}
+	}
+	if len(matches) == 1 {
+		return matches[0], true
 	}
 	return report.Row{}, false
 }
 
+// confirm prints prompt to stdout and reads a yes/no answer from stdin. A bare
+// Enter (empty line) counts as yes; anything other than y/yes is a no.
+func confirm(stdin io.Reader, stdout io.Writer, prompt string) bool {
+	fmt.Fprint(stdout, prompt)
+	sc := bufio.NewScanner(stdin)
+	if !sc.Scan() {
+		return false
+	}
+	line := strings.ToLower(strings.TrimSpace(sc.Text()))
+	return line == "" || line == "y" || line == "yes"
+}
+
 func muteEligible(row report.Row) bool {
 	return row.Path != "" &&
+		row.Removable &&
 		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
 		(row.Verdict == report.VerdictReap || row.Verdict == report.VerdictMute)
 }
 
-func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
-	if !opts.all && len(args) > 0 {
-		r, err := gather(opts)
-		if err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
-			return 1
-		}
-		row, ok := findSkill(r, args[0])
+func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+
+	// Named single mute: reap mute <name>. Mutes the named skill or agent
+	// regardless of verdict (the user asked for it explicitly).
+	if len(args) > 0 {
+		row, ok := findItem(r, args[0])
 		if !ok {
-			fmt.Fprintf(stderr, "no skill found: %s\n", args[0])
+			fmt.Fprintf(stderr, "no skill or agent found: %s\n", args[0])
 			return 1
 		}
 		if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
@@ -640,11 +704,8 @@ func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	r, err := gather(opts)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
+	// Bulk mute: reap mute (bare) or reap mute --all. Like prune, this rewrites
+	// many files, so preview the candidates and confirm before acting.
 	var candidates []report.Row
 	for _, row := range r.Rows {
 		if muteEligible(row) {
@@ -655,10 +716,20 @@ func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "Nothing to mute.")
 		return 0
 	}
+	fmt.Fprintf(stdout, "\n%d items eligible to mute (strips the injected description; reversible):\n", len(candidates))
+	for _, row := range candidates {
+		fmt.Fprintf(stdout, "  %-6s  %-40s  ~%d tok/session\n", row.Category, row.Name, row.Tokens)
+	}
+	if !opts.yes {
+		if !confirm(stdin, stdout, fmt.Sprintf("\nMute all %d items? This strips their descriptions (reversible). [Y/n] ", len(candidates))) {
+			fmt.Fprintln(stdout, "aborted")
+			return 0
+		}
+	}
 	muted, totalTok := 0, 0
 	for _, row := range candidates {
 		if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
-			if err.Error() == "already muted: "+row.Name {
+			if errors.Is(err, mute.ErrAlreadyMuted) {
 				continue
 			}
 			fmt.Fprintf(stderr, "error muting %s: %v\n", row.Name, err)
@@ -676,6 +747,9 @@ func cmdMute(opts options, args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdUnmute(opts options, args []string, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	if opts.all {
 		n, err := mute.UnmuteAll(opts.claudeDir)
 		if err != nil {
@@ -698,6 +772,9 @@ func cmdUnmute(opts options, args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdInstallHook(opts options, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	settings := filepath.Join(opts.claudeDir, "settings.json")
 	exe, err := os.Executable()
 	if err != nil || exe == "" {
@@ -718,6 +795,9 @@ func cmdInstallHook(opts options, stdout, stderr io.Writer) int {
 }
 
 func cmdUninstallHook(opts options, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	settings := filepath.Join(opts.claudeDir, "settings.json")
 	if err := hook.Uninstall(settings); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)

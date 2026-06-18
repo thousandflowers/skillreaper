@@ -10,13 +10,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/thousandflowers/skillreaper/internal/atomicfile"
+	"github.com/thousandflowers/skillreaper/internal/safepath"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 const manifestVersion = 1
+const maxManifestFileSize = 10 << 20
+const maxConfigFileSize = 10 << 20
 
 // Manifest wraps the list of prune entries together with format
 // versioning. When the manifest format changes, bump manifestVersion
@@ -50,7 +53,7 @@ func manifestPath(claudeDir string) string {
 // Transparently handles the legacy flat-array format (v0) by wrapping
 // into a Manifest on read.
 func LoadManifest(claudeDir string) ([]Entry, error) {
-	b, err := os.ReadFile(manifestPath(claudeDir))
+	b, err := safepath.ReadRegularFileWithin(claudeDir, manifestPath(claudeDir), maxManifestFileSize)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -69,7 +72,7 @@ func LoadManifest(claudeDir string) ([]Entry, error) {
 }
 
 func saveManifest(claudeDir string, entries []Entry) error {
-	if err := os.MkdirAll(reapedDir(claudeDir), 0o755); err != nil {
+	if err := parentWithinForWrite(claudeDir, manifestPath(claudeDir)); err != nil {
 		return err
 	}
 	m := Manifest{
@@ -81,24 +84,26 @@ func saveManifest(claudeDir string, entries []Entry) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(manifestPath(claudeDir), b, 0o644)
+	return safepath.AtomicWriteFileWithin(claudeDir, manifestPath(claudeDir), b, 0o600)
 }
 
 func nextID(entries []Entry) string {
 	return fmt.Sprintf("%03d", len(entries)+1)
 }
 
-func sanitize(name string) string {
-	return strings.NewReplacer(":", "-", "/", "-", "\\", "-").Replace(name)
-}
-
 // QuarantineItem moves a skill directory or agent file into the
 // quarantine area and records it in the manifest.
 func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
+	if !it.Removable {
+		return Entry{}, fmt.Errorf("%s %q is not removable", it.Category, it.Name)
+	}
 	src := it.Path
 	// A skill is its whole directory, not just SKILL.md.
 	if filepath.Base(src) == "SKILL.md" {
 		src = filepath.Dir(src)
+	}
+	if err := existingPathWithin(claudeDir, src); err != nil {
+		return Entry{}, err
 	}
 	if _, err := os.Stat(src); err != nil {
 		return Entry{}, err
@@ -109,11 +114,11 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		return Entry{}, err
 	}
 
-	dest := filepath.Join(reapedDir(claudeDir), string(it.Category), sanitize(it.Name))
+	dest := filepath.Join(reapedDir(claudeDir), string(it.Category), safepath.Sanitize(it.Name))
 	if _, err := os.Stat(dest); err == nil {
 		dest = fmt.Sprintf("%s.%d", dest, time.Now().Unix())
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	if err := parentWithinForWrite(claudeDir, dest); err != nil {
 		return Entry{}, err
 	}
 	if err := os.Rename(src, dest); err != nil {
@@ -129,7 +134,12 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		Timestamp: time.Now(),
 	}
 	if err := saveManifest(claudeDir, append(entries, e)); err != nil {
-		return Entry{}, err
+		// The item was moved but cannot be recorded; move it back so it is not
+		// lost without a manifest entry to restore it.
+		if rbErr := os.Rename(dest, src); rbErr != nil {
+			return Entry{}, fmt.Errorf("save manifest: %w (rollback also failed: %v; item left at %s)", err, rbErr, dest)
+		}
+		return Entry{}, fmt.Errorf("save manifest: %w", err)
 	}
 	return e, nil
 }
@@ -139,18 +149,18 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 // the manifest for restore. scope "" targets the top-level mcpServers;
 // otherwise it names a project path under "projects".
 func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
-	b, err := os.ReadFile(configPath)
+	if err := existingRegularFileWithin(filepath.Dir(claudeDir), configPath); err != nil {
+		return Entry{}, err
+	}
+	b, err := safepath.ReadRegularFileWithin(filepath.Dir(claudeDir), configPath, maxConfigFileSize)
 	if err != nil {
 		return Entry{}, err
 	}
 
 	backupDir := filepath.Join(reapedDir(claudeDir), "backups")
-	if err := os.MkdirAll(backupDir, 0o755); err != nil {
-		return Entry{}, err
-	}
 	backup := filepath.Join(backupDir,
 		fmt.Sprintf("%s.%d", filepath.Base(configPath), time.Now().UnixNano()))
-	if err := os.WriteFile(backup, b, 0o600); err != nil {
+	if err := safepath.AtomicWriteFileWithin(claudeDir, backup, b, 0o600); err != nil {
 		return Entry{}, err
 	}
 
@@ -168,12 +178,14 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
-	if err := os.WriteFile(configPath, out, 0o600); err != nil {
-		return Entry{}, err
-	}
 
+	// Read the manifest before mutating the config so a manifest-read failure
+	// cannot leave the server removed with no record.
 	entries, err := LoadManifest(claudeDir)
 	if err != nil {
+		return Entry{}, err
+	}
+	if err := atomicfile.Write(configPath, out, 0o600); err != nil {
 		return Entry{}, err
 	}
 	e := Entry{
@@ -186,7 +198,13 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 		Timestamp:  time.Now(),
 	}
 	if err := saveManifest(claudeDir, append(entries, e)); err != nil {
-		return Entry{}, err
+		// Restore the original config so the server is not lost without a
+		// manifest entry to restore it. Surface a rollback failure too, so the
+		// caller is never silently left with a modified config and no record.
+		if rbErr := atomicfile.Write(configPath, b, 0o600); rbErr != nil {
+			return Entry{}, fmt.Errorf("save manifest: %w (rollback also failed: %v; config %s left modified)", err, rbErr, configPath)
+		}
+		return Entry{}, fmt.Errorf("save manifest: %w", err)
 	}
 	return e, nil
 }
@@ -305,12 +323,26 @@ func Restore(claudeDir, id string) error {
 		if entries[i].Restored {
 			return fmt.Errorf("entry %s already restored", id)
 		}
-		if err := restoreEntry(&entries[i]); err != nil {
+		if err := restoreEntry(claudeDir, &entries[i]); err != nil {
 			return err
 		}
 		return saveManifest(claudeDir, entries)
 	}
 	return fmt.Errorf("no manifest entry with id %s", id)
+}
+
+func existingPathWithin(root, target string) error {
+	_, err := safepath.ExistingPathWithin(root, target)
+	return err
+}
+
+func existingRegularFileWithin(root, target string) error {
+	_, err := safepath.ExistingRegularFileWithin(root, target)
+	return err
+}
+
+func parentWithinForWrite(root, target string) error {
+	return safepath.ParentWithinForWrite(root, target)
 }
 
 // RestoreAll undoes every non-restored prune action.
@@ -324,7 +356,9 @@ func RestoreAll(claudeDir string) (int, error) {
 		if entries[i].Restored {
 			continue
 		}
-		if err := restoreEntry(&entries[i]); err != nil {
+		if err := restoreEntry(claudeDir, &entries[i]); err != nil {
+			// Persist the entries already restored so progress is not lost.
+			_ = saveManifest(claudeDir, entries)
 			return n, err
 		}
 		n++
@@ -332,9 +366,15 @@ func RestoreAll(claudeDir string) (int, error) {
 	return n, saveManifest(claudeDir, entries)
 }
 
-func restoreEntry(e *Entry) error {
+func restoreEntry(claudeDir string, e *Entry) error {
 	if len(e.Payload) > 0 {
-		b, err := os.ReadFile(e.ConfigPath)
+		// Bound the config write to the install tree (covers ~/.claude.json and
+		// plugin .mcp.json under the home dir) so a tampered manifest cannot
+		// redirect the write to an arbitrary file.
+		if err := existingPathWithin(filepath.Dir(claudeDir), e.ConfigPath); err != nil {
+			return err
+		}
+		b, err := safepath.ReadRegularFileWithin(filepath.Dir(claudeDir), e.ConfigPath, maxConfigFileSize)
 		if err != nil {
 			return err
 		}
@@ -349,14 +389,20 @@ func restoreEntry(e *Entry) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(e.ConfigPath, out, 0o600); err != nil {
+		if err := atomicfile.Write(e.ConfigPath, out, 0o600); err != nil {
 			return err
 		}
 		e.Restored = true
 		return nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(e.From), 0o755); err != nil {
+	// File move: both the quarantine source and the restore destination must
+	// stay within the Claude directory, so a tampered manifest cannot move a
+	// file to (or from) an arbitrary location.
+	if err := existingPathWithin(claudeDir, e.To); err != nil {
+		return err
+	}
+	if err := parentWithinForWrite(claudeDir, e.From); err != nil {
 		return err
 	}
 	if err := os.Rename(e.To, e.From); err != nil {

@@ -10,6 +10,25 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/usage"
 )
 
+func TestSessionsPerMonthLowActivityNotZero(t *testing.T) {
+	// A user with one session in a 31-day window projects to ~0.97/month.
+	// Integer truncation floored that to 0, silently zeroing the cost estimate.
+	st := usage.NewStats(31)
+	st.Sessions = 1
+	r := Build(nil, st, nil, Opts{})
+	if r.SessionsPerMonth < 1 {
+		t.Errorf("SessionsPerMonth = %d, want >= 1 for an active (low-frequency) user", r.SessionsPerMonth)
+	}
+}
+
+func TestSessionsPerMonthZeroWhenNoSessions(t *testing.T) {
+	st := usage.NewStats(30)
+	r := Build(nil, st, nil, Opts{})
+	if r.SessionsPerMonth != 0 {
+		t.Errorf("SessionsPerMonth = %d, want 0 with no sessions", r.SessionsPerMonth)
+	}
+}
+
 func TestVerdict(t *testing.T) {
 	cutoff := time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)
 	older := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -120,15 +139,19 @@ func TestBuild(t *testing.T) {
 func TestEvidenceBlindNotReaped(t *testing.T) {
 	st := usage.NewStats(30)
 	st.Sessions = 60 // ample Claude Code evidence
+	st.Uses[scan.CatSkill]["oc-rare"] = 1
 
 	items := []scan.Item{
 		{Category: scan.CatSkill, Name: "oc-only", Platform: "opencode", Source: "personal", DescChars: 370, Removable: true},
+		{Category: scan.CatSkill, Name: "oc-rare", Platform: "opencode", Source: "personal", DescChars: 370, Removable: true},
 		{Category: scan.CatSkill, Name: "cc-dead", Platform: "claude-code", Source: "personal", DescChars: 370, Removable: true},
 	}
 	r := Build(items, st, nil, Opts{
 		MinSessions:   10,
 		Cutoff:        time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC),
 		EvidenceBlind: map[string]bool{"opencode": true},
+		MuteThreshold: 0.20,
+		MuteMinTokens: 50,
 	})
 
 	byName := map[string]Row{}
@@ -140,6 +163,12 @@ func TestEvidenceBlindNotReaped(t *testing.T) {
 	}
 	if rsn := byName["oc-only"].Reason; rsn != ReasonNoEvidence {
 		t.Errorf("evidence-blind item: reason = %s, want %s", rsn, ReasonNoEvidence)
+	}
+	if v := byName["oc-rare"].Verdict; v != VerdictReview {
+		t.Errorf("evidence-blind rare item: verdict = %s, want REVIEW instead of MUTE", v)
+	}
+	if rsn := byName["oc-rare"].Reason; rsn != ReasonNoEvidence {
+		t.Errorf("evidence-blind rare item: reason = %s, want %s", rsn, ReasonNoEvidence)
 	}
 	if v := byName["cc-dead"].Verdict; v != VerdictReap {
 		t.Errorf("covered dead item: verdict = %s, want REAP", v)
@@ -313,7 +342,6 @@ func TestVerdictMinSessionsExact(t *testing.T) {
 	}
 }
 
-
 func TestBuildEmptyItems(t *testing.T) {
 	st := usage.NewStats(30)
 	st.Sessions = 10
@@ -325,4 +353,3 @@ func TestBuildEmptyItems(t *testing.T) {
 		t.Errorf("Rows = %d, want 0", len(r.Rows))
 	}
 }
-

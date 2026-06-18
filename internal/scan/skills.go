@@ -43,14 +43,17 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			continue
 		}
 		skillPath := filepath.Join(dir, e.Name(), "SKILL.md")
-		b, err := os.ReadFile(skillPath)
+		if _, ok := resolveWithin(dir, skillPath); !ok {
+			continue
+		}
+		b, err := readCapped(skillPath)
 		if err != nil {
 			continue // directory without SKILL.md is not a skill
 		}
-		name, desc, bodyChars := parseFrontmatter(b)
-		if name == "" {
-			name = e.Name()
-		}
+		// The invocation key is the directory name (plus any plugin prefix) —
+		// that is how the skill is addressed in transcripts. The frontmatter
+		// name is metadata and intentionally not used as the key.
+		_, desc, bodyChars := parseFrontmatter(b)
 		key := namePrefix + e.Name()
 		items = append(items, Item{
 			Category:    CatSkill,

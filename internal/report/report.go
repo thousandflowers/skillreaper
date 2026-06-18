@@ -3,6 +3,7 @@
 package report
 
 import (
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -23,8 +24,8 @@ type Opts struct {
 	KeepSet      map[string]bool // items manually marked as keep
 	// EvidenceBlind holds platform IDs whose session transcripts could not
 	// be parsed (e.g. OpenCode's SQLite store, or a platform with no session
-	// files). Zero-use items from these platforms are held at REVIEW instead
-	// of REAP, because absence of evidence is not evidence of absence.
+	// files). REAP/MUTE candidates from these platforms are held at REVIEW,
+	// because absence of evidence is not evidence of absence.
 	EvidenceBlind map[string]bool
 	// ClaudeMDLines holds the non-comment lines of every detected CLAUDE.md.
 	// A skill whose name appears here is held at KEEP(claude-md-ref).
@@ -82,7 +83,12 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		Warnings:       warns,
 	}
 	if st.WindowDays > 0 {
-		r.SessionsPerMonth = st.Sessions * 30 / st.WindowDays
+		// Round rather than truncate, and never floor an active user to 0:
+		// a low-frequency user (e.g. 1 session in 31 days) still costs money.
+		r.SessionsPerMonth = int(math.Round(float64(st.Sessions) * 30 / float64(st.WindowDays)))
+		if r.SessionsPerMonth == 0 && st.Sessions > 0 {
+			r.SessionsPerMonth = 1
+		}
 	}
 
 	itemKey := func(it scan.Item) string {
@@ -126,9 +132,9 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 			}
 			// Absence of evidence is not evidence of absence: an item from a
 			// platform whose transcripts we could not parse (e.g. OpenCode's
-			// SQLite store) has no usage signal, so a zero-use REAP here would
+			// SQLite store) has no complete usage signal, so REAP or MUTE would
 			// be unsafe. Hold it at REVIEW and let the user decide.
-			if row.Verdict == VerdictReap && opts.EvidenceBlind[it.Platform] {
+			if (row.Verdict == VerdictReap || row.Verdict == VerdictMute) && opts.EvidenceBlind[it.Platform] {
 				row.Verdict = VerdictReview
 				row.Reason = ReasonNoEvidence
 			}
@@ -156,6 +162,13 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 // lookupUses matches an item to usage evidence. Skills invoked as
 // slash commands are recorded without their plugin namespace, so a
 // "plugin:skill" item also matches its bare suffix.
+//
+// Known trade-off (do not "fix" without reading this): if a personal skill
+// and a plugin skill share the same suffix (e.g. "foo" and "ecc:foo"), both
+// rows absorb the bare "foo" uses. The transcripts carry no namespace, so the
+// bare suffix is the only available signal; attributing it to exactly one
+// item is not possible. This inflates both rows symmetrically and only in the
+// rare collision case.
 func lookupUses(st *usage.Stats, it scan.Item) (int, time.Time) {
 	uses := st.Uses[it.Category][it.Name]
 	last := st.Last[it.Category][it.Name]

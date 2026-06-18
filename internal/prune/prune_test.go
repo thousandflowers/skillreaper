@@ -19,6 +19,255 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
+// freezeManifest pre-creates a read-only manifest so LoadManifest succeeds but
+// saveManifest fails, simulating a write failure after the file mutation.
+func freezeManifest(t *testing.T, claudeDir string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("permission-based write-failure injection does not work as root")
+	}
+	p := filepath.Join(claudeDir, "reaped", "manifest.json")
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(`{"version":1,"entries":[]}`), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+}
+
+func TestQuarantineItemRollbackOnManifestFailure(t *testing.T) {
+	claudeDir := t.TempDir()
+	skillMd := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+	mustWrite(t, skillMd, "---\nname: deadskill\n---\nbody")
+	freezeManifest(t, claudeDir)
+
+	item := scan.Item{Category: scan.CatSkill, Name: "deadskill", Path: skillMd, Removable: true}
+	if _, err := QuarantineItem(claudeDir, item); err == nil {
+		t.Fatal("expected QuarantineItem to fail when the manifest cannot be written")
+	}
+	if _, err := os.Stat(filepath.Dir(skillMd)); err != nil {
+		t.Errorf("skill was moved but not recorded — should have rolled back: %v", err)
+	}
+}
+
+func TestRemoveMCPRollbackOnManifestFailure(t *testing.T) {
+	claudeDir := t.TempDir()
+	configPath := filepath.Join(claudeDir, "config.json")
+	const cfg = `{"mcpServers":{"keep":{"command":"a"},"drop":{"command":"b"}}}`
+	mustWrite(t, configPath, cfg)
+	freezeManifest(t, claudeDir)
+
+	if _, err := RemoveMCP(claudeDir, configPath, "", "drop"); err == nil {
+		t.Fatal("expected RemoveMCP to fail when the manifest cannot be written")
+	}
+	b, _ := os.ReadFile(configPath)
+	var top map[string]map[string]any
+	if err := json.Unmarshal(b, &top); err != nil {
+		t.Fatalf("config corrupted: %v", err)
+	}
+	if _, ok := top["mcpServers"]["drop"]; !ok {
+		t.Error("server removed from config but not recorded — should have rolled back the config edit")
+	}
+}
+
+func TestRemoveMCPRefusesConfigOutsideHome(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(base, "outside", "claude.json")
+	const cfg = `{"mcpServers":{"drop":{"command":"b"}}}`
+	mustWrite(t, configPath, cfg)
+
+	if _, err := RemoveMCP(claudeDir, configPath, "", "drop"); err == nil {
+		t.Fatal("expected RemoveMCP to refuse a config outside the Claude home")
+	}
+	b, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != cfg {
+		t.Fatalf("outside config was modified:\n%s", b)
+	}
+	if _, err := os.Stat(filepath.Join(reapedDir(claudeDir), "backups")); !os.IsNotExist(err) {
+		t.Fatalf("backup should not be written for rejected config, stat err: %v", err)
+	}
+}
+
+func TestRemoveMCPRefusesSymlinkedConfigOutsideHome(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outsideConfig := filepath.Join(base, "outside", "claude.json")
+	const cfg = `{"mcpServers":{"drop":{"command":"b"}}}`
+	mustWrite(t, outsideConfig, cfg)
+	configPath := filepath.Join(claudeDir, "linked-config.json")
+	if err := os.Symlink(outsideConfig, configPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if _, err := RemoveMCP(claudeDir, configPath, "", "drop"); err == nil {
+		t.Fatal("expected RemoveMCP to refuse a symlinked config outside the Claude home")
+	}
+	b, err := os.ReadFile(outsideConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != cfg {
+		t.Fatalf("outside config was modified:\n%s", b)
+	}
+}
+
+func TestRestoreAllPersistsPartialProgress(t *testing.T) {
+	claudeDir := t.TempDir()
+	for _, name := range []string{"a", "b"} {
+		md := filepath.Join(claudeDir, "skills", name, "SKILL.md")
+		mustWrite(t, md, "---\nname: "+name+"\n---\nbody")
+		if _, err := QuarantineItem(claudeDir, scan.Item{Category: scan.CatSkill, Name: name, Path: md, Removable: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, _ := LoadManifest(claudeDir)
+	// Break the second entry's restore by removing its quarantined copy.
+	if err := os.RemoveAll(entries[1].To); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RestoreAll(claudeDir); err == nil {
+		t.Fatal("expected RestoreAll to fail on the broken entry")
+	}
+	reloaded, _ := LoadManifest(claudeDir)
+	if !reloaded[0].Restored {
+		t.Error("first entry restored but progress not persisted before the error")
+	}
+}
+
+func TestRestoreRefusesPathOutsideClaudeDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	// A quarantined file that a tampered manifest tries to move outside the tree.
+	to := filepath.Join(reapedDir(claudeDir), "skill", "payload")
+	mustWrite(t, to, "payload")
+	outside := filepath.Join(t.TempDir(), "victim") // not under claudeDir
+	if err := saveManifest(claudeDir, []Entry{{ID: "001", Category: "skill", Name: "x", From: outside, To: to}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restore(claudeDir, "001"); err == nil {
+		t.Fatal("expected Restore to refuse a destination outside the claude dir")
+	}
+	if _, err := os.Stat(outside); !os.IsNotExist(err) {
+		t.Error("restore moved a file to a location outside the claude dir")
+	}
+}
+
+func TestLoadManifestRefusesNonRegularFile(t *testing.T) {
+	claudeDir := t.TempDir()
+	if err := os.MkdirAll(manifestPath(claudeDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(claudeDir); err == nil {
+		t.Fatal("expected LoadManifest to refuse a non-regular manifest path")
+	}
+}
+
+func TestRestoreMCPRefusesNonRegularConfig(t *testing.T) {
+	claudeDir := t.TempDir()
+	configDir := filepath.Join(claudeDir, "config.json")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveManifest(claudeDir, []Entry{{
+		ID:         "001",
+		Category:   string(scan.CatMCP),
+		Name:       "srv",
+		ConfigPath: configDir,
+		Payload:    json.RawMessage(`{"command":"x"}`),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restore(claudeDir, "001"); err == nil {
+		t.Fatal("expected Restore to refuse a non-regular config path")
+	}
+}
+
+func TestQuarantineRefusesSymlinkedParentOutsideClaudeDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	outside := t.TempDir()
+	skillDir := filepath.Join(outside, "deadskill")
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: deadskill\n---\nbody")
+	if err := os.Symlink(outside, filepath.Join(claudeDir, "skills")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	item := scan.Item{
+		Category:  scan.CatSkill,
+		Name:      "deadskill",
+		Path:      filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md"),
+		Removable: true,
+	}
+	if _, err := QuarantineItem(claudeDir, item); err == nil {
+		t.Fatal("expected QuarantineItem to refuse a symlinked parent outside claudeDir")
+	}
+	if _, err := os.Stat(skillDir); err != nil {
+		t.Fatalf("outside skill dir should not be moved: %v", err)
+	}
+}
+
+func TestQuarantineRefusesSymlinkedQuarantineParentOutsideClaudeDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	skillMd := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+	mustWrite(t, skillMd, "---\nname: deadskill\n---\nbody")
+	outside := t.TempDir()
+	if err := os.Symlink(outside, reapedDir(claudeDir)); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	item := scan.Item{Category: scan.CatSkill, Name: "deadskill", Path: skillMd, Removable: true}
+	if _, err := QuarantineItem(claudeDir, item); err == nil {
+		t.Fatal("expected QuarantineItem to refuse a symlinked quarantine parent")
+	}
+	if _, err := os.Stat(filepath.Dir(skillMd)); err != nil {
+		t.Fatalf("original skill dir should not be moved: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, string(scan.CatSkill), "deadskill")); !os.IsNotExist(err) {
+		t.Fatalf("quarantine should not write outside claudeDir, stat err: %v", err)
+	}
+}
+
+func TestRestoreRefusesSymlinkedIntermediateOutsideClaudeDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	outside := t.TempDir()
+	to := filepath.Join(reapedDir(claudeDir), "skill", "payload")
+	mustWrite(t, to, "payload")
+	if err := os.Symlink(outside, filepath.Join(claudeDir, "link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := saveManifest(claudeDir, []Entry{{
+		ID:       "001",
+		Category: "skill",
+		Name:     "x",
+		From:     filepath.Join(claudeDir, "link", "victim"),
+		To:       to,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Restore(claudeDir, "001"); err == nil {
+		t.Fatal("expected Restore to refuse a symlinked destination parent")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "victim")); !os.IsNotExist(err) {
+		t.Fatalf("restore should not write outside target, stat err: %v", err)
+	}
+}
+
 func TestQuarantineAndRestoreSkill(t *testing.T) {
 	claudeDir := t.TempDir()
 	skillMd := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")

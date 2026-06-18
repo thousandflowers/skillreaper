@@ -313,9 +313,11 @@ func gather(opts options) (*report.Report, error) {
 		case "sqlite":
 			if p.TranscriptDB != "" {
 				parsed, err := usage.ParseSQLite(p.TranscriptDB, cutoff, opts.days)
+				if parsed != nil {
+					mergeParsed(parsed)
+				}
 				switch {
 				case err == nil:
-					mergeParsed(parsed)
 				case errors.Is(err, usage.ErrNoSQLite):
 					// CLI missing — handled by the evidence-blind block below.
 				default:

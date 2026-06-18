@@ -99,7 +99,7 @@ INSERT INTO messages (session_id, role, content, created_at) VALUES
 	}
 }
 
-func TestParseSQLiteOverlongRowFailsClosed(t *testing.T) {
+func TestParseSQLiteOverlongRowReturnsIncompletePartialStats(t *testing.T) {
 	if _, err := exec.LookPath("sqlite3"); err != nil {
 		t.Skip("sqlite3 CLI not available")
 	}
@@ -117,23 +117,39 @@ INSERT INTO messages (session_id, role, content, created_at) VALUES
 		t.Fatalf("seed sqlite: %v\n%s", err, out)
 	}
 
-	if st, err := ParseSQLite(db, time.Unix(1717100000, 0), 30); err == nil {
-		t.Fatalf("ParseSQLite returned stats despite an overlong row: %+v", st)
+	st, err := ParseSQLite(db, time.Unix(1717100000, 0), 30)
+	if err == nil {
+		t.Fatal("expected ParseSQLite to report an overlong row")
+	}
+	if st == nil {
+		t.Fatal("expected partial stats to be returned")
+	}
+	if !st.IncompleteEvidence {
+		t.Fatal("expected partial stats to be marked incomplete")
+	}
+	if got := st.Uses[scan.CatSkill]["before-overlong"]; got != 1 {
+		t.Fatalf("before-overlong uses = %d, want 1", got)
 	}
 }
 
-func TestParseSQLiteRejectsOutputOverLimit(t *testing.T) {
+func TestParseSQLiteOutputLimitReturnsIncompletePartialStats(t *testing.T) {
 	db := makeFixtureDB(t)
 	oldLimit := sqliteOutputLimit
 	sqliteOutputLimit = 64
 	defer func() { sqliteOutputLimit = oldLimit }()
 
-	_, err := ParseSQLite(db, time.Unix(1717100000, 0), 30)
+	st, err := ParseSQLite(db, time.Unix(1717100000, 0), 30)
 	if err == nil {
 		t.Fatal("expected ParseSQLite to reject output over the byte limit")
 	}
 	if !strings.Contains(err.Error(), "output exceeded") {
 		t.Fatalf("error = %v, want output limit error", err)
+	}
+	if st == nil {
+		t.Fatal("expected partial stats to be returned")
+	}
+	if !st.IncompleteEvidence {
+		t.Fatal("expected partial stats to be marked incomplete")
 	}
 }
 

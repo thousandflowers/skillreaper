@@ -2,6 +2,7 @@ package mute
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,6 +127,62 @@ func TestMuteRefusesSymlinkOutsideClaudeDir(t *testing.T) {
 	}
 	if string(b) != skillMD {
 		t.Fatalf("outside file was modified:\n%s", b)
+	}
+}
+
+func TestMuteRefusesSymlinkedMutedDirOutsideClaudeDir(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	skillPath := writeSkill(t, claudeDir, "heavy")
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(claudeDir, "reaped")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if err := Mute(claudeDir, "heavy", skillPath); err == nil {
+		t.Fatal("expected Mute to refuse symlinked muted directory outside claudeDir")
+	}
+	b, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "description:") {
+		t.Fatalf("skill was modified despite rejected backup path:\n%s", b)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "muted")); !os.IsNotExist(err) {
+		t.Fatalf("outside muted directory should not be created, stat err: %v", err)
+	}
+}
+
+func TestMuteRefusesSymlinkedStateFileOutsideClaudeDir(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	skillPath := writeSkill(t, claudeDir, "heavy")
+	outsideState := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(outsideState, []byte(`{"muted":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(mutedDir(claudeDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideState, statePath(claudeDir)); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if err := Mute(claudeDir, "heavy", skillPath); err == nil {
+		t.Fatal("expected Mute to refuse symlinked state file outside claudeDir")
+	}
+	b, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "description:") {
+		t.Fatalf("skill was modified despite rejected state path:\n%s", b)
+	}
+	got, err := os.ReadFile(outsideState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"muted":{}}` {
+		t.Fatalf("outside state was modified:\n%s", got)
 	}
 }
 
@@ -269,18 +326,12 @@ func TestUnmuteAll(t *testing.T) {
 }
 
 func TestMuteRollbackOnStateFailure(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("permission-based write-failure injection does not work as root")
-	}
 	claudeDir := filepath.Join(t.TempDir(), ".claude")
 	skillPath := writeSkill(t, claudeDir, "heavy")
-	// Pre-create a read-only state file: loadState succeeds, saveState fails.
-	if err := os.MkdirAll(mutedDir(claudeDir), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(statePath(claudeDir), []byte(`{"muted":{}}`), 0o400); err != nil {
-		t.Fatal(err)
-	}
+	oldWriteStateFile := writeStateFile
+	writeStateFile = func(string, []byte) error { return errors.New("state write failed") }
+	defer func() { writeStateFile = oldWriteStateFile }()
+
 	if err := Mute(claudeDir, "heavy", skillPath); err == nil {
 		t.Fatal("expected Mute to fail when state cannot be saved")
 	}

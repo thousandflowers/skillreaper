@@ -18,6 +18,8 @@ import (
 )
 
 const manifestVersion = 1
+const maxManifestFileSize = 10 << 20
+const maxConfigFileSize = 10 << 20
 
 // Manifest wraps the list of prune entries together with format
 // versioning. When the manifest format changes, bump manifestVersion
@@ -51,7 +53,7 @@ func manifestPath(claudeDir string) string {
 // Transparently handles the legacy flat-array format (v0) by wrapping
 // into a Manifest on read.
 func LoadManifest(claudeDir string) ([]Entry, error) {
-	b, err := os.ReadFile(manifestPath(claudeDir))
+	b, err := safepath.ReadRegularFileWithin(claudeDir, manifestPath(claudeDir), maxManifestFileSize)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -82,7 +84,7 @@ func saveManifest(claudeDir string, entries []Entry) error {
 	if err != nil {
 		return err
 	}
-	return writeFileNoSymlink(manifestPath(claudeDir), b, 0o600)
+	return safepath.AtomicWriteFileWithin(claudeDir, manifestPath(claudeDir), b, 0o600)
 }
 
 func nextID(entries []Entry) string {
@@ -150,7 +152,7 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 	if err := existingRegularFileWithin(filepath.Dir(claudeDir), configPath); err != nil {
 		return Entry{}, err
 	}
-	b, err := os.ReadFile(configPath)
+	b, err := safepath.ReadRegularFileWithin(filepath.Dir(claudeDir), configPath, maxConfigFileSize)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -158,10 +160,7 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 	backupDir := filepath.Join(reapedDir(claudeDir), "backups")
 	backup := filepath.Join(backupDir,
 		fmt.Sprintf("%s.%d", filepath.Base(configPath), time.Now().UnixNano()))
-	if err := parentWithinForWrite(claudeDir, backup); err != nil {
-		return Entry{}, err
-	}
-	if err := writeFileNoSymlink(backup, b, 0o600); err != nil {
+	if err := safepath.AtomicWriteFileWithin(claudeDir, backup, b, 0o600); err != nil {
 		return Entry{}, err
 	}
 
@@ -332,106 +331,18 @@ func Restore(claudeDir, id string) error {
 	return fmt.Errorf("no manifest entry with id %s", id)
 }
 
-func realDir(path string) (string, error) {
-	return filepath.EvalSymlinks(path)
-}
-
 func existingPathWithin(root, target string) error {
-	rr, err := realDir(root)
-	if err != nil {
-		return err
-	}
-	tr, err := filepath.EvalSymlinks(target)
-	if err != nil {
-		return err
-	}
-	if !safepath.WithinDir(rr, tr) {
-		return fmt.Errorf("refusing to use path outside %s: %s", root, target)
-	}
-	return nil
+	_, err := safepath.ExistingPathWithin(root, target)
+	return err
 }
 
 func existingRegularFileWithin(root, target string) error {
-	if err := existingPathWithin(root, target); err != nil {
-		return err
-	}
-	info, err := os.Stat(target)
-	if err != nil {
-		return err
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("refusing to use non-regular file %s", target)
-	}
-	return nil
-}
-
-func nearestExistingAncestor(path string) (string, error) {
-	cur := filepath.Clean(path)
-	for {
-		if _, err := os.Lstat(cur); err == nil {
-			return cur, nil
-		} else if !os.IsNotExist(err) {
-			return "", err
-		}
-		next := filepath.Dir(cur)
-		if next == cur {
-			return "", fmt.Errorf("no existing ancestor for %s", path)
-		}
-		cur = next
-	}
+	_, err := safepath.ExistingRegularFileWithin(root, target)
+	return err
 }
 
 func parentWithinForWrite(root, target string) error {
-	rr, err := realDir(root)
-	if err != nil {
-		return err
-	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return err
-	}
-	absTarget, err := filepath.Abs(target)
-	if err != nil {
-		return err
-	}
-	if !safepath.WithinDir(absRoot, absTarget) {
-		return fmt.Errorf("refusing to write outside %s: %s", root, target)
-	}
-
-	parent := filepath.Dir(absTarget)
-	existing, err := nearestExistingAncestor(parent)
-	if err != nil {
-		return err
-	}
-	er, err := filepath.EvalSymlinks(existing)
-	if err != nil {
-		return err
-	}
-	if !safepath.WithinDir(rr, er) {
-		return fmt.Errorf("refusing to write through path outside %s: %s", root, target)
-	}
-	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return err
-	}
-	pr, err := filepath.EvalSymlinks(parent)
-	if err != nil {
-		return err
-	}
-	if !safepath.WithinDir(rr, pr) {
-		return fmt.Errorf("refusing to write through path outside %s: %s", root, target)
-	}
-	return nil
-}
-
-func writeFileNoSymlink(path string, b []byte, perm os.FileMode) error {
-	info, err := os.Lstat(path)
-	if err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing to write through symlink %s", path)
-	}
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return os.WriteFile(path, b, perm)
+	return safepath.ParentWithinForWrite(root, target)
 }
 
 // RestoreAll undoes every non-restored prune action.
@@ -463,7 +374,7 @@ func restoreEntry(claudeDir string, e *Entry) error {
 		if err := existingPathWithin(filepath.Dir(claudeDir), e.ConfigPath); err != nil {
 			return err
 		}
-		b, err := os.ReadFile(e.ConfigPath)
+		b, err := safepath.ReadRegularFileWithin(filepath.Dir(claudeDir), e.ConfigPath, maxConfigFileSize)
 		if err != nil {
 			return err
 		}

@@ -92,10 +92,14 @@ func ParseSQLite(path string, cutoff time.Time, windowDays int) (*Stats, error) 
 		return nil, fmt.Errorf("sqlite3 query timed out after %s for %s", sqliteTimeout, path)
 	}
 	if scanErr != nil {
+		st.Sessions = sessionCount
+		st.FilesScanned = 1
+		st.MalformedLines++
+		st.IncompleteEvidence = true
 		if errors.Is(scanErr, errSQLiteOutputLimit) {
-			return nil, fmt.Errorf("sqlite3 query output exceeded %d bytes for %s", sqliteOutputLimit, path)
+			return st, fmt.Errorf("sqlite3 query output exceeded %d bytes for %s", sqliteOutputLimit, path)
 		}
-		return nil, fmt.Errorf("sqlite3 query output could not be parsed for %s: %w", path, scanErr)
+		return st, fmt.Errorf("sqlite3 query output could not be parsed for %s: %w", path, scanErr)
 	}
 	if waitErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -176,7 +180,8 @@ func parseSQLiteRows(r io.Reader, st *Stats, cutoff time.Time) (int, error) {
 		recordBlocks(st, blocks, ts, "", pending, nil)
 	}
 	if err := sc.Err(); err != nil {
-		return 0, err
+		flush()
+		return len(sessions), err
 	}
 	flush()
 

@@ -171,6 +171,57 @@ func TestScanSkillsSkipsSymlinkedSkillOutsideSkillsRoot(t *testing.T) {
 	}
 }
 
+func TestScanSkillsSkipsSymlinkedSkillsRootOutsideClaudeDir(t *testing.T) {
+	home := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "skills")
+	mustWrite(t, filepath.Join(outside, "outside", "SKILL.md"),
+		"---\nname: outside\ndescription: should not load\n---\n")
+	if err := os.Symlink(outside, filepath.Join(home, "skills")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	items, _ := ScanSkills(home, "test")
+	if findItem(items, "outside") != nil {
+		t.Fatal("symlinked skills root outside claudeDir should not be loaded")
+	}
+}
+
+func TestScanSkillsSkipsSymlinkedPluginRootOutsideClaudeDir(t *testing.T) {
+	home := t.TempDir()
+	mustWrite(t, filepath.Join(home, "skills", "ok", "SKILL.md"),
+		"---\nname: ok\ndescription: still works\n---\n")
+
+	outsidePlugins := filepath.Join(t.TempDir(), "plugins")
+	plugDir := filepath.Join(outsidePlugins, "cache", "mkt", "evil", "1.0.0")
+	mustWrite(t, filepath.Join(plugDir, "skills", "outside", "SKILL.md"),
+		"---\nname: outside\ndescription: should not load\n---\n")
+	reg := map[string]any{
+		"version": 2,
+		"plugins": map[string]any{
+			"evil@mkt": []map[string]any{{
+				"installPath": plugDir,
+				"installedAt": "2026-05-15T22:41:04.874Z",
+			}},
+		},
+	}
+	b, _ := json.Marshal(reg)
+	mustWrite(t, filepath.Join(outsidePlugins, "installed_plugins.json"), string(b))
+	if err := os.Symlink(outsidePlugins, filepath.Join(home, "plugins")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	items, warns := ScanSkills(home, "test")
+	if findItem(items, "evil:outside") != nil {
+		t.Fatal("plugin skill under symlinked plugin root should not be loaded")
+	}
+	if findItem(items, "ok") == nil {
+		t.Fatal("personal skill should still be loaded")
+	}
+	if len(warns) != 1 {
+		t.Fatalf("warnings = %d, want 1", len(warns))
+	}
+}
+
 func TestScanAgents(t *testing.T) {
 	home := buildFixtureHome(t)
 	items, warns := ScanAgents(home, "test")
@@ -206,5 +257,20 @@ func TestScanAgentsSkipsSymlinkedAgentOutsideAgentsRoot(t *testing.T) {
 	}
 	if findItem(items, "helper") != nil {
 		t.Fatal("symlinked agent outside agents root should not be loaded")
+	}
+}
+
+func TestScanAgentsSkipsSymlinkedAgentsRootOutsideClaudeDir(t *testing.T) {
+	home := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "agents")
+	mustWrite(t, filepath.Join(outside, "helper.md"),
+		"---\nname: helper\ndescription: should not load\n---\n")
+	if err := os.Symlink(outside, filepath.Join(home, "agents")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	items, _ := ScanAgents(home, "test")
+	if findItem(items, "helper") != nil {
+		t.Fatal("symlinked agents root outside claudeDir should not be loaded")
 	}
 }

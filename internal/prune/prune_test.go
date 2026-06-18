@@ -27,12 +27,17 @@ func freezeManifest(t *testing.T, claudeDir string) {
 		t.Skip("permission-based write-failure injection does not work as root")
 	}
 	p := filepath.Join(claudeDir, "reaped", "manifest.json")
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(p, []byte(`{"version":1,"entries":[]}`), 0o400); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 }
 
 func TestQuarantineItemRollbackOnManifestFailure(t *testing.T) {
@@ -160,6 +165,36 @@ func TestRestoreRefusesPathOutsideClaudeDir(t *testing.T) {
 	}
 	if _, err := os.Stat(outside); !os.IsNotExist(err) {
 		t.Error("restore moved a file to a location outside the claude dir")
+	}
+}
+
+func TestLoadManifestRefusesNonRegularFile(t *testing.T) {
+	claudeDir := t.TempDir()
+	if err := os.MkdirAll(manifestPath(claudeDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(claudeDir); err == nil {
+		t.Fatal("expected LoadManifest to refuse a non-regular manifest path")
+	}
+}
+
+func TestRestoreMCPRefusesNonRegularConfig(t *testing.T) {
+	claudeDir := t.TempDir()
+	configDir := filepath.Join(claudeDir, "config.json")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveManifest(claudeDir, []Entry{{
+		ID:         "001",
+		Category:   string(scan.CatMCP),
+		Name:       "srv",
+		ConfigPath: configDir,
+		Payload:    json.RawMessage(`{"command":"x"}`),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restore(claudeDir, "001"); err == nil {
+		t.Fatal("expected Restore to refuse a non-regular config path")
 	}
 }
 

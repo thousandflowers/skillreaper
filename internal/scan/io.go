@@ -54,6 +54,15 @@ func readCapped(path string) ([]byte, error) {
 }
 
 func resolveWithin(root, target string) (string, bool) {
+	rootInfo, err := os.Lstat(root)
+	if err != nil || rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
+		return "", false
+	}
+	absRoot, err1 := filepath.Abs(root)
+	absTarget, err2 := filepath.Abs(target)
+	if err1 != nil || err2 != nil || !safepath.WithinDir(absRoot, absTarget) {
+		return "", false
+	}
 	rr, err1 := filepath.EvalSymlinks(root)
 	tr, err2 := filepath.EvalSymlinks(target)
 	if err1 != nil || err2 != nil {

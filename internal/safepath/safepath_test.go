@@ -1,6 +1,7 @@
 package safepath
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -68,5 +69,38 @@ func TestSanitizeMatchesOldBehavior(t *testing.T) {
 	// Sanity: result is always usable as a relative path with no separators.
 	if strings.ContainsAny(filepath.Base(Sanitize("x")), `/\`) {
 		t.Error("sanitized name still contains a path separator")
+	}
+}
+
+func TestParentWithinForWriteRejectsSymlinkedParentOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "reaped")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	err := ParentWithinForWrite(root, filepath.Join(link, "muted", "state.json"))
+	if err == nil {
+		t.Fatal("expected symlinked parent outside root to be rejected")
+	}
+	if _, statErr := os.Stat(filepath.Join(outside, "muted")); !os.IsNotExist(statErr) {
+		t.Fatalf("outside directory should not be created, stat err: %v", statErr)
+	}
+}
+
+func TestReadRegularFileWithinRejectsFinalSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(outside, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "state.json")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if _, err := ReadRegularFileWithin(root, link, 1024); err == nil {
+		t.Fatal("expected final symlink to be rejected")
 	}
 }

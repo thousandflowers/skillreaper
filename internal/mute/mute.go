@@ -31,26 +31,10 @@ func backupName(name string) string {
 	return fmt.Sprintf("%s-%08x.md.bak", safepath.Sanitize(name), h.Sum32())
 }
 
-func resolveExistingWithin(root, target string) (string, error) {
-	rr, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return "", err
-	}
-	tr, err := filepath.EvalSymlinks(target)
-	if err != nil {
-		return "", err
-	}
-	if !safepath.WithinDir(rr, tr) {
-		return "", fmt.Errorf("refusing to use path outside %s: %s", root, target)
-	}
-	info, err := os.Stat(tr)
-	if err != nil {
-		return "", err
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("refusing to use non-regular file %s", target)
-	}
-	return tr, nil
+const maxStateFileSize = 10 << 20
+
+var writeStateFile = func(claudeDir string, b []byte) error {
+	return safepath.AtomicWriteFileWithin(claudeDir, statePath(claudeDir), b, 0o600)
 }
 
 func resolveMutableExisting(claudeDir, target string) (string, error) {
@@ -78,6 +62,10 @@ func resolveMutableExisting(claudeDir, target string) (string, error) {
 }
 
 func resolvedRel(root, target string) (string, bool) {
+	rootInfo, err := os.Lstat(root)
+	if err != nil || rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
+		return "", false
+	}
 	rr, err := filepath.EvalSymlinks(root)
 	if err != nil || !safepath.WithinDir(rr, target) {
 		return "", false
@@ -135,7 +123,7 @@ type State struct {
 }
 
 func loadState(claudeDir string) (*State, error) {
-	b, err := os.ReadFile(statePath(claudeDir))
+	b, err := safepath.ReadRegularFileWithin(claudeDir, statePath(claudeDir), maxStateFileSize)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &State{Muted: map[string]Entry{}}, nil
@@ -153,17 +141,11 @@ func loadState(claudeDir string) (*State, error) {
 }
 
 func saveState(claudeDir string, s *State) error {
-	if err := os.MkdirAll(mutedDir(claudeDir), 0o755); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	// Kept as a direct write on purpose: Mute's rollback path depends on a
-	// saveState failure being injectable (read-only file), and an atomic
-	// rename would bypass that. The live SKILL.md and backup use atomicfile.
-	return os.WriteFile(statePath(claudeDir), b, 0o600)
+	return writeStateFile(claudeDir, b)
 }
 
 // Mute strips the description field from a skill's SKILL.md frontmatter,
@@ -196,12 +178,9 @@ func Mute(claudeDir, name, skillPath string) error {
 	if !ok {
 		return fmt.Errorf("no description to strip in %s", skillPath)
 	}
-	if err := os.MkdirAll(mutedDir(claudeDir), 0o755); err != nil {
-		return err
-	}
 	backup := filepath.Join(mutedDir(claudeDir), backupName(name))
 	// Backups hold the user's original content; keep them owner-only.
-	if err := atomicfile.Write(backup, b, 0o600); err != nil {
+	if err := safepath.AtomicWriteFileWithin(claudeDir, backup, b, 0o600); err != nil {
 		return err
 	}
 	if err := atomicfile.Write(resolvedSkillPath, stripped, perm); err != nil {
@@ -280,7 +259,7 @@ func restoreWithin(claudeDir string, e Entry) error {
 	if err != nil {
 		return err
 	}
-	backup, err := resolveExistingWithin(mutedDir(claudeDir), e.Backup)
+	backup, err := resolveBackupExisting(claudeDir, e.Backup)
 	if err != nil {
 		return err
 	}
@@ -297,6 +276,15 @@ func restoreWithin(claudeDir string, e Entry) error {
 		return err
 	}
 	return os.Remove(backup)
+}
+
+func resolveBackupExisting(claudeDir, target string) (string, error) {
+	absMuted, err1 := filepath.Abs(mutedDir(claudeDir))
+	absTarget, err2 := filepath.Abs(target)
+	if err1 != nil || err2 != nil || !safepath.WithinDir(absMuted, absTarget) {
+		return "", fmt.Errorf("refusing to use backup outside %s: %s", mutedDir(claudeDir), target)
+	}
+	return safepath.ExistingRegularFileWithin(claudeDir, target)
 }
 
 // stripDescription removes the "description:" line(s) from a Markdown file's

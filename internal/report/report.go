@@ -162,6 +162,13 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 // lookupUses matches an item to usage evidence. Skills invoked as
 // slash commands are recorded without their plugin namespace, so a
 // "plugin:skill" item also matches its bare suffix.
+//
+// Known trade-off (do not "fix" without reading this): if a personal skill
+// and a plugin skill share the same suffix (e.g. "foo" and "ecc:foo"), both
+// rows absorb the bare "foo" uses. The transcripts carry no namespace, so the
+// bare suffix is the only available signal; attributing it to exactly one
+// item is not possible. This inflates both rows symmetrically and only in the
+// rare collision case.
 func lookupUses(st *usage.Stats, it scan.Item) (int, time.Time) {
 	uses := st.Uses[it.Category][it.Name]
 	last := st.Last[it.Category][it.Name]

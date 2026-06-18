@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/atomicfile"
+	"github.com/thousandflowers/skillreaper/internal/safepath"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
@@ -89,10 +89,6 @@ func nextID(entries []Entry) string {
 	return fmt.Sprintf("%03d", len(entries)+1)
 }
 
-func sanitize(name string) string {
-	return strings.NewReplacer(":", "-", "/", "-", "\\", "-").Replace(name)
-}
-
 // QuarantineItem moves a skill directory or agent file into the
 // quarantine area and records it in the manifest.
 func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
@@ -116,7 +112,7 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		return Entry{}, err
 	}
 
-	dest := filepath.Join(reapedDir(claudeDir), string(it.Category), sanitize(it.Name))
+	dest := filepath.Join(reapedDir(claudeDir), string(it.Category), safepath.Sanitize(it.Name))
 	if _, err := os.Stat(dest); err == nil {
 		dest = fmt.Sprintf("%s.%d", dest, time.Now().Unix())
 	}
@@ -204,8 +200,11 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 	}
 	if err := saveManifest(claudeDir, append(entries, e)); err != nil {
 		// Restore the original config so the server is not lost without a
-		// manifest entry to restore it.
-		_ = atomicfile.Write(configPath, b, 0o600)
+		// manifest entry to restore it. Surface a rollback failure too, so the
+		// caller is never silently left with a modified config and no record.
+		if rbErr := atomicfile.Write(configPath, b, 0o600); rbErr != nil {
+			return Entry{}, fmt.Errorf("save manifest: %w (rollback also failed: %v; config %s left modified)", err, rbErr, configPath)
+		}
 		return Entry{}, fmt.Errorf("save manifest: %w", err)
 	}
 	return e, nil
@@ -333,20 +332,6 @@ func Restore(claudeDir, id string) error {
 	return fmt.Errorf("no manifest entry with id %s", id)
 }
 
-// withinDir reports whether target resolves to a path at or under root.
-func withinDir(root, target string) bool {
-	ra, err1 := filepath.Abs(root)
-	ta, err2 := filepath.Abs(target)
-	if err1 != nil || err2 != nil {
-		return false
-	}
-	rel, err := filepath.Rel(ra, ta)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
-}
-
 func realDir(path string) (string, error) {
 	return filepath.EvalSymlinks(path)
 }
@@ -360,7 +345,7 @@ func existingPathWithin(root, target string) error {
 	if err != nil {
 		return err
 	}
-	if !withinDir(rr, tr) {
+	if !safepath.WithinDir(rr, tr) {
 		return fmt.Errorf("refusing to use path outside %s: %s", root, target)
 	}
 	return nil
@@ -409,7 +394,7 @@ func parentWithinForWrite(root, target string) error {
 	if err != nil {
 		return err
 	}
-	if !withinDir(absRoot, absTarget) {
+	if !safepath.WithinDir(absRoot, absTarget) {
 		return fmt.Errorf("refusing to write outside %s: %s", root, target)
 	}
 
@@ -422,7 +407,7 @@ func parentWithinForWrite(root, target string) error {
 	if err != nil {
 		return err
 	}
-	if !withinDir(rr, er) {
+	if !safepath.WithinDir(rr, er) {
 		return fmt.Errorf("refusing to write through path outside %s: %s", root, target)
 	}
 	if err := os.MkdirAll(parent, 0o755); err != nil {
@@ -432,7 +417,7 @@ func parentWithinForWrite(root, target string) error {
 	if err != nil {
 		return err
 	}
-	if !withinDir(rr, pr) {
+	if !safepath.WithinDir(rr, pr) {
 		return fmt.Errorf("refusing to write through path outside %s: %s", root, target)
 	}
 	return nil

@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 )
 
-// Write writes data to path atomically with the given permissions.
+// Write writes data to path atomically with the given permissions. It also
+// fsyncs the file and its parent directory so the new entry survives a crash
+// rather than being held only in memory.
 func Write(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
@@ -35,5 +37,21 @@ func Write(path string, data []byte, perm os.FileMode) error {
 	if err := os.Chmod(tmpName, perm); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, path)
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	// Durably commit the directory entry so the rename is not lost on crash.
+	// Best-effort: some platforms/filesystems cannot fsync a directory, in
+	// which case the data fsync above still guarantees the file's contents.
+	syncDir(dir)
+	return nil
+}
+
+func syncDir(dir string) {
+	d, err := os.Open(dir)
+	if err != nil {
+		return
+	}
+	defer d.Close()
+	_ = d.Sync()
 }

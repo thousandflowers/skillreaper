@@ -274,3 +274,36 @@ func TestProjectFor(t *testing.T) {
 		}
 	}
 }
+
+func TestParseUnreadableSubdirMarksEvidenceIncomplete(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission-based failure injection does not work as root")
+	}
+	dir := t.TempDir()
+
+	// Accessible transcript that should still be parsed.
+	writeTranscript(t, filepath.Join(dir, "proj-a", "s1.jsonl"),
+		`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"seen-skill"}}]}}`,
+	)
+
+	// A subdirectory whose contents cannot be read: evidence under it is lost.
+	unreadable := filepath.Join(dir, "proj-b")
+	writeTranscript(t, filepath.Join(unreadable, "s2.jsonl"),
+		`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"hidden-skill"}}]}}`,
+	)
+	if err := os.Chmod(unreadable, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(unreadable, 0o755)
+
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !st.IncompleteEvidence {
+		t.Fatal("unreadable subdirectory should mark evidence incomplete")
+	}
+	if got := st.Uses[scan.CatSkill]["seen-skill"]; got != 1 {
+		t.Errorf("accessible transcript should still be parsed; seen-skill uses = %d, want 1", got)
+	}
+}

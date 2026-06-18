@@ -288,6 +288,10 @@ func TestMuteRollbackOnStateFailure(t *testing.T) {
 	if !strings.Contains(string(b), "description:") {
 		t.Errorf("skill was stripped but mute not recorded — should have rolled back:\n%s", b)
 	}
+	// Rollback must also drop the orphan backup so no state-less copy lingers.
+	if _, err := os.Stat(filepath.Join(mutedDir(claudeDir), backupName("heavy"))); err == nil {
+		t.Error("orphan backup should be removed when saveState fails")
+	}
 }
 
 func TestUnmuteAllPersistsPartialProgress(t *testing.T) {

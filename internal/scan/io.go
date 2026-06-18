@@ -5,7 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/thousandflowers/skillreaper/internal/safepath"
 )
 
 // maxFileSize caps how large a config or markdown file the scanner reads into
@@ -58,23 +59,8 @@ func resolveWithin(root, target string) (string, bool) {
 	if err1 != nil || err2 != nil {
 		return "", false
 	}
-	if !withinDir(rr, tr) {
+	if !safepath.WithinDir(rr, tr) {
 		return "", false
 	}
 	return tr, true
-}
-
-// withinDir reports whether target is at or under root. Both should already be
-// symlink-resolved by the caller when that matters.
-func withinDir(root, target string) bool {
-	ra, err1 := filepath.Abs(root)
-	ta, err2 := filepath.Abs(target)
-	if err1 != nil || err2 != nil {
-		return false
-	}
-	rel, err := filepath.Rel(ra, ta)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }

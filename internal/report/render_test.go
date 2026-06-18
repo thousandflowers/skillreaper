@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestRenderDeadToolCharsShownPerSession(t *testing.T) {
@@ -33,5 +34,30 @@ func TestRenderDeadToolCharsSingleSession(t *testing.T) {
 	RenderText(&buf, r, false)
 	if !strings.Contains(buf.String(), "~33 chars of tool descriptions unused per session") {
 		t.Errorf("expected 33 with a single session, got:\n%s", buf.String())
+	}
+}
+
+func TestTruncatePreservesWholeRunes(t *testing.T) {
+	// A multibyte name must be truncated on a rune boundary, not a byte
+	// boundary, so the terminal never receives invalid UTF-8.
+	in := "日本語のスキル名" // each rune is 3 bytes
+	got := truncate(in, 5)
+	if !utf8.ValidString(got) {
+		t.Errorf("truncate produced invalid UTF-8: %q", got)
+	}
+	// 4 runes + ellipsis.
+	if rc := utf8.RuneCountInString(got); rc != 5 {
+		t.Errorf("truncate rune count = %d, want 5 (%q)", rc, got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("truncate should end with ellipsis, got %q", got)
+	}
+}
+
+func TestTruncateShortStringUnchanged(t *testing.T) {
+	for _, s := range []string{"short", "日本", ""} {
+		if got := truncate(s, 44); got != s {
+			t.Errorf("truncate(%q, 44) = %q, want unchanged", s, got)
+		}
 	}
 }

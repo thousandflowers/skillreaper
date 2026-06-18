@@ -156,14 +156,28 @@ type pendingSkill struct {
 
 // Parse scans every .jsonl transcript under projectsDir whose mtime is
 // at or after cutoff. windowDays is carried into Stats for reporting.
+//
+// A mid-walk failure (e.g. a permission-denied subdirectory) does not abort
+// the scan: the affected subtree is skipped and Stats.IncompleteEvidence is
+// set so callers do not treat cold items as safe to reap or mute.
 func Parse(projectsDir string, cutoff time.Time, windowDays int) (*Stats, error) {
 	st := NewStats(windowDays)
 	err := filepath.WalkDir(projectsDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".jsonl") {
+		if err != nil {
+			// Walk handed us a read/stat error for this path. Skip it but flag
+			// that evidence is missing — a whole subtree may be unreadable.
+			st.IncompleteEvidence = true
+			return nil
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".jsonl") {
 			return nil
 		}
 		info, ierr := d.Info()
-		if ierr != nil || info.ModTime().Before(cutoff) {
+		if ierr != nil {
+			st.IncompleteEvidence = true
+			return nil
+		}
+		if info.ModTime().Before(cutoff) {
 			return nil
 		}
 		st.FilesScanned++
@@ -171,10 +185,7 @@ func Parse(projectsDir string, cutoff time.Time, windowDays int) (*Stats, error)
 		parseFile(path, projectFor(projectsDir, path), st)
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return st, nil
+	return st, err
 }
 
 // parseFile reads one transcript. Unreadable files or lines count as

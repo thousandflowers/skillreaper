@@ -14,14 +14,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/thousandflowers/skillreaper/internal/atomicfile"
+	"github.com/thousandflowers/skillreaper/internal/safepath"
 )
 
 func mutedDir(claudeDir string) string  { return filepath.Join(claudeDir, "reaped", "muted") }
 func statePath(claudeDir string) string { return filepath.Join(mutedDir(claudeDir), "state.json") }
-
-func sanitize(name string) string {
-	return strings.NewReplacer(":", "-", "/", "-", "\\", "-").Replace(name)
-}
 
 // backupName is the backup filename for a muted skill. Distinct names can
 // sanitize to the same string (e.g. "a:b" and "a-b"); a hash of the original
@@ -29,20 +28,7 @@ func sanitize(name string) string {
 func backupName(name string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(name))
-	return fmt.Sprintf("%s-%08x.md.bak", sanitize(name), h.Sum32())
-}
-
-func withinDir(root, target string) bool {
-	ra, err1 := filepath.Abs(root)
-	ta, err2 := filepath.Abs(target)
-	if err1 != nil || err2 != nil {
-		return false
-	}
-	rel, err := filepath.Rel(ra, ta)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+	return fmt.Sprintf("%s-%08x.md.bak", safepath.Sanitize(name), h.Sum32())
 }
 
 func resolveExistingWithin(root, target string) (string, error) {
@@ -54,7 +40,7 @@ func resolveExistingWithin(root, target string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !withinDir(rr, tr) {
+	if !safepath.WithinDir(rr, tr) {
 		return "", fmt.Errorf("refusing to use path outside %s: %s", root, target)
 	}
 	info, err := os.Stat(tr)
@@ -93,7 +79,7 @@ func resolveMutableExisting(claudeDir, target string) (string, error) {
 
 func resolvedRel(root, target string) (string, bool) {
 	rr, err := filepath.EvalSymlinks(root)
-	if err != nil || !withinDir(rr, target) {
+	if err != nil || !safepath.WithinDir(rr, target) {
 		return "", false
 	}
 	rel, err := filepath.Rel(rr, target)
@@ -174,6 +160,9 @@ func saveState(claudeDir string, s *State) error {
 	if err != nil {
 		return err
 	}
+	// Kept as a direct write on purpose: Mute's rollback path depends on a
+	// saveState failure being injectable (read-only file), and an atomic
+	// rename would bypass that. The live SKILL.md and backup use atomicfile.
 	return os.WriteFile(statePath(claudeDir), b, 0o600)
 }
 
@@ -196,6 +185,13 @@ func Mute(claudeDir, name, skillPath string) error {
 	if err != nil {
 		return err
 	}
+	// Preserve the original file mode so muting does not silently widen (or
+	// tighten) the skill's permissions.
+	info, err := os.Stat(resolvedSkillPath)
+	if err != nil {
+		return err
+	}
+	perm := info.Mode().Perm()
 	stripped, ok := stripDescription(b)
 	if !ok {
 		return fmt.Errorf("no description to strip in %s", skillPath)
@@ -204,17 +200,22 @@ func Mute(claudeDir, name, skillPath string) error {
 		return err
 	}
 	backup := filepath.Join(mutedDir(claudeDir), backupName(name))
-	if err := os.WriteFile(backup, b, 0o644); err != nil {
+	// Backups hold the user's original content; keep them owner-only.
+	if err := atomicfile.Write(backup, b, 0o600); err != nil {
 		return err
 	}
-	if err := os.WriteFile(resolvedSkillPath, stripped, 0o644); err != nil {
+	if err := atomicfile.Write(resolvedSkillPath, stripped, perm); err != nil {
 		return err
 	}
 	s.Muted[name] = Entry{Path: resolvedSkillPath, Backup: backup}
 	if err := saveState(claudeDir, s); err != nil {
 		// The skill was stripped but the mute cannot be recorded; restore the
-		// original so it is not left silently degraded with no way to unmute.
-		_ = os.WriteFile(resolvedSkillPath, b, 0o644)
+		// original so it is not left silently degraded with no way to unmute,
+		// and drop the now-orphan backup so no state-less copy lingers.
+		if rbErr := atomicfile.Write(resolvedSkillPath, b, perm); rbErr != nil {
+			return fmt.Errorf("save mute state: %w (rollback also failed: %v; skill left stripped at %s)", err, rbErr, resolvedSkillPath)
+		}
+		_ = os.Remove(backup)
 		return fmt.Errorf("save mute state: %w", err)
 	}
 	return nil
@@ -287,7 +288,12 @@ func restoreWithin(claudeDir string, e Entry) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, b, 0o644); err != nil {
+	// Restore at the skill's current mode so unmute preserves permissions.
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if err := atomicfile.Write(path, b, info.Mode().Perm()); err != nil {
 		return err
 	}
 	return os.Remove(backup)

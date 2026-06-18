@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/thousandflowers/skillreaper/internal/safepath"
 )
 
 // ScanProse inventories always-loaded prose: the global CLAUDE.md,
@@ -43,7 +45,7 @@ func ScanProse(dir, cwd, platformID string) ([]Item, []Warning) {
 		// Skip symlinks that resolve outside the rules tree, so a planted link
 		// cannot make reap stat and surface a file elsewhere on disk.
 		real, err := filepath.EvalSymlinks(path)
-		if err != nil || (realRules != "" && !withinDir(realRules, real)) {
+		if err != nil || (realRules != "" && !safepath.WithinDir(realRules, real)) {
 			return nil
 		}
 		addFile(path, "rules")

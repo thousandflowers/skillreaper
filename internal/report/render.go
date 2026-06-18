@@ -457,10 +457,16 @@ func humanTime(t time.Time) string {
 }
 
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	if utf8.RuneCountInString(s) <= n {
 		return s
 	}
-	return s[:n-1] + "…"
+	// Slice on a rune boundary so a multibyte name is not split, which would
+	// emit invalid UTF-8 to the terminal.
+	if n <= 1 {
+		return "…"
+	}
+	r := []rune(s)
+	return string(r[:n-1]) + "…"
 }
 
 // table aligns columns with two-space gutters.

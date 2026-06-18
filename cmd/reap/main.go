@@ -286,6 +286,7 @@ func gather(opts options) (*report.Report, error) {
 	for _, p := range platforms {
 		pid := string(p.ID)
 		parsedAny := false
+		var sqliteErr error
 		mergeParsed := func(parsed *usage.Stats) {
 			parsedAny = true
 			if parsed.IncompleteEvidence && !evidenceBlind[pid] {
@@ -313,6 +314,7 @@ func gather(opts options) (*report.Report, error) {
 		case "sqlite":
 			if p.TranscriptDB != "" {
 				parsed, err := usage.ParseSQLite(p.TranscriptDB, cutoff, opts.days)
+				sqliteErr = err
 				if parsed != nil {
 					mergeParsed(parsed)
 				}
@@ -335,7 +337,13 @@ func gather(opts options) (*report.Report, error) {
 			evidenceBlind[pid] = true
 			reason := "no session transcripts were found"
 			if p.TranscriptType == "sqlite" {
-				reason = "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH"
+				if errors.Is(sqliteErr, usage.ErrNoSQLite) {
+					reason = "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH"
+				} else if sqliteErr != nil {
+					reason = fmt.Sprintf("its SQLite history could not be read: %v", sqliteErr)
+				} else {
+					reason = "no SQLite session history was found"
+				}
 			} else if p.TranscriptType != "jsonl" {
 				reason = fmt.Sprintf("its transcripts use a format skillreaper does not parse yet (%s)", p.TranscriptType)
 			}
@@ -513,6 +521,9 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	r, err := gather(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -629,13 +640,17 @@ func findItem(r *report.Report, name string) (report.Row, bool) {
 			return row, true
 		}
 	}
+	matches := make([]report.Row, 0, 2)
 	for _, row := range r.Rows {
 		if !mutable(row) {
 			continue
 		}
 		if i := strings.LastIndexByte(row.Name, ':'); i >= 0 && row.Name[i+1:] == name {
-			return row, true
+			matches = append(matches, row)
 		}
+	}
+	if len(matches) == 1 {
+		return matches[0], true
 	}
 	return report.Row{}, false
 }

@@ -5,6 +5,7 @@ import { basename } from "node:path";
 import { pipeline } from "node:stream/promises";
 
 const REPO_RELEASES = "https://github.com/thousandflowers/skillreaper/releases";
+const FETCH_TIMEOUT_MS = 30_000;
 
 const osMap = {
   darwin: "darwin",
@@ -87,7 +88,7 @@ export async function verifySha256File(filePath, expectedHash) {
 }
 
 async function fetchOk(url) {
-  const resp = await fetch(url);
+  const resp = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
   }

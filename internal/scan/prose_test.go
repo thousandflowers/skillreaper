@@ -48,3 +48,27 @@ func TestScanProseSkipsRuleSymlinkEscapingTree(t *testing.T) {
 		}
 	}
 }
+
+func TestScanProseSkipsSymlinkedRulesRootOutsideTree(t *testing.T) {
+	dir := t.TempDir()
+	outsideRules := filepath.Join(t.TempDir(), "rules")
+	if err := os.MkdirAll(outsideRules, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideRules, "external.md"), []byte("external"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideRules, filepath.Join(dir, "rules")); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+
+	items, warns := ScanProse(dir, "", "claude-code")
+	for _, it := range items {
+		if it.Source == "rules" {
+			t.Errorf("symlinked rules root should be skipped, got %q", it.Path)
+		}
+	}
+	if len(warns) != 1 {
+		t.Fatalf("warnings = %d, want 1", len(warns))
+	}
+}

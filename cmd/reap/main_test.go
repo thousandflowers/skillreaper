@@ -11,6 +11,7 @@ import (
 
 	"github.com/thousandflowers/skillreaper/internal/hook"
 	"github.com/thousandflowers/skillreaper/internal/report"
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 func TestStateCommandsRequireClaudeDir(t *testing.T) {
@@ -28,6 +29,15 @@ func TestStateCommandsRequireClaudeDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "settings.json")); !os.IsNotExist(err) {
 		t.Error("install-hook polluted the cwd with settings.json")
+	}
+
+	out.Reset()
+	errb.Reset()
+	if code := cmdPrune(options{claudeDir: ""}, strings.NewReader(""), &out, &errb); code == 0 {
+		t.Error("prune with no claude dir should fail, not write to cwd")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "reaped")); !os.IsNotExist(err) {
+		t.Error("prune polluted the cwd with reaped/")
 	}
 }
 
@@ -197,8 +207,36 @@ func TestRunReportOverlongTranscriptHoldsAbsenceDecisionsAtReview(t *testing.T) 
 	if row := byName["deadskill"]; row.Verdict != report.VerdictReview || row.Reason != report.ReasonNoEvidence {
 		t.Errorf("deadskill verdict = %s(%s), want REVIEW(%s)", row.Verdict, row.Reason, report.ReasonNoEvidence)
 	}
-	if len(r.Warnings) == 0 || !strings.Contains(r.Warnings[0].Msg, "incomplete") {
+	foundIncomplete := false
+	for _, w := range r.Warnings {
+		if strings.Contains(w.Msg, "incomplete") {
+			foundIncomplete = true
+			break
+		}
+	}
+	if !foundIncomplete {
 		t.Errorf("expected incomplete-evidence warning, got %+v", r.Warnings)
+	}
+}
+
+func TestFindItemRejectsAmbiguousSuffixMatch(t *testing.T) {
+	r := &report.Report{Rows: []report.Row{
+		{Item: scan.Item{Category: scan.CatSkill, Name: "one:plan", Removable: true}},
+		{Item: scan.Item{Category: scan.CatSkill, Name: "two:plan", Removable: true}},
+	}}
+	if _, ok := findItem(r, "plan"); ok {
+		t.Fatal("ambiguous suffix match should not select an arbitrary item")
+	}
+}
+
+func TestFindItemAllowsUniqueSuffixMatch(t *testing.T) {
+	r := &report.Report{Rows: []report.Row{
+		{Item: scan.Item{Category: scan.CatSkill, Name: "one:plan", Removable: true}},
+		{Item: scan.Item{Category: scan.CatSkill, Name: "two:build", Removable: true}},
+	}}
+	row, ok := findItem(r, "plan")
+	if !ok || row.Name != "one:plan" {
+		t.Fatalf("unique suffix match = %+v, %v; want one:plan", row, ok)
 	}
 }
 

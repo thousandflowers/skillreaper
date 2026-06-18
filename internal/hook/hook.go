@@ -243,7 +243,7 @@ func SaveNudgeState(claudeDir string, s NudgeState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(nudgeStatePath(claudeDir), b, 0o600)
+	return atomicfile.Write(nudgeStatePath(claudeDir), b, 0o600)
 }
 
 // ShouldNudge reports whether a passive nudge should print now: at least

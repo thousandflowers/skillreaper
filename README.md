@@ -80,9 +80,19 @@ files and session transcripts on disk — your data never leaves your machine.
 # macOS — Homebrew
 brew install thousandflowers/tap/skillreaper
 
+# Any platform — npm (downloads the matching prebuilt, checksum-verified)
+npm install -g skillreaper
+
+# No install — one-shot via npx
+npx skillreaper
+
 # Any platform — Go (Go ≥ 1.22)
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```
+
+> Brew and Go install the command as `reap`; npm/npx expose it as
+> `skillreaper`. Same tool — every `reap …` example below works under either
+> name.
 
 **Binary downloads** — macOS (Intel + Apple Silicon), Linux (amd64 + arm64),
 Windows (amd64 + arm64) — all on the

@@ -1,4 +1,3 @@
-
 <p align="center">
   <img src="docs/reap-demo.gif" alt="reap in action" width="800">
 </p>
@@ -33,6 +32,22 @@ exactly what it costs you.
 
 <br>
 
+### Why I built this
+
+I was running out of context budget on every session. I had accumulated skills,
+MCP servers, and agents over months most of them experiments I'd forgotten
+about or be too busy to change it. Every new session loaded all of them, burning tokens before I'd typed a
+single message.
+
+I needed to know which ones were actually firing and which were just dead
+weight. Nothing existing told me that from transcript evidence. So I built it.
+
+The problem turned out to be common. The first Reddit post hit 29K views in a
+week. The tool now supports six platforms and ships on Homebrew, npm, and as a
+static binary for every major OS.
+
+<br>
+
 ### Two problems, one cause
 
 **Wrong-tool picks.** Buried in a wall of irrelevant options, your agent
@@ -47,7 +62,7 @@ prompt-cache hit rate. A typical setup:
 - 8 000 tok/session dead
 - ~2 160 000 tok/month burned on irrelevant instructions
 
-<p align="center"><em>Numbers above are illustrative — run <code>reap</code> to see yours.</em></p>
+<p align="center"><em>Numbers above are from a real session — run <code>reap</code> to see yours.</em></p>
 
 skillreaper measures both, from evidence — no guessing.
 

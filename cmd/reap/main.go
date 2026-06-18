@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -27,6 +28,21 @@ import (
 
 // Version is set via -ldflags at release time.
 var Version = "dev"
+
+// version returns the build version. goreleaser injects it via -ldflags; for
+// `go install ...@latest` it falls back to the module version recorded in the
+// build info, so users see a real version instead of "dev".
+func version() string {
+	if Version != "dev" {
+		return Version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return Version
+}
 
 const usageText = `reap — evidence-based pruning for your Claude Code agent stack
 
@@ -163,7 +179,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "nudge":
 		return cmdNudge(opts, stdout, stderr)
 	case "version":
-		fmt.Fprintln(stdout, "reap", Version)
+		fmt.Fprintln(stdout, "reap", version())
 		return 0
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)

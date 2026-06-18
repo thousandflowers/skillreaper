@@ -7,6 +7,8 @@ import test from "node:test";
 import {
   checksumForAsset,
   checksumsDownloadUrl,
+  isSourceCheckout,
+  latestDownloadUrl,
   platformTarget,
   releaseDownloadUrl,
   releaseTagForVersion,
@@ -24,6 +26,18 @@ test("release URLs are pinned to the package version tag", () => {
   );
   assert.equal(checksumsDownloadUrl(tag).includes("/releases/latest/"), false);
   assert.equal(url.includes("/releases/latest/"), false);
+});
+
+test("source checkout resolves the latest release, real versions stay pinned", () => {
+  assert.equal(isSourceCheckout("0.0.0"), true);
+  assert.equal(isSourceCheckout("dev"), true);
+  assert.equal(isSourceCheckout(undefined), true);
+  assert.equal(isSourceCheckout("0.3.2"), false);
+
+  assert.equal(
+    latestDownloadUrl("checksums.txt"),
+    "https://github.com/thousandflowers/skillreaper/releases/latest/download/checksums.txt"
+  );
 });
 
 test("platform target uses release archive and binary names", () => {

@@ -18,11 +18,25 @@ const archMap = {
   arm64: "arm64",
 };
 
+// A source checkout (git clone) carries the sentinel version below instead
+// of a real release. npm publish rewrites it to the tag version, so the
+// sentinel is only ever seen when installing from source — in which case we
+// fetch the latest published release rather than a stale pinned one.
+const SOURCE_VERSIONS = new Set(["0.0.0", "0.0.0-dev", "dev"]);
+
+export function isSourceCheckout(version) {
+  return !version || SOURCE_VERSIONS.has(version);
+}
+
 export function releaseTagForVersion(version) {
   if (!version) {
     throw new Error("package version is required to select a release");
   }
   return version.startsWith("v") ? version : `v${version}`;
+}
+
+export function latestDownloadUrl(assetName) {
+  return `${REPO_RELEASES}/latest/download/${encodeURIComponent(assetName)}`;
 }
 
 export function platformTarget(platformName = platform(), archName = arch()) {
@@ -96,10 +110,19 @@ async function fetchOk(url) {
 }
 
 export async function downloadVerifiedReleaseAsset({ version, assetName, destination }) {
-  const tag = releaseTagForVersion(version);
-  const checksumsResp = await fetchOk(checksumsDownloadUrl(tag));
+  const source = isSourceCheckout(version);
+  const checksumsUrl = source
+    ? latestDownloadUrl("checksums.txt")
+    : checksumsDownloadUrl(releaseTagForVersion(version));
+  const assetUrl = source
+    ? latestDownloadUrl(assetName)
+    : releaseDownloadUrl(releaseTagForVersion(version), assetName);
+
+  // Checksums and asset come from the same release, so the hash check below
+  // still guarantees integrity even when resolving "latest".
+  const checksumsResp = await fetchOk(checksumsUrl);
   const expectedHash = checksumForAsset(await checksumsResp.text(), assetName);
-  const assetResp = await fetchOk(releaseDownloadUrl(tag, assetName));
+  const assetResp = await fetchOk(assetUrl);
 
   if (!assetResp.body) {
     throw new Error(`empty response body for ${assetName}`);

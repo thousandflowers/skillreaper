@@ -2,9 +2,6 @@ version: 2
 
 project_name: skillreaper
 
-env:
-  - GO_VERSION=1.22
-
 before:
   hooks:
     - go mod tidy

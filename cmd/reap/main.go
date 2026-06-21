@@ -51,6 +51,7 @@ Usage:
   reap gap [flags]          loaded-vs-fired utilization breakdown
   reap by-project [flags]   skills bucketed by the project that fired them
   reap route [flags]        propose a usage-informed lazy-load routing plan
+  reap apm [flags]          emit a proposed APM apm.yml from per-repo firing
   reap manifest <name>      emit a release manifest for one skill
   reap why <name>           explain in detail why an item got its verdict
   reap prune [flags]        quarantine unused items (reversible)
@@ -77,6 +78,7 @@ type options struct {
 	muteMinTokens  int
 	routeThreshold float64
 	routeMinSkills int
+	apmDiff        string
 	price          float64
 	model          string
 	asJSON         bool
@@ -110,6 +112,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.IntVar(&opts.muteMinTokens, "mute-min-tokens", 50, "only MUTE skills heavier than this token weight")
 	fs.Float64Var(&opts.routeThreshold, "route-threshold", 0.10, "route: skills fired in fewer than this fraction of sessions get routed behind a leaf router")
 	fs.IntVar(&opts.routeMinSkills, "route-min-skills", 0, "route: skip the plan unless at least this many skills survive a prune (0 = always show)")
+	fs.StringVar(&opts.apmDiff, "diff", "", "apm: reconcile the proposed manifest against an existing apm.yml at this path")
 	fs.StringVar(&opts.model, "model", "", "model ID for pricing lookup (overrides --price)")
 	fs.Float64Var(&opts.price, "price", 0, "input price per million tokens (USD) — used when --model is unknown or unset")
 	fs.BoolVar(&opts.asJSON, "json", false, "output JSON")
@@ -157,6 +160,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdByProject(opts, stdout, stderr)
 	case "route":
 		return cmdRoute(opts, stdout, stderr)
+	case "apm":
+		return cmdApm(opts, stdout, stderr)
 	case "manifest":
 		return cmdManifest(opts, rest, stdout, stderr)
 	case "why":
@@ -898,6 +903,33 @@ func cmdRoute(opts options, stdout, stderr io.Writer) int {
 		report.RenderRoutePlanMarkdown(stdout, plan)
 	default:
 		report.RenderRoutePlan(stdout, plan, colorEnabled(opts, stdout))
+	}
+	return 0
+}
+
+func cmdApm(opts options, stdout, stderr io.Writer) int {
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	cwd, _ := os.Getwd()
+	declared, lock, err := report.LoadAPMContext(opts.apmDiff, cwd)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	m := report.BuildAPM(r, cwd, lock, declared, opts.apmDiff)
+	switch {
+	case opts.asJSON:
+		if err := report.RenderAPMJSON(stdout, m); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+	case opts.asMarkdown:
+		report.RenderAPMMarkdown(stdout, m)
+	default:
+		report.RenderAPMYAML(stdout, m)
 	}
 	return 0
 }

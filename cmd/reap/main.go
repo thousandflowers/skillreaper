@@ -430,6 +430,13 @@ func mergeStats(dst, src *usage.Stats) {
 			dst.SkillProjects[key][proj] += count
 		}
 	}
+	for key, p := range src.MCPPayload {
+		d := dst.MCPPayload[key]
+		d.Calls += p.Calls
+		d.TotalChars += p.TotalChars
+		d.NoiseChars += p.NoiseChars
+		dst.MCPPayload[key] = d
+	}
 }
 
 func cmdReport(opts options, stdout, stderr io.Writer) int {

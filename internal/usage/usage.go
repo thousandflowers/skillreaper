@@ -58,6 +58,22 @@ type Stats struct {
 	// skill descriptions, and agent definitions that the model receives
 	// every session but never uses.
 	DeadToolChars int
+
+	// MCPPayload accumulates payload-quality evidence per MCP tool key
+	// ("mcp__server__tool"): how many results were measured and how much of
+	// their content was useful vs noise. It powers the "fires but mostly
+	// noise" axis — a tool that fires often yet returns mostly base64/boilerplate
+	// every call. Only MCP tools are scored (heaviest, noisiest payloads).
+	MCPPayload map[string]PayloadStat
+}
+
+// PayloadStat is the per-MCP-tool payload-quality accumulator. Calls is the
+// number of tool_result payloads measured; TotalChars/NoiseChars sum bytes
+// across them. Stored by value to match Stats' int-map style.
+type PayloadStat struct {
+	Calls      int
+	TotalChars int
+	NoiseChars int
 }
 
 // NewStats returns an empty Stats with initialized maps.
@@ -77,7 +93,21 @@ func NewStats(windowDays int) *Stats {
 			scan.CatSkill: {}, scan.CatAgent: {}, scan.CatMCP: {},
 		},
 		SkillProjects: map[string]map[string]int{},
+		MCPPayload:    map[string]PayloadStat{},
 	}
+}
+
+// recordPayload folds one measured MCP tool_result into the per-tool quality
+// accumulator. toolKey is the full "mcp__server__tool" name. No-op on empty key.
+func (s *Stats) recordPayload(toolKey string, total, noise int) {
+	if toolKey == "" {
+		return
+	}
+	p := s.MCPPayload[toolKey]
+	p.Calls++
+	p.TotalChars += total
+	p.NoiseChars += noise
+	s.MCPPayload[toolKey] = p
 }
 
 // recordSkillProject attributes one successful skill firing to a project.
@@ -226,6 +256,7 @@ func parseFile(path, project string, st *Stats) {
 	declared := map[string]int{}
 	used := map[string]bool{}
 	pending := map[string]pendingSkill{}
+	mcpPending := map[string]string{}
 	parsedInit := false
 
 	sc := bufio.NewScanner(f)
@@ -269,7 +300,7 @@ func parseFile(path, project string, st *Stats) {
 		if err := json.Unmarshal(e.Message.Content, &blocks); err != nil {
 			continue
 		}
-		recordBlocks(st, blocks, ts, project, pending, used)
+		recordBlocks(st, blocks, ts, project, pending, mcpPending, used)
 	}
 	if sc.Err() != nil {
 		st.MalformedLines++
@@ -296,7 +327,7 @@ func parseFile(path, project string, st *Stats) {
 // tool_use with its tool_result (so an errored invocation is not counted as a
 // use). project (""-ok) attributes a successful skill firing to a repo. used
 // (nil-ok) records every tool name seen, for JSONL dead-tool weight.
-func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string, pending map[string]pendingSkill, used map[string]bool) {
+func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string, pending map[string]pendingSkill, mcpPending map[string]string, used map[string]bool) {
 	rec := func(key string, t time.Time) {
 		st.record(scan.CatSkill, key, t)
 		st.recordSkillProject(key, project)
@@ -344,8 +375,23 @@ func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string
 				} else {
 					st.record(scan.CatMCP, rest, ts)
 				}
+				// Defer payload scoring until this call's tool_result arrives.
+				// A result-less call (session ended mid-call) is simply never
+				// scored — absence of a result is not evidence of noise.
+				if mcpPending != nil && b.ID != "" {
+					mcpPending[b.ID] = b.Name
+				}
 			}
 		case "tool_result":
+			// Score the matching MCP call's payload, if any. Independent of the
+			// skill-result correlation below: MCP and Skill never share an id.
+			if mcpPending != nil {
+				if tool, ok := mcpPending[b.ToolUseID]; ok {
+					total, noise := classifyPayload(b.Content)
+					st.recordPayload(tool, total, noise)
+					delete(mcpPending, b.ToolUseID)
+				}
+			}
 			ps, ok := pending[b.ToolUseID]
 			if !ok {
 				continue

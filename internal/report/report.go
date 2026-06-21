@@ -69,6 +69,10 @@ type Report struct {
 	// SkillProjects maps a skill key to the projects that fired it (see
 	// usage.Stats.SkillProjects). Powers the by-project view.
 	SkillProjects map[string]map[string]int
+	// MCPPayload holds the per-MCP-tool payload-quality scores (the second
+	// utilization axis: signal vs noise per call). Powers the payload section
+	// of the gap view. Nil/empty when there is no MCP result evidence.
+	MCPPayload []PayloadRow
 }
 
 // Build joins inventory items with usage stats and computes verdicts
@@ -154,6 +158,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 
 	r.MoneyPerMonth = cost.MoneyPerMonth(r.DeadTokensPerSession, r.SessionsPerMonth, opts.PricePerMTok)
 	r.SkillProjects = st.SkillProjects
+	r.MCPPayload = computePayload(st)
 	sortRows(r.Rows)
 	r.Gap = computeGap(r.Rows)
 	return r

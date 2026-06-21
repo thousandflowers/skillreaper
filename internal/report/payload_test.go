@@ -26,9 +26,12 @@ func TestComputePayloadClassifiesAndSorts(t *testing.T) {
 	if len(rows) != 3 {
 		t.Fatalf("want 3 scored rows (empty skipped), got %d", len(rows))
 	}
-	// Worst quality first.
-	if rows[0].Tool != "mcp__rare__thing" {
-		t.Errorf("worst-quality first: got %s", rows[0].Tool)
+	// Flagged-noisy tools lead (fetch is the only Noisy one); then worst quality.
+	if rows[0].Tool != "mcp__fetch__fetch" {
+		t.Errorf("noisy tool should lead: got %s", rows[0].Tool)
+	}
+	if rows[1].Tool != "mcp__rare__thing" {
+		t.Errorf("worst-quality non-noisy next: got %s", rows[1].Tool)
 	}
 	byTool := map[string]PayloadRow{}
 	for _, r := range rows {

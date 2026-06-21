@@ -169,6 +169,58 @@ func TestRenderAPMRuns(t *testing.T) {
 	}
 }
 
+func TestEncodeProjectMatchesClaudeCode(t *testing.T) {
+	// CC collapses every non-alphanumeric (including '.', '_', space, '-') to '-'.
+	cases := map[string]string{
+		"/Users/me/myrepo":              "-Users-me-myrepo",
+		"/Users/me/my_project":          "-Users-me-my-project",
+		"/Users/me/app.v2":              "-Users-me-app-v2",
+		"/Users/me/.config/x":           "-Users-me--config-x",
+		"/Users/me/Application Support": "-Users-me-Application-Support",
+	}
+	for in, want := range cases {
+		if got := encodeProject(in); got != want {
+			t.Errorf("encodeProject(%q): want %q, got %q", in, want, got)
+		}
+	}
+}
+
+// TestLoadAPMManifestIgnoresCommentsAndHeaders feeds skillreaper's OWN emitted
+// YAML back through the loader and asserts no phantom 'declared'/lock entries
+// come from the comment header, the placeholder TODO hint, or URLs — the high
+// finding from review (self-triggering fabricated drop suggestions).
+func TestLoadAPMManifestIgnoresCommentsAndHeaders(t *testing.T) {
+	lock := map[string]string{"frontend-design": "anthropics/skills/skills/frontend-design"}
+	// Use the fixture's own cwd so skills actually fire here and the manifest is
+	// non-empty; the "# repo:" header still carries a slashed path to test that
+	// comment lines are not harvested.
+	m := BuildAPM(apmReport(), apmCwd, lock, nil, "")
+	var buf bytes.Buffer
+	RenderAPMYAML(&buf, m) // emits "# repo: ..." header + "owner/repo/path" TODO + a real dep
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apm.yml")
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	declared, declLock, err := LoadAPMManifest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The only declared entry must be the real coordinate's last segment.
+	for _, phantom := range []string{"path", "repo", "owner", "myrepo", "apm", "skillreaper"} {
+		if declared[phantom] {
+			t.Errorf("phantom declared entry %q harvested from a comment/header", phantom)
+		}
+	}
+	if !declared["frontend-design"] {
+		t.Errorf("real coordinate should be declared; got %v", declared)
+	}
+	if declLock["path"] != "" {
+		t.Errorf("placeholder hint must not pollute lock: %q", declLock["path"])
+	}
+}
+
 func depNames(deps []APMDep) []string {
 	var out []string
 	for _, d := range deps {

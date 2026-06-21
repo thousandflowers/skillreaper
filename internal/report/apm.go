@@ -73,7 +73,7 @@ type APMReport struct {
 func BuildAPM(r *Report, cwd string, lock map[string]string, declared map[string]bool, diffPath string) APMReport {
 	repoKey := encodeProject(cwd)
 	out := APMReport{
-		Repo:       prettyProject(repoKey),
+		Repo:       cwd, // verbatim — the encoded key is lossy and not round-trippable
 		WindowDays: r.WindowDays,
 		Sessions:   r.Sessions,
 		Diff:       declared != nil,
@@ -209,17 +209,50 @@ func LoadAPMManifest(path string) (declared map[string]bool, lock map[string]str
 	}
 	declared = map[string]bool{}
 	lock = map[string]string{}
-	for _, m := range apmCoordRe.FindAllString(string(data), -1) {
-		coord := m
-		seg := coordLastSegment(coord)
-		if seg == "" {
+	for _, raw := range strings.Split(string(data), "\n") {
+		// Only dependency list items carry coordinates. Skipping non-list lines
+		// keeps slashes in comments, the "# repo:" header, URLs, and the literal
+		// "owner/repo/path" placeholder hint out of the declared/lock sets.
+		line := stripYAMLComment(raw)
+		if !strings.HasPrefix(strings.TrimSpace(line), "-") {
 			continue
 		}
-		declared[seg] = true
-		// last write wins; lockfiles list each skill once so this is lossless there.
-		lock[seg] = coord
+		for _, m := range apmCoordRe.FindAllString(line, -1) {
+			seg := coordLastSegment(m)
+			if seg == "" {
+				continue
+			}
+			declared[seg] = true
+			if lock[seg] == "" { // first real declaration wins
+				lock[seg] = m
+			}
+		}
 	}
 	return declared, lock, nil
+}
+
+// stripYAMLComment removes a trailing YAML comment from a line. A '#' counts as
+// a comment only outside quotes and at line start or after whitespace, so quoted
+// or unquoted "#version" pins inside a coordinate are preserved.
+func stripYAMLComment(line string) string {
+	inSingle, inDouble := false, false
+	for i := 0; i < len(line); i++ {
+		switch line[i] {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '#':
+			if !inSingle && !inDouble && (i == 0 || line[i-1] == ' ' || line[i-1] == '\t') {
+				return line[:i]
+			}
+		}
+	}
+	return line
 }
 
 // LoadAPMContext gathers everything BuildAPM needs from disk: the declared
@@ -287,13 +320,21 @@ func repoUses(r *Report, name, repoKey string) int {
 	return n
 }
 
-// encodeProject reverses prettyProject: a cwd path becomes Claude Code's encoded
-// project-bucket name. Lossy where paths contain '-', matching CC's own scheme.
+// projectEncodeRe matches every character Claude Code collapses when it names a
+// ~/.claude/projects bucket from a cwd: all non-alphanumerics (/, ., _, space,
+// existing '-', …), each replaced by a single '-'.
+var projectEncodeRe = regexp.MustCompile(`[^A-Za-z0-9]`)
+
+// encodeProject reproduces Claude Code's project-bucket directory name for a
+// cwd, so a repo path matches the key stored in usage.Stats.SkillProjects.
+// CC replaces every non-alphanumeric run-member with '-'; matching that exactly
+// is what makes the per-repo firing lookup work for paths with '.', '_', or
+// spaces (e.g. ".config", "my_project", "Application Support").
 func encodeProject(cwd string) string {
 	if cwd == "" {
 		return ""
 	}
-	return strings.ReplaceAll(cwd, "/", "-")
+	return projectEncodeRe.ReplaceAllString(cwd, "-")
 }
 
 // bareSuffix returns the part of a namespaced skill name after the last ':',
@@ -327,7 +368,20 @@ func RenderAPMYAML(w io.Writer, m APMReport) {
 	fmt.Fprintf(w, "# repo: %s · window: %dd · %d sessions\n", orNone(m.Repo), m.WindowDays, m.Sessions)
 	fmt.Fprintln(w, "# skills only (first cut); MCP servers and agents are not emitted yet.")
 	fmt.Fprintln(w, "dependencies:")
-	fmt.Fprintln(w, "  apm:")
+	// Emit "apm: []" when no line will be an active list item, so the value
+	// parses as an empty list rather than null (comments don't make a list).
+	hasActive := false
+	for _, d := range m.Deps {
+		if !d.Placeholder {
+			hasActive = true
+			break
+		}
+	}
+	if hasActive {
+		fmt.Fprintln(w, "  apm:")
+	} else {
+		fmt.Fprintln(w, "  apm: []")
+	}
 	if len(m.Deps) == 0 {
 		fmt.Fprintln(w, "    # no skills fired in this repo within the window.")
 	}

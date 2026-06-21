@@ -37,8 +37,10 @@ type PayloadRow struct {
 }
 
 // computePayload turns the per-tool payload accumulators into sorted, scored
-// rows. Tools with no measured bytes are skipped (no evidence). Worst quality
-// first, then most calls, then tool name — so the noisiest heavy hitters lead.
+// rows. Tools with no measured bytes are skipped (no evidence). Flagged-noisy
+// tools lead (they fire often AND waste context, the actionable cases); then by
+// worst quality, most calls, and tool name — so a single 0%-quality anecdote
+// never outranks a genuine high-volume offender.
 func computePayload(st *usage.Stats) []PayloadRow {
 	if st == nil || len(st.MCPPayload) == 0 {
 		return nil
@@ -67,6 +69,9 @@ func computePayload(st *usage.Stats) []PayloadRow {
 		return nil
 	}
 	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Noisy != rows[j].Noisy {
+			return rows[i].Noisy // flagged-noisy tools lead
+		}
 		if rows[i].QualityPct != rows[j].QualityPct {
 			return rows[i].QualityPct < rows[j].QualityPct
 		}

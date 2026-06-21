@@ -890,8 +890,9 @@ func cmdRoute(opts options, stdout, stderr io.Writer) int {
 	}
 	plan := report.BuildRoutePlan(r, opts.routeThreshold)
 	if opts.routeMinSkills > 0 && plan.TotalSkills < opts.routeMinSkills {
-		fmt.Fprintf(stdout, "Only %d skills survive a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first.\n", plan.TotalSkills, opts.routeMinSkills)
-		return 0
+		// Flag the skip on the plan so every output format renders it (parity).
+		plan.Skipped = true
+		plan.MinSkills = opts.routeMinSkills
 	}
 	switch {
 	case opts.asJSON:

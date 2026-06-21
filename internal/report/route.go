@@ -50,7 +50,7 @@ type RouteSkill struct {
 	Reason string  `json:"reason"` // frequent | rare | no-evidence
 	Uses   int     `json:"uses"`
 	Tokens int     `json:"tokens"`
-	Rate   float64 `json:"rate"` // uses/sessions, 0..1
+	Rate   float64 `json:"rate"` // uses/sessions; ≥0, can exceed 1 if fired many times per session
 }
 
 // RouteCategory is one leaf router holding rarely-fired skills, derived from
@@ -72,6 +72,11 @@ type RoutePlan struct {
 	Categories      []RouteCategory `json:"categories"`
 	ExposedTok      int             `json:"exposed_tok"` // stays resident every session
 	RoutedTok       int             `json:"routed_tok"`  // moved behind routers (the win)
+	// Skipped marks that the caller's --route-min-skills gate suppressed the
+	// plan (too few surviving skills to bother routing). Rendered in every
+	// format so JSON/Markdown/text stay in parity.
+	Skipped   bool `json:"skipped"`
+	MinSkills int  `json:"min_skills,omitempty"`
 }
 
 // BuildRoutePlan classifies every skill that would survive a prune into exposed
@@ -145,20 +150,11 @@ func routeCategory(r *Report, name string) (catName, source string) {
 	return "misc", "misc"
 }
 
-// skillProjects merges a skill's project-firing buckets under both its full name
-// and its bare slash-command suffix (transcripts record the latter), mirroring
-// lookupUses' aliasing.
+// skillProjects returns a skill's project-firing buckets. It is only reached for
+// non-namespaced names (routeCategory handles namespaced skills before calling),
+// so a plain name lookup is sufficient.
 func skillProjects(r *Report, name string) map[string]int {
-	out := map[string]int{}
-	for p, c := range r.SkillProjects[name] {
-		out[p] += c
-	}
-	if i := strings.LastIndexByte(name, ':'); i >= 0 {
-		for p, c := range r.SkillProjects[name[i+1:]] {
-			out[p] += c
-		}
-	}
-	return out
+	return r.SkillProjects[name]
 }
 
 // sortRouteSkills orders skills by firing count desc, then tokens desc, then name.
@@ -187,7 +183,12 @@ func sortCategories(cats map[string]*RouteCategory) []RouteCategory {
 		if out[i].RoutedTok != out[j].RoutedTok {
 			return out[i].RoutedTok > out[j].RoutedTok
 		}
-		return out[i].Name < out[j].Name
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		// Same name, different source (namespace vs project vs misc) — break the
+		// tie deterministically so the plan is stable/diffable.
+		return out[i].Source < out[j].Source
 	})
 	return out
 }
@@ -195,6 +196,11 @@ func sortCategories(cats map[string]*RouteCategory) []RouteCategory {
 // RenderRoutePlan writes the human-readable routing plan.
 func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 	paint := painter(color)
+	if plan.Skipped {
+		fmt.Fprintf(w, "\n%s\n  %s\n", paint(cBold, "reap route"),
+			paint(cDim, fmt.Sprintf("Only %d skills survive a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first.", plan.TotalSkills, plan.MinSkills)))
+		return
+	}
 	fmt.Fprintf(w, "\n%s\n", paint(cBold, "reap route — usage-informed lazy-load plan (proposed, never applied)"))
 	fmt.Fprintf(w, "  %s\n\n",
 		paint(cDim, fmt.Sprintf("%d skills survive a prune · %d sessions · expose threshold %.0f%%",
@@ -247,6 +253,10 @@ func RenderRoutePlanJSON(w io.Writer, plan *RoutePlan) error {
 
 // RenderRoutePlanMarkdown writes the plan as Markdown.
 func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
+	if plan.Skipped {
+		fmt.Fprintf(w, "# reap route\n\n_Only %d skills survive a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first._\n", plan.TotalSkills, plan.MinSkills)
+		return
+	}
 	fmt.Fprintf(w, "# reap route — usage-informed lazy-load plan\n\n")
 	fmt.Fprintf(w, "_Proposed, never applied. %d skills survive a prune · %d sessions · expose threshold %.0f%%._\n\n",
 		plan.TotalSkills, plan.Sessions, plan.ExposeThreshold*100)

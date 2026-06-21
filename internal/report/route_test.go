@@ -2,6 +2,8 @@ package report
 
 import (
 	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/thousandflowers/skillreaper/internal/scan"
@@ -111,6 +113,35 @@ func TestRenderRoutePlanRuns(t *testing.T) {
 		},
 	} {
 		render()
+	}
+}
+
+func TestRenderRouteSkippedParity(t *testing.T) {
+	plan := BuildRoutePlan(routeReport(), 0.10)
+	plan.Skipped = true
+	plan.MinSkills = 200
+
+	var text, md bytes.Buffer
+	RenderRoutePlan(&text, plan, false)
+	RenderRoutePlanMarkdown(&md, plan)
+	if !strings.Contains(text.String(), "route-min-skills=200") {
+		t.Errorf("text skip view missing the reason:\n%s", text.String())
+	}
+	if !strings.Contains(md.String(), "route-min-skills=200") {
+		t.Errorf("markdown skip view missing the reason:\n%s", md.String())
+	}
+
+	// JSON must remain valid and carry the skipped flag (no prose leak).
+	var js bytes.Buffer
+	if err := RenderRoutePlanJSON(&js, plan); err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(js.Bytes(), &out); err != nil {
+		t.Fatalf("skip JSON must stay valid: %v\n%s", err, js.String())
+	}
+	if out["skipped"] != true {
+		t.Errorf("skip JSON must set skipped=true, got %v", out["skipped"])
 	}
 }
 

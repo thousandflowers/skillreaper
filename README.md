@@ -133,6 +133,10 @@ reap keep <name>              # protect an item from pruning
 reap restore --all            # undo every prune
 reap why <name>               # explain in detail why an item got its verdict
 reap by-project               # skills bucketed by the project that fired them
+reap route                    # propose a usage-informed lazy-load routing plan (opt-in)
+reap apm                      # emit a proposed APM apm.yml from this repo's firing
+reap apm --diff apm.yml       # reconcile: what to add (fired, undeclared) / drop (declared, cold)
+reap gap                      # now also scores MCP payload quality (fires-but-noise)
 reap manifest <name>          # emit a release manifest for one skill
 reap install-hook             # install weekly nudge (SessionStart hook)
 reap install-hook --dry-run   # preview without writing
@@ -201,6 +205,47 @@ right now).
 <pre>reap gap          # text breakdown
 reap gap --json   # JSON output
 reap gap --md     # markdown table</pre>
+
+The gap view also scores **payload quality** for MCP tools: when a tool fires,
+is the result signal or noise? A fetch/screenshot tool can fire 80× and return
+mostly base64 or boilerplate every call — green under load utilization, but
+context burned on each call. Tools that fire often *and* return mostly noise are
+flagged `⚑ noisy`. This is the second utilization axis (load is the first), and
+mute does not catch it.
+
+<br>
+
+### route — usage-informed lazy-load plan (opt-in)
+
+After pruning, a library of hundreds of legit skills still grows resident
+context linearly. `reap route` proposes a category-router organization driven by
+**real firing evidence**, not text similarity: frequently-fired skills stay
+exposed; the rare long tail is pushed behind leaf routers (grouped by namespace,
+else dominant firing project) loaded on demand. It is strictly opt-in and
+secondary to pruning — and below ~150 skills, native loading is usually enough,
+so the plan says so. The output is a **plan**: proposed, never auto-applied.
+
+<pre>reap route                      # text plan
+reap route --json               # JSON
+reap route --md                 # markdown
+reap route --route-threshold 0.05   # route skills firing in <5% of sessions
+reap route --route-min-skills 200   # only show a plan past 200 surviving skills</pre>
+
+<br>
+
+### apm — emit a proposed APM manifest
+
+`reap apm` turns this repo's firing evidence into a proposed
+[APM](https://github.com/microsoft/apm) `apm.yml` (skills only, first cut).
+Read-only: it prints YAML, never edits the repo or runs `apm install`. KEEP →
+include, REAP → omit, REVIEW → never auto-omit. Upstream coordinates are
+recovered from `apm.lock.yaml` when present; otherwise the skill becomes a clearly
+marked `TODO` comment rather than an invented coordinate.
+
+<pre>reap apm                        # propose apm.yml (yaml)
+reap apm --json                 # JSON
+reap apm --md                   # markdown
+reap apm --diff apm.yml         # reconcile: add fired-but-undeclared, drop declared-but-cold</pre>
 
 <br>
 

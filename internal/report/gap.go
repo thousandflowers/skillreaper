@@ -131,6 +131,7 @@ func RenderGap(w io.Writer, r *Report, color bool) {
 
 	renderMuteSavings(w, r, paint)
 	renderBrokenSkills(w, r, paint)
+	renderPayloadQuality(w, r, paint)
 }
 
 // renderMuteSavings shows the per-session tokens recoverable by muting heavy,
@@ -206,13 +207,20 @@ func RenderGapMarkdown(w io.Writer, r *Report) {
 		row(gapLabel(gc.Category), gc, gc.Category == scan.CatMCP)
 	}
 	row("total", GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}, false)
+	renderPayloadMarkdown(w, r)
 }
 
 // RenderGapJSON writes only the Gap snapshot as indented JSON.
 func RenderGapJSON(w io.Writer, r *Report) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(r.Gap)
+	// Embed *Gap so its fields stay top-level (backwards compatible) and add the
+	// payload-quality axis alongside it.
+	out := struct {
+		*Gap
+		Payload []PayloadRow `json:"payload,omitempty"`
+	}{Gap: r.Gap, Payload: r.MCPPayload}
+	return enc.Encode(out)
 }
 
 // computeGap derives the loaded-vs-fired snapshot from joined rows.

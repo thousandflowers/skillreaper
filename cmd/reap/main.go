@@ -50,6 +50,8 @@ Usage:
   reap [flags]              scan and report (read-only)
   reap gap [flags]          loaded-vs-fired utilization breakdown
   reap by-project [flags]   skills bucketed by the project that fired them
+  reap route [flags]        propose a usage-informed lazy-load routing plan
+  reap apm [flags]          emit a proposed APM apm.yml from per-repo firing
   reap manifest <name>      emit a release manifest for one skill
   reap why <name>           explain in detail why an item got its verdict
   reap prune [flags]        quarantine unused items (reversible)
@@ -68,27 +70,30 @@ Flags:
 `
 
 type options struct {
-	days          int
-	minSessions   int
-	graceDays     int
-	minTokens     int
-	muteThreshold float64
-	muteMinTokens int
-	price         float64
-	model         string
-	asJSON        bool
-	asMarkdown    bool
-	noColor       bool
-	yes           bool
-	all           bool
-	dryRun        bool
-	quiet         bool
-	noNudge       bool
-	listKeep      bool
-	removeKeep    string
-	claudeDir     string
-	claudeJSON    string
-	claudeVersion string
+	days           int
+	minSessions    int
+	graceDays      int
+	minTokens      int
+	muteThreshold  float64
+	muteMinTokens  int
+	routeThreshold float64
+	routeMinSkills int
+	apmDiff        string
+	price          float64
+	model          string
+	asJSON         bool
+	asMarkdown     bool
+	noColor        bool
+	yes            bool
+	all            bool
+	dryRun         bool
+	quiet          bool
+	noNudge        bool
+	listKeep       bool
+	removeKeep     string
+	claudeDir      string
+	claudeJSON     string
+	claudeVersion  string
 }
 
 func main() {
@@ -105,6 +110,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.IntVar(&opts.minTokens, "min-tokens", 3, "items below this token weight → KEEP(tiny)")
 	fs.Float64Var(&opts.muteThreshold, "mute-threshold", 0.20, "MUTE used skills fired in fewer than this fraction of sessions (0 disables)")
 	fs.IntVar(&opts.muteMinTokens, "mute-min-tokens", 50, "only MUTE skills heavier than this token weight")
+	fs.Float64Var(&opts.routeThreshold, "route-threshold", 0.10, "route: skills fired in fewer than this fraction of sessions get routed behind a leaf router")
+	fs.IntVar(&opts.routeMinSkills, "route-min-skills", 0, "route: skip the plan unless at least this many skills survive a prune (0 = always show)")
+	fs.StringVar(&opts.apmDiff, "diff", "", "apm: reconcile the proposed manifest against an existing apm.yml at this path")
 	fs.StringVar(&opts.model, "model", "", "model ID for pricing lookup (overrides --price)")
 	fs.Float64Var(&opts.price, "price", 0, "input price per million tokens (USD) — used when --model is unknown or unset")
 	fs.BoolVar(&opts.asJSON, "json", false, "output JSON")
@@ -150,6 +158,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdGap(opts, stdout, stderr)
 	case "by-project":
 		return cmdByProject(opts, stdout, stderr)
+	case "route":
+		return cmdRoute(opts, stdout, stderr)
+	case "apm":
+		return cmdApm(opts, stdout, stderr)
 	case "manifest":
 		return cmdManifest(opts, rest, stdout, stderr)
 	case "why":
@@ -429,6 +441,13 @@ func mergeStats(dst, src *usage.Stats) {
 		for proj, count := range projs {
 			dst.SkillProjects[key][proj] += count
 		}
+	}
+	for key, p := range src.MCPPayload {
+		d := dst.MCPPayload[key]
+		d.Calls += p.Calls
+		d.TotalChars += p.TotalChars
+		d.NoiseChars += p.NoiseChars
+		dst.MCPPayload[key] = d
 	}
 }
 
@@ -860,6 +879,59 @@ func cmdByProject(opts options, stdout, stderr io.Writer) int {
 		return 0
 	}
 	report.RenderByProject(stdout, r, colorEnabled(opts, stdout))
+	return 0
+}
+
+func cmdRoute(opts options, stdout, stderr io.Writer) int {
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	plan := report.BuildRoutePlan(r, opts.routeThreshold)
+	if opts.routeMinSkills > 0 && plan.TotalSkills < opts.routeMinSkills {
+		// Flag the skip on the plan so every output format renders it (parity).
+		plan.Skipped = true
+		plan.MinSkills = opts.routeMinSkills
+	}
+	switch {
+	case opts.asJSON:
+		if err := report.RenderRoutePlanJSON(stdout, plan); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+	case opts.asMarkdown:
+		report.RenderRoutePlanMarkdown(stdout, plan)
+	default:
+		report.RenderRoutePlan(stdout, plan, colorEnabled(opts, stdout))
+	}
+	return 0
+}
+
+func cmdApm(opts options, stdout, stderr io.Writer) int {
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	cwd, _ := os.Getwd()
+	declared, lock, err := report.LoadAPMContext(opts.apmDiff, cwd)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	m := report.BuildAPM(r, cwd, lock, declared, opts.apmDiff)
+	switch {
+	case opts.asJSON:
+		if err := report.RenderAPMJSON(stdout, m); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+	case opts.asMarkdown:
+		report.RenderAPMMarkdown(stdout, m)
+	default:
+		report.RenderAPMYAML(stdout, m)
+	}
 	return 0
 }
 

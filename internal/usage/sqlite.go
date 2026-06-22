@@ -130,6 +130,7 @@ func (r *byteLimitReader) Read(p []byte) (int, error) {
 func parseSQLiteRows(r io.Reader, st *Stats, cutoff time.Time) (int, error) {
 	sessions := map[string]bool{}
 	pending := map[string]pendingSkill{}
+	mcpPending := map[string]string{}
 	curSession := ""
 
 	// A Skill tool_use with no matching result is counted as a use; pending is
@@ -172,7 +173,7 @@ func parseSQLiteRows(r io.Reader, st *Stats, cutoff time.Time) (int, error) {
 		}
 		// project "" — OpenCode messages carry no cwd to bucket by; used nil —
 		// no init block, so no dead-tool weight.
-		recordBlocks(st, blocks, ts, "", pending, nil)
+		recordBlocks(st, blocks, ts, "", pending, mcpPending, nil)
 	}
 	if err := sc.Err(); err != nil {
 		flush()

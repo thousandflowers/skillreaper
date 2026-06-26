@@ -89,6 +89,8 @@ files and session transcripts on disk — your data never leaves your machine.
 
 <br>
 
+<p align="center">If this looks useful → <a href="https://github.com/thousandflowers/skillreaper">⭐ star the repo</a></p>
+
 ### Install
 
 ```bash

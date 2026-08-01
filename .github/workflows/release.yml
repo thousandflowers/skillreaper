@@ -49,15 +49,16 @@ jobs:
             -p "checksums.txt" \
             --output /tmp/checksums.txt
 
-          AMD64_SHA=$(grep darwin_amd64 /tmp/checksums.txt | cut -d' ' -f1)
-          ARM64_SHA=$(grep darwin_arm64 /tmp/checksums.txt | cut -d' ' -f1)
-
-          # rewrite the formula with new version + checksums
+          # bump version (urls interpolate v#{version}, no url rewrite needed)
           sed -i "s/version \"[0-9.]*\"/version \"${VERSION}\"/" skillreaper.rb
-          sed -i "s|/download/v[0-9.]*/skillreaper_darwin_amd64|/download/${TAG}/skillreaper_darwin_amd64|" skillreaper.rb
-          sed -i "s|/download/v[0-9.]*/skillreaper_darwin_arm64|/download/${TAG}/skillreaper_darwin_arm64|" skillreaper.rb
-          sed -i "s/sha256 \"[a-f0-9]\{64\}\"$/sha256 \"${AMD64_SHA}\"/" skillreaper.rb
-          sed -i "0,/sha256 \"[a-f0-9]\{64\}\"$/!{s/sha256 \"[a-f0-9]\{64\}\"$/sha256 \"${ARM64_SHA}\"/}" skillreaper.rb
+
+          # set each stanza's sha256 from its own checksum: match the url
+          # line by platform, then rewrite the sha256 line that follows it
+          for platform in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
+            sha=$(grep "skillreaper_${platform}.tar.gz" /tmp/checksums.txt | cut -d' ' -f1)
+            [ -n "$sha" ] || { echo "missing checksum for ${platform}" >&2; exit 1; }
+            sed -i "\\|skillreaper_${platform}.tar.gz|{n;s|sha256 \"[a-f0-9]*\"|sha256 \"${sha}\"|;}" skillreaper.rb
+          done
 
           git config user.name "skillreaper-bot"
           git config user.email "bot@skillreaper.dev"

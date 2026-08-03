@@ -26,6 +26,8 @@ brew install thousandflowers/tap/skillreaper
 reap
 ```
 
+> The installed binary is `reap` — not `skillreaper`.
+
 **One command. Zero config. Read-only.** It reads your real session transcripts,
 finds every skill / MCP / agent your AI loads but never fires, and shows you
 exactly what it costs you.
@@ -57,12 +59,14 @@ sloppier runs. This isn't about pennies — it's about work quality.
 **Wasted tokens.** Dead instructions eat context every session and hurt
 prompt-cache hit rate. A typical setup:
 
-- 187 items loaded
-- 142 never used (76 %)
-- 8 000 tok/session dead
-- ~2 160 000 tok/month burned on irrelevant instructions
+- 376 items loaded
+- 363 never used (97 %)
+- 19 528 tok/session dead
+- ~918 000 tok/month burned on irrelevant instructions
 
-<p align="center"><em>Numbers above are from a real session — run <code>reap</code> to see yours.</em></p>
+<p align="center"><sub>Token figures are estimates — <code>reap</code> counts tokens as <code>ceil(chars / 3.7)</code>. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
+
+<p align="center"><em>Measured on my own setup — 47 sessions over 30 days. Run <code>reap</code> to see yours.</em></p>
 
 skillreaper measures both, from evidence — no guessing.
 
@@ -81,10 +85,9 @@ files and session transcripts on disk — your data never leaves your machine.
 
 | Before skillreaper | After skillreaper |
 |---|---|
-| 187 items loaded every session | 45 items, all actively used |
-| Wrong tool 1 in 5 turns | Right tool on first try |
-| 8 000 tok/session dead | Full context budget for real work |
-| ~30 pages of irrelevant instructions read monthly | Zero |
+| 376 items loaded every session | 13 kept · 10 actually fire |
+| 19 528 tok/session dead | Full context budget for real work |
+| ≈ 72 000 dead chars ≈ 29 pages every session (at 500 words/pg) | Zero |
 | Lower cache hit rate = higher latency | Smaller prompt fits in cache |
 
 <br>
@@ -103,7 +106,7 @@ npm install -g skillreaper
 # No install — one-shot via npx
 npx skillreaper
 
-# Any platform — Go (Go ≥ 1.26)
+# Any platform — Go (Go ≥ 1.24)
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```
 
@@ -180,24 +183,27 @@ Beyond the prune verdicts, `reap gap` shows your **utilization rate** —
 how much of what you load you actually use.
 
 ```
-⟡ loaded vs fired — last 30 days · 142 sessions
+⟡ loaded vs fired — last 30 days · 47 sessions
 
 CATEGORY   LOADED  FIRED   UTIL   ────────────       TOKENS
-skills        187      4    2%    ▰▱▱▱▱▱▱▱▱▱     ~8 000 →   210
-mcp            12      3   25%    ▰▰▱▱▱▱▱▱▱▱          ? →     ?
-agents         30      2    7%    ▰▱▱▱▱▱▱▱▱▱     ~1 200 →    90
+skills        296      6    2%    ▰▱▱▱▱▱▱▱▱▱    ~15 950 →    71
+mcp            12      1    8%    ▰▱▱▱▱▱▱▱▱▱          0 →     0
+agents         68      3    4%    ▰▱▱▱▱▱▱▱▱▱     ~3 959 →   172
 ───────────────────────────────────────────────────────────────
-total         229      9    4%    ▰▱▱▱▱▱▱▱▱▱     ~9 200 →   300
+total         376     10    3%    ▰▱▱▱▱▱▱▱▱▱    ~19 909 →   243
 ```
 
 Each row breaks down by category (skill, MCP, agent) with item count, token
-weight, and a 10-segment utilization bar. Low utilization (<10 %) is red,
-medium (<50 %) yellow, high (≥50 %) green.
+weight, and a 10-segment utilization bar. The token column reads
+*loaded → actually used*: `~19 909 → 243` means 19 909 tokens load every
+session and only 243 are ever touched — the gap is dead weight that reloads
+each time. Low utilization (<10 %) is red, medium (<50 %) yellow,
+high (≥50 %) green.
 
 The default `reap` report also includes a compact utilization summary line:
 
 ```
-⟡ utilization 4%  —  9/229 items fired · ~300/9 200 tok touched (30d)
+⟡ utilization 3%  —  10/376 items fired · ~243/19 909 tok touched (30d)
 ```
 
 This is the **real** gap between what your agent carries and what it fires —
@@ -339,7 +345,7 @@ lazy tool loading. These two optimizations are complementary, not competing.
 
 ### Design
 
-- **100 % local**, zero dependencies, single static binary (Go ≥ 1.26)
+- **100 % local**, zero dependencies, single static binary (Go ≥ 1.24)
 - **Multi-platform** — adding a new platform is one struct in
   `internal/platform/`
 - **Reversible quarantine** — never deletes, never destructive

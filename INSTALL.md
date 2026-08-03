@@ -45,7 +45,7 @@ skillreaper version
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```
 
-Requires Go >= 1.22. Binary goes to `$GOPATH/bin` (default
+Requires Go >= 1.24. Binary goes to `$GOPATH/bin` (default
 `~/go/bin/reap`). If `~/go/bin` is not in PATH:
 
 ```bash
@@ -77,10 +77,10 @@ Download from the
 Single static binary per archive. No dependencies.
 
 ```bash
-# Example: macOS Apple Silicon v0.1.0
-curl -LO https://github.com/thousandflowers/skillreaper/releases/download/v0.1.0/skillreaper_darwin_arm64.tar.gz
+# Example: macOS Apple Silicon v0.4.1
+curl -LO https://github.com/thousandflowers/skillreaper/releases/download/v0.4.1/skillreaper_darwin_arm64.tar.gz
 tar xzf skillreaper_darwin_arm64.tar.gz
-mv skillreaper /usr/local/bin/
+mv skillreaper /usr/local/bin/reap   # the archive ships the binary as skillreaper; rename to reap
 rm skillreaper_darwin_arm64.tar.gz
 ```
 

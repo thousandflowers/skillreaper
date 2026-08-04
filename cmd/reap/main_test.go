@@ -313,6 +313,17 @@ func TestRunPruneInteractiveAbort(t *testing.T) {
 	}
 }
 
+func TestRunHelp(t *testing.T) {
+	for _, args := range [][]string{{"--help"}, {"-h"}} {
+		t.Run(args[0], func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			if code := run(args, strings.NewReader(""), &out, &errOut); code != 0 {
+				t.Errorf("exit = %d, want 0 (help is not a usage error)", code)
+			}
+		})
+	}
+}
+
 func TestRunVersion(t *testing.T) {
 	tests := []struct {
 		name string

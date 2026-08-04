@@ -141,6 +141,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// flags anywhere; the leftover positionals are the subcommand and its args.
 	positionals, err := parseInterspersed(fs, args)
 	if err != nil {
+		// -h/--help is not a usage error: flag already printed usage, exit 0.
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 	if showVersion {

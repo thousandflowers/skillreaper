@@ -44,9 +44,8 @@ single message.
 I needed to know which ones were actually firing and which were just dead
 weight. Nothing existing told me that from transcript evidence. So I built it.
 
-The problem turned out to be common. The first Reddit post hit 29K views in a
-week. The tool now supports six platforms and ships on Homebrew, npm, and as a
-static binary for every major OS.
+It now supports six platforms and ships on Homebrew, npm, and as a static
+binary for every major OS.
 
 <br>
 

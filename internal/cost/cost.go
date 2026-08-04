@@ -10,19 +10,30 @@ package cost
 // When a provider releases a new model, just add its pricing here
 // instead of changing core logic.
 var ModelPricing = map[string]float64{
-	// Claude — current (June 2026, verified from api docs)
+	// Claude — current (2026-08, verified from api docs)
+	"claude-fable-5":    10.0,
+	"claude-opus-4-8":   5.0,
 	"claude-opus-4-7":   5.0,
 	"claude-opus-4-6":   5.0,
+	"claude-sonnet-5":   3.0,
 	"claude-opus-4-5":   5.0,
 	"claude-sonnet-4-6": 3.0,
 	"claude-sonnet-4-5": 3.0,
 	"claude-haiku-4-5":  1.0,
 	"claude-3-5-sonnet": 3.0,
-
-	// OpenAI
-	"gpt-4o":      2.50,
+	// OpenAI — used by Codex / opencode (input $/1M, 2026-08 from openai.com/pricing)
+	"gpt-5":       1.25,
+	"gpt-5-mini":  0.25,
+	"gpt-4o":      2.5,
 	"gpt-4o-mini": 0.15,
-	"o3-mini":     1.10,
+	"o3":          2.0,
+	"o4-mini":     1.1,
+	"o3-mini":     1.1,
+	// Google Gemini — used by gemini-cli (input $/1M base tier, 2026-08 from ai.google.dev/pricing)
+	"gemini-2.5-pro":         1.25,
+	"gemini-2.5-flash":       0.3,
+	"gemini-3-pro-preview":   2.0,
+	"gemini-3-flash-preview": 0.5,
 }
 
 // DefaultModel is the pricing fallback when no --price or --model

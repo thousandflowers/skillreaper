@@ -104,6 +104,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("reap", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var opts options
+	var showVersion bool
+	fs.BoolVar(&showVersion, "version", false, "print version")
+	fs.BoolVar(&showVersion, "v", false, "print version")
 	fs.IntVar(&opts.days, "days", 30, "evidence window in days")
 	fs.IntVar(&opts.minSessions, "min-sessions", 10, "sessions required before REAP verdicts")
 	fs.IntVar(&opts.graceDays, "grace-days", 14, "items installed this recently → REVIEW(grace)")
@@ -139,6 +142,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	positionals, err := parseInterspersed(fs, args)
 	if err != nil {
 		return 2
+	}
+	if showVersion {
+		fmt.Fprintln(stdout, "reap", version())
+		return 0
 	}
 	cmd := ""
 	var rest []string

@@ -314,12 +314,28 @@ func TestRunPruneInteractiveAbort(t *testing.T) {
 }
 
 func TestRunVersion(t *testing.T) {
-	var out, errOut bytes.Buffer
-	if code := run([]string{"version"}, strings.NewReader(""), &out, &errOut); code != 0 {
-		t.Fatalf("exit = %d", code)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "subcommand", args: []string{"version"}},
+		{name: "long flag", args: []string{"--version"}},
+		{name: "short flag", args: []string{"-v"}},
 	}
-	if !strings.Contains(out.String(), "reap") {
-		t.Errorf("version output = %q", out.String())
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			if code := run(tt.args, strings.NewReader(""), &out, &errOut); code != 0 {
+				t.Fatalf("exit = %d, stderr = %q", code, errOut.String())
+			}
+			if got, want := out.String(), "reap "+version()+"\n"; got != want {
+				t.Errorf("version output = %q, want %q", got, want)
+			}
+			if got := errOut.String(); got != "" {
+				t.Errorf("stderr = %q, want empty", got)
+			}
+		})
 	}
 }
 

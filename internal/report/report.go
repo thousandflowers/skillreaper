@@ -177,33 +177,70 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 func lookupUses(st *usage.Stats, it scan.Item) (int, time.Time) {
 	uses := st.Uses[it.Category][it.Name]
 	last := st.Last[it.Category][it.Name]
-	if it.Category == scan.CatSkill {
-		if i := strings.LastIndexByte(it.Name, ':'); i >= 0 {
-			suffix := it.Name[i+1:]
-			uses += st.Uses[it.Category][suffix]
-			if t := st.Last[it.Category][suffix]; t.After(last) {
-				last = t
-			}
+	for _, alias := range aliasKeys(it) {
+		uses += st.Uses[it.Category][alias]
+		if t := st.Last[it.Category][alias]; t.After(last) {
+			last = t
 		}
 	}
 	return uses, last
 }
 
-// lookupErrors mirrors lookupUses for errored invocations, folding the bare
-// slash-command alias of a namespaced skill into the same total.
+// lookupErrors mirrors lookupUses for errored invocations, folding the same
+// aliases into one total.
 func lookupErrors(st *usage.Stats, it scan.Item) (int, time.Time) {
 	errs := st.Errors[it.Category][it.Name]
 	last := st.LastAttempt[it.Category][it.Name]
-	if it.Category == scan.CatSkill {
-		if i := strings.LastIndexByte(it.Name, ':'); i >= 0 {
-			suffix := it.Name[i+1:]
-			errs += st.Errors[it.Category][suffix]
-			if t := st.LastAttempt[it.Category][suffix]; t.After(last) {
-				last = t
-			}
+	for _, alias := range aliasKeys(it) {
+		errs += st.Errors[it.Category][alias]
+		if t := st.LastAttempt[it.Category][alias]; t.After(last) {
+			last = t
 		}
 	}
 	return errs, last
+}
+
+// aliasKeys returns the extra usage keys an item's firings may be recorded
+// under, because the name in the config is not always the name in a transcript.
+//
+//   - skill: slash commands drop the plugin namespace, so "ecc:plan" also
+//     matches the bare "plan" (see the collision trade-off above).
+//   - mcp: a plugin-shipped server is configured under its bare name
+//     ("playwright"), but Claude Code exposes its tools as
+//     "mcp__plugin_<plugin>_<server>__<tool>", which the parser records under
+//     "plugin_<plugin>_<server>". Without this alias a plugin server that fired
+//     looks unused and earns a REAP verdict.
+//
+// The mcp alias is built up from the plugin name rather than parsed back out of
+// the recorded key on purpose: "plugin_ecc_sequential-thinking" cannot be split
+// into plugin and server by scanning for a separator, because either half may
+// itself contain one.
+func aliasKeys(it scan.Item) []string {
+	switch it.Category {
+	case scan.CatSkill:
+		if i := strings.LastIndexByte(it.Name, ':'); i >= 0 {
+			return []string{it.Name[i+1:]}
+		}
+	case scan.CatMCP:
+		if p, ok := sourcePluginName(it.Source); ok {
+			return []string{"plugin_" + p + "_" + it.Name}
+		}
+	}
+	return nil
+}
+
+// sourcePluginName extracts "ecc" from a scan Source of "plugin:ecc@ecc".
+// Reports false for any non-plugin source.
+func sourcePluginName(source string) (string, bool) {
+	const prefix = "plugin:"
+	if !strings.HasPrefix(source, prefix) {
+		return "", false
+	}
+	full := source[len(prefix):]
+	if i := strings.IndexByte(full, '@'); i >= 0 {
+		full = full[:i]
+	}
+	return full, full != ""
 }
 
 var categoryOrder = map[scan.Category]int{

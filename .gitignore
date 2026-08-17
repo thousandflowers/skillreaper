@@ -8,3 +8,4 @@ coverage.out
 docs/gifs/
 docs/gif-helpers/*
 !docs/gif-helpers/demo-fixture.sh
+!docs/gif-helpers/hero-fixture.sh

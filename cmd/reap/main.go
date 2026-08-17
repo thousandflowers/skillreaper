@@ -1118,7 +1118,11 @@ func tryShowStarCta(opts options, stdout io.Writer, r *report.Report, color bool
 	if isNudgeDisabled(opts) {
 		return
 	}
-	if opts.asJSON || opts.asMarkdown {
+	// Every format that must stay clean is named here rather than relied on for
+	// living outside the default branch of a switch. cmdPrune calls this too, and
+	// a gate that is really just a position in one switch statement is one
+	// refactor away from leaking a CTA into --quiet or into pasted --agent bytes.
+	if opts.asJSON || opts.asMarkdown || opts.asAgent || opts.quiet {
 		return
 	}
 	if !color {

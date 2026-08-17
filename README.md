@@ -1,5 +1,6 @@
 <p align="center">
-  <img src="docs/reap-demo.gif" alt="reap in action" width="800">
+  <img src="docs/reap-demo.gif" alt="reap in action" width="800"><br>
+  <sub>Demo runs against a sample fixture. The numbers below are from my own stack.</sub>
 </p>
 
 <h1 align="center">

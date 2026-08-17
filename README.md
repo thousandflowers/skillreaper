@@ -62,6 +62,8 @@ exactly what it costs you.
 
 <br>
 
+## Why this exists
+
 ### Why I built this
 
 I was running out of context budget on every session. I had accumulated skills,
@@ -77,7 +79,7 @@ binary for every major OS.
 
 <br>
 
-### Two problems, one cause
+### Two costs of context bloat
 
 **Wrong-tool picks.** Buried in a wall of irrelevant options, your agent
 wastes turns reaching for the wrong tool. More turns = slower, costlier,
@@ -114,7 +116,7 @@ files and session transcripts on disk — your data never leaves your machine.
 
 <br>
 
-### Before → After
+### Before → After: what removing token waste buys
 
 | Before skillreaper | After skillreaper |
 |---|---|
@@ -126,6 +128,8 @@ files and session transcripts on disk — your data never leaves your machine.
 <br>
 
 <p align="center">If this looks useful → <a href="https://github.com/thousandflowers/skillreaper">⭐ star the repo</a></p>
+
+## Getting started
 
 ### Install
 
@@ -224,6 +228,8 @@ original file intact — never a half-written mix.
 
 <br>
 
+## Reading the report
+
 ### Verdicts
 
 | Label | Meaning |
@@ -238,7 +244,7 @@ Every verdict includes a reason suffix explaining *why*.
 
 <br>
 
-### Loaded vs fired
+### Loaded vs fired: measuring context-window utilization
 
 Beyond the prune verdicts, `reap gap` shows your **utilization rate** —
 how much of what you load you actually use.
@@ -284,7 +290,9 @@ mute does not catch it.
 
 <br>
 
-### route — usage-informed lazy-load plan (opt-in)
+## Beyond pruning
+
+### route — context engineering for large tool libraries
 
 After pruning, a library of hundreds of legit skills still grows resident
 context linearly. `reap route` proposes a category-router organization driven by
@@ -338,6 +346,8 @@ Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.
 
 
 
+## Transparency and internals
+
 ### Platform support
 
 | Platform | Full support |
@@ -351,7 +361,7 @@ Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.
 
 <br>
 
-### How it works
+### How the evidence is gathered
 
 1. **Auto-detect** — probes every known config directory. Only installed
    platforms are scanned. No flags needed.
@@ -404,7 +414,7 @@ lazy tool loading. These two optimizations are complementary, not competing.
 
 <br>
 
-### Design
+### Design and internals
 
 - **100 % local**, zero dependencies, single static binary (Go ≥ 1.24)
 - **Multi-platform** — adding a new platform is one struct in

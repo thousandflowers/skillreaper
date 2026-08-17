@@ -9,7 +9,12 @@ TOKENS  CATEGORY  NAME                 VERDICT  REASON
 177     skill     review-sitemap       REAP     unused
 163     skill     deploy-dataset       REAP     unused
 159     skill     validate-manifest    REAP     unused
-(366 more never-used items not shown — use --json for all)
+157     skill     parse-contract       REAP     unused
+149     skill     extract-receipt      REAP     unused
+145     skill     sync-changelog       REAP     unused
+111     skill     summarise-timesheet  REAP     unused
+110     skill     export-timesheet     REAP     unused
+(361 more never-used items not shown — use --json for all)
 
 To prune: reap prune   (interactive, reversible via reap restore --all)
 

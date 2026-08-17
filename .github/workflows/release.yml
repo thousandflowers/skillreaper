@@ -94,20 +94,32 @@ jobs:
           git commit -m "Update skillreaper to ${TAG}"
           git push
 
+  # Publishes with npm Trusted Publishing: the registry trusts this workflow in
+  # this repository over OIDC and mints a short-lived credential per run. No
+  # long-lived NPM_TOKEN to rotate, to leak, or to discover has expired at the
+  # worst possible moment.
+  #
+  # PREREQUISITE this job cannot check for you: the trusted publisher must
+  # already exist on npmjs.com for the skillreaper package, pointing at
+  # thousandflowers/skillreaper and release.yml. Until it does, this job fails
+  # at `npm publish` — and by then the GitHub release is already public.
+  #
+  # node-version is 24, not 22, and that is load-bearing: trusted publishing
+  # needs npm >= 11.5.1, while the current v22 line still bundles npm 10.9.8.
   npm-publish:
     runs-on: ubuntu-latest
     needs: goreleaser
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: "22"
-          registry-url: "https://registry.npmjs.org"
+          node-version: "24"
       - name: Publish to npm
         run: |
           cd npm
           VERSION="${GITHUB_REF_NAME#v}"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

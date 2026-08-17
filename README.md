@@ -53,7 +53,7 @@ npx skillreaper
 ```
 
 On my own stack right now: **378 items loaded, 7 ever fired — 1% utilization.**
-That's ~19,800 dead tokens re-sent in every single session, ~670k a month of
+That's ~19,800 dead tokens re-sent in every single session, ~694k a month of
 pure token waste, paid for on every request before you type anything.
 
 **One command. Zero config. Read-only.** It reads your real session transcripts,
@@ -99,7 +99,7 @@ weakest number here: <code>19 823 × 35 × $3.00 ÷ 1e6</code> — input tokens 
 30-day window. Change the model, the price, or how much you work and it moves;
 the item and token counts do not. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
 
-<p align="center"><em>Measured on my own setup — 34 sessions over 30 days. Run <code>reap</code> to see yours.</em></p>
+<p align="center"><em>Measured on my own setup — 35 sessions over 30 days. Run <code>reap</code> to see yours.</em></p>
 
 skillreaper measures both, from evidence — no guessing.
 

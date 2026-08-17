@@ -404,6 +404,7 @@ func gather(opts options) (*report.Report, error) {
 		MinSessions:   opts.minSessions,
 		GraceDays:     opts.graceDays,
 		MinTokens:     opts.minTokens,
+		Model:         opts.model,
 		PricePerMTok:  opts.price,
 		Cutoff:        cutoff,
 		WindowDays:    opts.days,

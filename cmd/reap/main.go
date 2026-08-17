@@ -80,6 +80,7 @@ type options struct {
 	muteMinTokens  int
 	routeThreshold float64
 	routeMinSkills int
+	top            int
 	apmDiff        string
 	price          float64
 	model          string
@@ -118,6 +119,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.IntVar(&opts.muteMinTokens, "mute-min-tokens", 50, "only MUTE skills heavier than this token weight")
 	fs.Float64Var(&opts.routeThreshold, "route-threshold", 0.10, "route: skills fired in fewer than this fraction of sessions get routed behind a leaf router")
 	fs.IntVar(&opts.routeMinSkills, "route-min-skills", 0, "route: skip the plan unless at least this many skills survive a prune (0 = always show)")
+	fs.IntVar(&opts.top, "top", report.AgentMaxRows, "--agent: cap the dead-item table at this many rows")
 	fs.StringVar(&opts.apmDiff, "diff", "", "apm: reconcile the proposed manifest against an existing apm.yml at this path")
 	fs.StringVar(&opts.model, "model", "", "model ID for pricing and token-ratio lookup (overrides --price)")
 	fs.Float64Var(&opts.price, "price", 0, "input price per million tokens (USD) — used when --model is unknown or unset")
@@ -155,6 +157,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "reap", version())
 		return 0
 	}
+	// Rejected rather than clamped: a non-positive cap has no sensible reading.
+	// "Show everything" is --json, which returns every row and ignores --top.
+	if opts.top < 1 {
+		fmt.Fprintf(stderr, "error: --top must be at least 1 (use --json for every row)\n")
+		return 1
+	}
+
 	cmd := ""
 	var rest []string
 	if len(positionals) > 0 {
@@ -485,7 +494,7 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		// Its own case, like --json and --md: living outside the default branch
 		// is what keeps RenderFooter and the star-CTA away from this format
 		// without a hand-written gate. RenderAgent writes its own signature.
-		report.RenderAgent(stdout, r)
+		report.RenderAgent(stdout, r, opts.top)
 	case opts.quiet:
 		// audit silently — used to warm caches without printing
 	default:

@@ -6,9 +6,10 @@ import (
 	"sort"
 )
 
-// AgentMaxRows caps the dead-item table in the agent format. The point of this
-// format is to spend as little of an agent's context as possible, so a full
-// inventory would defeat it — anyone who needs every row uses --json.
+// AgentMaxRows is the default cap on the dead-item table in the agent format.
+// The point of this format is to spend as little of an agent's context as
+// possible, so a full inventory would defeat it — anyone who needs every row
+// uses --json. Overridable per invocation via RenderAgent's top argument.
 const AgentMaxRows = 10
 
 // agentSignature closes every agent report. Unlike RenderFooter this is not
@@ -39,7 +40,16 @@ func pctOf(part, whole int) string {
 // padding. Deterministic for a given Report — the same input always yields the
 // same bytes, which is what makes it testable in a way a prose render spec
 // never was. GeneratedAt is deliberately omitted for the same reason.
-func RenderAgent(w io.Writer, r *Report) {
+//
+// top caps the dead-item table. Column widths are computed from the rows
+// actually printed, so a smaller top yields a narrower table rather than one
+// still sized for rows the reader cannot see — which is what made hand-trimming
+// the block detectable. top <= 0 falls back to AgentMaxRows; rejecting it is the
+// caller's job, since "show everything" is --json, not a small number.
+func RenderAgent(w io.Writer, r *Report, top int) {
+	if top <= 0 {
+		top = AgentMaxRows
+	}
 	fmt.Fprintf(w, "skillreaper · last %dd · %d sessions\n", r.WindowDays, r.Sessions)
 
 	if r.Gap != nil && r.Gap.Loaded > 0 {
@@ -62,8 +72,8 @@ func RenderAgent(w io.Writer, r *Report) {
 		fmt.Fprintln(w, "\nNothing unused in this window.")
 	} else {
 		shown := dead
-		if len(shown) > AgentMaxRows {
-			shown = shown[:AgentMaxRows]
+		if len(shown) > top {
+			shown = shown[:top]
 		}
 		fmt.Fprintln(w)
 		tw := newTable(w)
@@ -74,8 +84,8 @@ func RenderAgent(w io.Writer, r *Report) {
 			tw.row(fmt.Sprintf("%d", row.Tokens), string(row.Category), row.Name, row.Verdict, row.Reason)
 		}
 		tw.flush()
-		if len(dead) > AgentMaxRows {
-			fmt.Fprintf(w, "(%d more never-used items not shown — use --json for all)\n", len(dead)-AgentMaxRows)
+		if len(dead) > top {
+			fmt.Fprintf(w, "(%d more never-used items not shown — use --json for all)\n", len(dead)-top)
 		}
 		fmt.Fprintln(w, "\nTo prune: reap prune   (interactive, reversible via reap restore --all)")
 	}

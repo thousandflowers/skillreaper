@@ -46,7 +46,13 @@ func agentFixture() *Report {
 
 func renderAgentString(r *Report) string {
 	var b bytes.Buffer
-	RenderAgent(&b, r)
+	RenderAgent(&b, r, AgentMaxRows)
+	return b.String()
+}
+
+func renderAgentStringTop(r *Report, top int) string {
+	var b bytes.Buffer
+	RenderAgent(&b, r, top)
 	return b.String()
 }
 
@@ -130,6 +136,80 @@ func TestRenderAgentNoOverflowLineAtExactlyMaxRows(t *testing.T) {
 
 	if got := renderAgentString(r); strings.Contains(got, "not shown") {
 		t.Errorf("overflow line rendered at exactly the cap:\n%s", got)
+	}
+}
+
+// A smaller cap has to be honest in the details, not just in the row count:
+// the overflow arithmetic follows the cap, and the NAME column narrows to the
+// rows actually printed. Hand-trimming the block failed exactly there — the
+// column stayed sized for a row that was no longer on the page.
+func TestRenderAgentTopCapsRowsAndWidths(t *testing.T) {
+	const total = 17
+	const top = 5
+
+	r := agentFixture()
+	r.Rows = nil
+	for i := 0; i < total; i++ {
+		r.Rows = append(r.Rows, deadRow(fmt.Sprintf("demo:skill-%02d", i), 1000-i))
+	}
+	// The widest name sits past the cap, so it must not size the column.
+	r.Rows = append(r.Rows, deadRow("demo:summarise-timesheet-long", 1))
+	r.DeadCount = total + 1
+
+	got := renderAgentStringTop(r, top)
+
+	if n := strings.Count(got, "REAP"); n != top {
+		t.Errorf("rendered %d REAP rows, want top (%d)", n, top)
+	}
+	wantMore := fmt.Sprintf("(%d more never-used items not shown — use --json for all)", total+1-top)
+	if !strings.Contains(got, wantMore) {
+		t.Errorf("missing overflow line %q in:\n%s", wantMore, got)
+	}
+	if strings.Contains(got, "demo:skill-05") {
+		t.Error("row beyond the cap was rendered")
+	}
+	if strings.Contains(got, "demo:summarise-timesheet-long") {
+		t.Error("the widest name is past the cap and must not be rendered")
+	}
+
+	// Column width is read off the header row: NAME must start no later than it
+	// would for the widest *printed* name, not the widest name in the report.
+	var header string
+	for _, line := range strings.Split(got, "\n") {
+		if strings.HasPrefix(line, "TOKENS") {
+			header = line
+			break
+		}
+	}
+	if header == "" {
+		t.Fatalf("no header row in:\n%s", got)
+	}
+	nameCol := strings.Index(header, "NAME")
+	verdictCol := strings.Index(header, "VERDICT")
+	if nameCol < 0 || verdictCol < 0 {
+		t.Fatalf("header %q missing NAME/VERDICT", header)
+	}
+	// "demo:skill-00" is 13 chars; the column is that plus the separator, well
+	// short of what "demo:summarise-timesheet-long" (29) would have forced.
+	if w := verdictCol - nameCol; w > 20 {
+		t.Errorf("NAME column is %d wide — sized for a row that is not printed:\n%s", w, header)
+	}
+}
+
+func TestRenderAgentTopBelowOneFallsBackToDefault(t *testing.T) {
+	r := agentFixture()
+	r.Rows = nil
+	for i := 0; i < AgentMaxRows+3; i++ {
+		r.Rows = append(r.Rows, deadRow(fmt.Sprintf("demo:skill-%02d", i), 1000-i))
+	}
+	r.DeadCount = AgentMaxRows + 3
+
+	// The flag layer rejects <1; the renderer must still not divide by it or
+	// render an empty table if it ever gets one.
+	for _, top := range []int{0, -1} {
+		if n := strings.Count(renderAgentStringTop(r, top), "REAP"); n != AgentMaxRows {
+			t.Errorf("top=%d rendered %d rows, want the default %d", top, n, AgentMaxRows)
+		}
 	}
 }
 

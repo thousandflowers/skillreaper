@@ -18,6 +18,7 @@ const (
 	CodexCLI   ID = "codex"
 	OpenClaw   ID = "openclaw"
 	Hermes     ID = "hermes"
+	GeminiCLI  ID = "gemini"
 )
 
 // Info describes one supported platform and its install paths.
@@ -117,6 +118,29 @@ func All() []Info {
 			HasProse:       false,
 			HasTranscripts: false,
 			TranscriptType: "none",
+		},
+		{
+			ID:         GeminiCLI,
+			Name:       "Gemini CLI",
+			ConfigDir:  "~/.gemini",
+			ConfigFile: "~/.gemini/settings.json",
+			// Gemini's custom commands are TOML, not SKILL.md frontmatter, and
+			// it has no subagent directory — claiming either would inventory
+			// nothing while implying coverage. MCP servers live in settings.json
+			// under the same mcpServers key every other platform here uses, and
+			// GEMINI.md is loaded into every session the way CLAUDE.md is.
+			HasSkills: false,
+			HasAgents: false,
+			HasMCP:    true,
+			HasHooks:  false,
+			HasProse:  true,
+			// Gemini does keep session history, in a layout this parser does not
+			// read yet. Declaring it is what marks the platform evidence-blind,
+			// so its items surface as REVIEW instead of being REAP'd on evidence
+			// that was never collected. Setting HasTranscripts:false would look
+			// tidier and silently produce false REAP verdicts instead.
+			HasTranscripts: true,
+			TranscriptType: "gemini-json",
 		},
 		{
 			ID:             Hermes,
@@ -248,6 +272,14 @@ func resolve(p Info) Info {
 		agentSkills := filepath.Join(home, ".agents", "skills")
 		if dirExists(agentSkills) {
 			p.SkillDirs = append(p.SkillDirs, agentSkills)
+		}
+
+	case GeminiCLI:
+		p.ProseDirs = []string{filepath.Join(cfgDir, "GEMINI.md")}
+		// Recorded so the report can name where evidence would come from, even
+		// though no parser reads this layout yet.
+		if tmpDir := filepath.Join(cfgDir, "tmp"); dirExists(tmpDir) {
+			p.TranscriptDirs = []string{tmpDir}
 		}
 
 	case Hermes:

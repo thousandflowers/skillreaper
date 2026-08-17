@@ -23,6 +23,82 @@ func TestAllReturnsAll(t *testing.T) {
 	}
 }
 
+func TestGeminiCLIDefinition(t *testing.T) {
+	all := All()
+	var g *Info
+	for i := range all {
+		if all[i].ID == GeminiCLI {
+			g = &all[i]
+			break
+		}
+	}
+	if g == nil {
+		t.Fatal("Gemini CLI missing from All()")
+	}
+	if g.Name != "Gemini CLI" {
+		t.Errorf("Name = %q", g.Name)
+	}
+	if !g.HasMCP || !g.HasProse {
+		t.Errorf("Gemini exposes mcpServers in settings.json and GEMINI.md: HasMCP=%v HasProse=%v", g.HasMCP, g.HasProse)
+	}
+	if g.HasSkills || g.HasAgents || g.HasHooks {
+		t.Errorf("Gemini has no SKILL.md skills, subagents or hooks: %+v", g)
+	}
+	// The safety property this platform depends on: it declares transcripts in
+	// a format no parser reads, which is what makes cmdReport mark it
+	// evidence-blind. Flipping HasTranscripts to false would silently turn
+	// every Gemini item into a REAP verdict backed by no evidence at all.
+	if !g.HasTranscripts {
+		t.Error("HasTranscripts must stay true or Gemini items get REAP'd on evidence that was never collected")
+	}
+	if g.TranscriptType == "jsonl" || g.TranscriptType == "sqlite" {
+		t.Errorf("TranscriptType %q claims a parser that does not read Gemini's layout", g.TranscriptType)
+	}
+}
+
+func TestResolveGeminiCLI(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	t.Cleanup(func() { os.Setenv("HOME", origHome) })
+	home := t.TempDir()
+	os.Setenv("HOME", home)
+
+	gdir := filepath.Join(home, ".gemini")
+	if err := os.MkdirAll(filepath.Join(gdir, "tmp"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gdir, "settings.json"),
+		[]byte(`{"mcpServers":{"srv":{"command":"npx","args":["srv-mcp"]}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gdir, "GEMINI.md"), []byte("context"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var got *Info
+	for _, p := range Detect() {
+		if p.ID == GeminiCLI {
+			c := p
+			got = &c
+			break
+		}
+	}
+	if got == nil {
+		t.Fatal("Detect did not find the Gemini install")
+	}
+	if got.ConfigDirAbs != gdir {
+		t.Errorf("ConfigDirAbs = %q, want %q", got.ConfigDirAbs, gdir)
+	}
+	if want := filepath.Join(gdir, "settings.json"); got.ConfigFileAbs != want {
+		t.Errorf("ConfigFileAbs = %q, want %q", got.ConfigFileAbs, want)
+	}
+	if want := filepath.Join(gdir, "GEMINI.md"); len(got.ProseDirs) != 1 || got.ProseDirs[0] != want {
+		t.Errorf("ProseDirs = %v, want [%s]", got.ProseDirs, want)
+	}
+	if want := filepath.Join(gdir, "tmp"); len(got.TranscriptDirs) != 1 || got.TranscriptDirs[0] != want {
+		t.Errorf("TranscriptDirs = %v, want [%s]", got.TranscriptDirs, want)
+	}
+}
+
 func TestDetectOnMachine(t *testing.T) {
 	installed := Detect()
 	for _, p := range installed {

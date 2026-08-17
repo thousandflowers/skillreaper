@@ -84,6 +84,7 @@ type options struct {
 	model          string
 	asJSON         bool
 	asMarkdown     bool
+	asAgent        bool
 	noColor        bool
 	yes            bool
 	all            bool
@@ -121,6 +122,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.Float64Var(&opts.price, "price", 0, "input price per million tokens (USD) — used when --model is unknown or unset")
 	fs.BoolVar(&opts.asJSON, "json", false, "output JSON")
 	fs.BoolVar(&opts.asMarkdown, "md", false, "output Markdown")
+	fs.BoolVar(&opts.asAgent, "agent", false, "output compact plain text for an agent to paste verbatim")
 	fs.BoolVar(&opts.noColor, "no-color", false, "disable colors")
 	fs.BoolVar(&opts.noNudge, "no-nudge", false, "suppress the star-CTA prompt")
 	fs.BoolVar(&opts.yes, "yes", false, "prune: apply without confirmation")
@@ -477,6 +479,11 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		}
 	case opts.asMarkdown:
 		report.RenderMarkdown(stdout, r)
+	case opts.asAgent:
+		// Its own case, like --json and --md: living outside the default branch
+		// is what keeps RenderFooter and the star-CTA away from this format
+		// without a hand-written gate. RenderAgent writes its own signature.
+		report.RenderAgent(stdout, r)
 	case opts.quiet:
 		// audit silently — used to warm caches without printing
 	default:
@@ -504,6 +511,8 @@ func cmdGap(opts options, stdout, stderr io.Writer) int {
 		}
 	case opts.asMarkdown:
 		report.RenderGapMarkdown(stdout, r)
+	case opts.asAgent:
+		report.RenderGapAgent(stdout, r)
 	default:
 		report.RenderGap(stdout, r, colorEnabled(opts, stdout))
 	}

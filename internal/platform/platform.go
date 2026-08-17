@@ -22,21 +22,21 @@ const (
 
 // Info describes one supported platform and its install paths.
 type Info struct {
-	ID              ID
-	Name            string // display name
-	ConfigDir       string // home config directory (~/.claude, ~/.config/opencode)
-	ConfigFile      string // main config file name
-	HasSkills       bool
-	HasAgents       bool
-	HasMCP          bool
-	HasHooks        bool
-	HasProse        bool
-	HasTranscripts  bool
-	TranscriptType  string // "jsonl" | "sqlite" | "none"
+	ID             ID
+	Name           string // display name
+	ConfigDir      string // home config directory (~/.claude, ~/.config/opencode)
+	ConfigFile     string // main config file name
+	HasSkills      bool
+	HasAgents      bool
+	HasMCP         bool
+	HasHooks       bool
+	HasProse       bool
+	HasTranscripts bool
+	TranscriptType string // "jsonl" | "sqlite" | "none"
 
 	// Derived from detection; empty when not installed.
-	ConfigDirAbs   string // resolved absolute config directory
-	ConfigFileAbs  string // resolved absolute config file path
+	ConfigDirAbs  string // resolved absolute config directory
+	ConfigFileAbs string // resolved absolute config file path
 
 	// Transcript locations (resolved).
 	TranscriptDirs []string // for jsonl-based tools
@@ -54,80 +54,80 @@ func All() []Info {
 	_ = home
 	return []Info{
 		{
-			ID:           ClaudeCode,
-			Name:         "Claude Code",
-			ConfigDir:    "~/.claude",
-			ConfigFile:   "~/.claude.json",
-			HasSkills:    true,
-			HasAgents:    true,
-			HasMCP:       true,
-			HasHooks:     true,
-			HasProse:     true,
+			ID:             ClaudeCode,
+			Name:           "Claude Code",
+			ConfigDir:      "~/.claude",
+			ConfigFile:     "~/.claude.json",
+			HasSkills:      true,
+			HasAgents:      true,
+			HasMCP:         true,
+			HasHooks:       true,
+			HasProse:       true,
 			HasTranscripts: true,
 			TranscriptType: "jsonl",
 		},
 		{
-			ID:           OpenCode,
-			Name:         "OpenCode",
-			ConfigDir:    "~/.config/opencode",
-			ConfigFile:   "~/.config/opencode/opencode.jsonc",
-			HasSkills:    true,
-			HasAgents:    true,
-			HasMCP:       true,
-			HasHooks:     false,
-			HasProse:     true,
+			ID:             OpenCode,
+			Name:           "OpenCode",
+			ConfigDir:      "~/.config/opencode",
+			ConfigFile:     "~/.config/opencode/opencode.jsonc",
+			HasSkills:      true,
+			HasAgents:      true,
+			HasMCP:         true,
+			HasHooks:       false,
+			HasProse:       true,
 			HasTranscripts: true,
 			TranscriptType: "sqlite",
 		},
 		{
-			ID:           Cursor,
-			Name:         "Cursor",
-			ConfigDir:    "~/.cursor",
-			ConfigFile:   "~/.cursor/mcp.json",
-			HasSkills:    true,
-			HasAgents:    true,
-			HasMCP:       true,
-			HasHooks:     false,
-			HasProse:     false,
+			ID:             Cursor,
+			Name:           "Cursor",
+			ConfigDir:      "~/.cursor",
+			ConfigFile:     "~/.cursor/mcp.json",
+			HasSkills:      true,
+			HasAgents:      true,
+			HasMCP:         true,
+			HasHooks:       false,
+			HasProse:       false,
 			HasTranscripts: false,
 			TranscriptType: "none",
 		},
 		{
-			ID:           CodexCLI,
-			Name:         "Codex CLI",
-			ConfigDir:    "~/.codex",
-			ConfigFile:   "~/.codex/config.toml",
-			HasSkills:    true,
-			HasAgents:    true,
-			HasMCP:       true,
-			HasHooks:     false,
-			HasProse:     true,
+			ID:             CodexCLI,
+			Name:           "Codex CLI",
+			ConfigDir:      "~/.codex",
+			ConfigFile:     "~/.codex/config.toml",
+			HasSkills:      true,
+			HasAgents:      true,
+			HasMCP:         true,
+			HasHooks:       false,
+			HasProse:       true,
 			HasTranscripts: true,
 			TranscriptType: "jsonl",
 		},
 		{
-			ID:           OpenClaw,
-			Name:         "OpenClaw",
-			ConfigDir:    "~/.openclaw",
-			ConfigFile:   "~/.openclaw/openclaw.json",
-			HasSkills:    true,
-			HasAgents:    false,
-			HasMCP:       true,
-			HasHooks:     false,
-			HasProse:     false,
+			ID:             OpenClaw,
+			Name:           "OpenClaw",
+			ConfigDir:      "~/.openclaw",
+			ConfigFile:     "~/.openclaw/openclaw.json",
+			HasSkills:      true,
+			HasAgents:      false,
+			HasMCP:         true,
+			HasHooks:       false,
+			HasProse:       false,
 			HasTranscripts: false,
 			TranscriptType: "none",
 		},
 		{
-			ID:           Hermes,
-			Name:         "Hermes",
-			ConfigDir:    "~/.hermes",
-			ConfigFile:   "~/.hermes/config.yaml",
-			HasSkills:    true,
-			HasAgents:    false,
-			HasMCP:       true,
-			HasHooks:     false,
-			HasProse:     true,
+			ID:             Hermes,
+			Name:           "Hermes",
+			ConfigDir:      "~/.hermes",
+			ConfigFile:     "~/.hermes/config.yaml",
+			HasSkills:      true,
+			HasAgents:      false,
+			HasMCP:         true,
+			HasHooks:       false,
+			HasProse:       true,
 			HasTranscripts: true,
 			TranscriptType: "jsonl",
 		},

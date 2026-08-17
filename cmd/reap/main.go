@@ -44,7 +44,8 @@ func version() string {
 	return Version
 }
 
-const usageText = `reap — evidence-based pruning for your Claude Code agent stack
+const usageText = `reap — evidence-based pruning for your AI-agent stack
+Reads Claude Code, Codex CLI, OpenCode, Cursor, OpenClaw and Hermes.
 
 Usage:
   reap [flags]              scan and report (read-only)

@@ -74,7 +74,7 @@ Rules for the table:
 - `Category` is one of `skill`, `mcp`, `agent`, `hook`, `prose` — print as-is.
 - Never show `Path` or `Description`: both are long and machine-facing.
 - Size each column to its widest value. Never truncate a name: a clipped
-  `ecc:intent-driven-developmen` is not something the user can act on.
+  `acme:legacy-schema-migratio` is not something the user can act on.
 - If `Gap.Loaded` is 0, print `no items loaded` where the utilization would go
   rather than dividing by it.
 

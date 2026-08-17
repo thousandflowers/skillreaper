@@ -11,10 +11,10 @@
   "repository": "https://github.com/thousandflowers/skillreaper",
   "license": "MIT",
   "keywords": [
-    "utilization",
+    "unused-skills",
     "context-window",
     "token-waste",
-    "unused-skills",
+    "utilization",
     "mcp",
     "subagents",
     "hooks",

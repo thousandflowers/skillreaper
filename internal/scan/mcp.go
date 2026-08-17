@@ -28,7 +28,7 @@ func ScanMCP(configPath, configDir, platformID string) ([]Item, []Warning) {
 		if jerr := json.Unmarshal(b, &top); jerr != nil {
 			warns = append(warns, Warning{Path: configPath, Msg: "unreadable JSON: " + jerr.Error()})
 		} else {
-			items = appendMCPServers(items, top["mcpServers"], "user-config", configPath, platformID)
+			items = appendMCPServers(items, top["mcpServers"], "user-config", configPath, platformID, nil)
 
 			var projects map[string]json.RawMessage
 			if raw, ok := top["projects"]; ok {
@@ -38,7 +38,7 @@ func ScanMCP(configPath, configDir, platformID string) ([]Item, []Warning) {
 							MCPServers json.RawMessage `json:"mcpServers"`
 						}
 						if json.Unmarshal(projRaw, &proj) == nil {
-							items = appendMCPServers(items, proj.MCPServers, "project:"+projPath, configPath, platformID)
+							items = appendMCPServers(items, proj.MCPServers, "project:"+projPath, configPath, platformID, nil)
 						}
 					}
 				}
@@ -51,21 +51,30 @@ func ScanMCP(configPath, configDir, platformID string) ([]Item, []Warning) {
 	plugins, pw := installedPlugins(configDir)
 	warns = append(warns, pw...)
 	for _, p := range plugins {
-		path := filepath.Join(p.InstallPath, ".mcp.json")
-		pb, err := readCapped(path)
-		if err != nil {
-			continue
-		}
-		var f struct {
-			MCPServers json.RawMessage `json:"mcpServers"`
-		}
-		if jerr := json.Unmarshal(pb, &f); jerr != nil {
-			warns = append(warns, Warning{Path: path, Msg: "unreadable JSON: " + jerr.Error()})
-			continue
+		before := len(items)
+		// A plugin declares its servers either in a dedicated .mcp.json or inline
+		// in its manifest. Reading only .mcp.json made manifest-declared servers
+		// invisible: no row at all, so no verdict and no weight. .mcp.json is read
+		// first so it wins a name collision.
+		seen := map[string]bool{}
+		for _, path := range []string{
+			filepath.Join(p.InstallPath, ".mcp.json"),
+			filepath.Join(p.InstallPath, ".claude-plugin", "plugin.json"),
+		} {
+			pb, err := readCapped(path)
+			if err != nil {
+				continue
+			}
+			var f struct {
+				MCPServers json.RawMessage `json:"mcpServers"`
+			}
+			if jerr := json.Unmarshal(pb, &f); jerr != nil {
+				warns = append(warns, Warning{Path: path, Msg: "unreadable JSON: " + jerr.Error()})
+				continue
+			}
+			items = appendMCPServers(items, f.MCPServers, "plugin:"+p.FullName, path, platformID, seen)
 		}
 		// Plugin-shipped servers cannot be pruned per-server; mark not removable.
-		before := len(items)
-		items = appendMCPServers(items, f.MCPServers, "plugin:"+p.FullName, path, platformID)
 		for i := before; i < len(items); i++ {
 			items[i].Platform = platformID
 			items[i].Removable = false
@@ -75,8 +84,10 @@ func ScanMCP(configPath, configDir, platformID string) ([]Item, []Warning) {
 }
 
 // appendMCPServers expands one mcpServers JSON object into Items.
-// Servers from user/project config are removable.
-func appendMCPServers(items []Item, raw json.RawMessage, source, path, platformID string) []Item {
+// Servers from user/project config are removable. seen (nil-ok) suppresses
+// names already emitted, so a plugin that declares the same server in both
+// .mcp.json and its manifest yields one row, not two.
+func appendMCPServers(items []Item, raw json.RawMessage, source, path, platformID string, seen map[string]bool) []Item {
 	if len(raw) == 0 {
 		return items
 	}
@@ -85,6 +96,12 @@ func appendMCPServers(items []Item, raw json.RawMessage, source, path, platformI
 		return items
 	}
 	for name, cfgRaw := range servers {
+		if seen != nil {
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+		}
 		var cfg mcpServerConfig
 		_ = json.Unmarshal(cfgRaw, &cfg)
 		display := cfg.URL

@@ -353,3 +353,97 @@ func TestBuildEmptyItems(t *testing.T) {
 		t.Errorf("Rows = %d, want 0", len(r.Rows))
 	}
 }
+
+// An MCP server's tools appear in a transcript under one of two prefixes:
+// "mcp__<server>__<tool>" for a server from the user/project config, and
+// "mcp__plugin_<plugin>_<server>__<tool>" for one shipped by a plugin. Only the
+// first matched the scanned row name, so every plugin-shipped server that did
+// fire was reported with Uses=0 and REAP'd.
+func TestMCPPluginPrefixAlias(t *testing.T) {
+	fired := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	st := usage.NewStats(30)
+	st.Sessions = 40
+	// Plain form: server configured and recorded under the same bare name.
+	st.Uses[scan.CatMCP]["headroom"] = 5
+	st.Last[scan.CatMCP]["headroom"] = fired
+	// Plugin form: recorded under plugin_<plugin>_<server>.
+	st.Uses[scan.CatMCP]["plugin_ecc_playwright"] = 3
+	st.Last[scan.CatMCP]["plugin_ecc_playwright"] = fired
+	// Hyphens on both sides of the join, and a hyphenated server name: proof
+	// that the alias is constructed from the plugin name, not parsed back out of
+	// the recorded key by splitting on a separator.
+	st.Uses[scan.CatMCP]["plugin_superpowers-chrome_chrome"] = 2
+	st.Last[scan.CatMCP]["plugin_superpowers-chrome_chrome"] = fired
+	st.Uses[scan.CatMCP]["plugin_ecc_sequential-thinking"] = 4
+	st.Last[scan.CatMCP]["plugin_ecc_sequential-thinking"] = fired
+
+	items := []scan.Item{
+		{Category: scan.CatMCP, Name: "headroom", Source: "user-config", Removable: true},
+		{Category: scan.CatMCP, Name: "playwright", Source: "plugin:ecc@ecc"},
+		{Category: scan.CatMCP, Name: "sequential-thinking", Source: "plugin:ecc@ecc"},
+		{Category: scan.CatMCP, Name: "chrome", Source: "plugin:superpowers-chrome@superpowers-marketplace"},
+		// A plugin server that genuinely never fired must still be REAP'd: the
+		// alias must not make every plugin row look used.
+		{Category: scan.CatMCP, Name: "exa", Source: "plugin:ecc@ecc"},
+	}
+	r := Build(items, st, nil, Opts{
+		MinSessions: 10,
+		Cutoff:      time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC),
+	})
+
+	byName := map[string]Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+
+	want := []struct {
+		name    string
+		uses    int
+		verdict string
+	}{
+		{"headroom", 5, VerdictKeep},
+		{"playwright", 3, VerdictKeep},
+		{"sequential-thinking", 4, VerdictKeep},
+		{"chrome", 2, VerdictKeep},
+		{"exa", 0, VerdictReap},
+	}
+	for _, w := range want {
+		got, ok := byName[w.name]
+		if !ok {
+			t.Errorf("%s: no row", w.name)
+			continue
+		}
+		if got.Uses != w.uses {
+			t.Errorf("%s: Uses = %d, want %d", w.name, got.Uses, w.uses)
+		}
+		if got.Verdict != w.verdict {
+			t.Errorf("%s: Verdict = %s, want %s", w.name, got.Verdict, w.verdict)
+		}
+		if w.uses > 0 && !got.LastUsed.Equal(fired) {
+			t.Errorf("%s: LastUsed = %v, want %v", w.name, got.LastUsed, fired)
+		}
+	}
+}
+
+func TestSourcePluginName(t *testing.T) {
+	cases := []struct {
+		source string
+		want   string
+		ok     bool
+	}{
+		{"plugin:ecc@ecc", "ecc", true},
+		{"plugin:superpowers-chrome@superpowers-marketplace", "superpowers-chrome", true},
+		{"plugin:bare", "bare", true},
+		{"user-config", "", false},
+		{"project:/Users/x/proj", "", false},
+		{"plugin:", "", false},
+		{"plugin:@mkt", "", false},
+	}
+	for _, c := range cases {
+		got, ok := sourcePluginName(c.source)
+		if got != c.want || ok != c.ok {
+			t.Errorf("sourcePluginName(%q) = (%q, %v), want (%q, %v)", c.source, got, ok, c.want, c.ok)
+		}
+	}
+}

@@ -87,6 +87,17 @@ func RenderShareHint(w io.Writer, color bool) {
 	fmt.Fprintf(w, "  %s\n", paint(cDim, "↗ help your team save context too → reap share"))
 }
 
+// RenderFooter prints the permanent attribution line that closes a text
+// report. Unlike RenderStarCta this is a signature, not a nudge: no cooldown,
+// no savings threshold, no opt-out, and it never touches NudgeState. The
+// caller owns the only exclusion that applies — JSON, Markdown and quiet
+// output never reach it. The color flag decides how the line is painted,
+// never whether it is printed, so redirecting to a file still yields the URL.
+func RenderFooter(w io.Writer, color bool) {
+	paint := painter(color)
+	fmt.Fprintf(w, "  %s\n\n", paint(cDim, "⟡ skillreaper · github.com/thousandflowers/skillreaper"))
+}
+
 // RenderShareText prints a ready-to-paste share message for team channels.
 func RenderShareText(w io.Writer, tokensPerSession int) {
 	line := shareMessage(tokensPerSession)

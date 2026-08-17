@@ -1,3 +1,4 @@
+<!-- readme-numbers:start -->
 ```
 skillreaper · last 30d · 34 sessions
 7/378 items fired · 1% utilization
@@ -20,6 +21,7 @@ To prune: reap prune   (interactive, reversible via reap restore --all)
 
 measured by skillreaper · github.com/thousandflowers/skillreaper
 ```
+<!-- readme-numbers:end -->
 
 <p align="center">
   <sub>Real <code>reap --agent</code> output, run against a generated sample stack

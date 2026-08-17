@@ -16,6 +16,12 @@ import (
 // starCtaCooldownDays limits the star-CTA to at most once per 30 days.
 const starCtaCooldownDays = 30
 
+// maxStarCtaShowings caps the star-CTA for the life of the install. The
+// cooldown alone only spaces the asks out; without a ceiling a user who keeps
+// the tool for years keeps being asked forever, and an ask that never stops is
+// not a nudge. Three is enough to be seen and few enough to be forgettable.
+const maxStarCtaShowings = 3
+
 // shareHintCooldownDays limits the share-command hint to at most once per 30 days.
 const shareHintCooldownDays = 30
 
@@ -255,10 +261,17 @@ func ShouldNudge(now time.Time, reapCount, muteCount int, st NudgeState) bool {
 	return reapCount > st.LastReapCount || muteCount > st.LastMuteCount
 }
 
-// ShouldShowStarCta reports whether the star-CTA should be shown now.
-// It appears at most once unless at least starCtaCooldownDays have passed
-// since the last showing.
+// ShouldShowStarCta reports whether the star-CTA should be shown now. Two
+// limits apply, and the lifetime one is checked first: after
+// maxStarCtaShowings it never returns true again, no matter how much time
+// passes. Under that ceiling it appears at most once per starCtaCooldownDays.
+// The count is read from state written since the field existed, so the cap
+// applies to installs that have already been asked rather than restarting
+// their tally at zero.
 func ShouldShowStarCta(now time.Time, st NudgeState) bool {
+	if st.StarCtaCount >= maxStarCtaShowings {
+		return false // asked enough, for good
+	}
 	if st.LastStarCtaAt.IsZero() {
 		return true // never shown
 	}

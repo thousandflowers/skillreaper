@@ -59,7 +59,7 @@ func renderGapAgentString(r *Report) string {
 func TestRenderAgentExactBytes(t *testing.T) {
 	want := `skillreaper · last 30d · 12 sessions
 2/5 items fired · 40% utilization
-2 never used · ~445 dead tokens/session · ~$1.50/month
+2 never used · ~445 dead tokens/session
 
 TOKENS  CATEGORY  NAME                          VERDICT  REASON
 300     skill     acme:legacy-schema-migration  REAP     unused
@@ -142,7 +142,7 @@ func TestRenderAgentNoDeadRows(t *testing.T) {
 
 	want := `skillreaper · last 30d · 12 sessions
 2/5 items fired · 40% utilization
-0 never used · ~0 dead tokens/session · ~$0.00/month
+0 never used · ~0 dead tokens/session
 
 Nothing unused in this window.
 
@@ -157,6 +157,22 @@ measured by skillreaper · github.com/thousandflowers/skillreaper
 	}
 	if strings.Contains(got, "reap prune") {
 		t.Error("prune hint rendered with nothing to prune")
+	}
+}
+
+func TestRenderAgentOmitsMoney(t *testing.T) {
+	// The fixture carries a non-zero MoneyPerMonth, so a dollar figure appearing
+	// here means the money line came back to the one format that must not carry
+	// it: prices change under us, and this output is pasted verbatim.
+	r := agentFixture()
+	if r.MoneyPerMonth == 0 {
+		t.Fatal("fixture has no MoneyPerMonth — this test would pass vacuously")
+	}
+	for _, render := range []func(*Report) string{renderAgentString, renderGapAgentString} {
+		got := render(r)
+		if strings.Contains(got, "$") || strings.Contains(got, "/month") {
+			t.Errorf("agent output carries a price:\n%s", got)
+		}
 	}
 }
 

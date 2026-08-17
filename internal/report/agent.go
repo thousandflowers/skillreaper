@@ -49,8 +49,13 @@ func RenderAgent(w io.Writer, r *Report) {
 		fmt.Fprintln(w, "no items loaded")
 	}
 
-	fmt.Fprintf(w, "%d never used · ~%d dead tokens/session · ~$%.2f/month\n",
-		r.DeadCount, r.DeadTokensPerSession, r.MoneyPerMonth)
+	// No money line here, unlike every other renderer. A dollar figure is a
+	// token count multiplied by a price we do not control and that moves when a
+	// provider updates its list; a format whose whole contract is "paste this
+	// verbatim" must not carry the one number that ages badly. The item count
+	// and the token count are measured facts and survive a price change.
+	fmt.Fprintf(w, "%d never used · ~%d dead tokens/session\n",
+		r.DeadCount, r.DeadTokensPerSession)
 
 	dead := deadRows(r)
 	if len(dead) == 0 {

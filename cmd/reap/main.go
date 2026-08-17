@@ -490,12 +490,6 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		col := colorEnabled(opts, stdout)
 		report.RenderText(stdout, r, col)
 		tryShowStarCta(opts, stdout, r, col)
-		// Ungated: the throttled CTA above may be on cooldown or under the token
-		// threshold, and on those runs the report would carry no ask at all. Only
-		// on the plain report — cmdPrune's callsite deliberately does not get it,
-		// because a line asking for a star does not belong on the output someone
-		// reads to confirm what just moved on their disk.
-		report.RenderStarLink(stdout, col)
 		// Permanent signature, deliberately outside every nudge gate above.
 		// Living in this branch is what excludes it from --json/--md/--quiet.
 		report.RenderFooter(stdout, col)

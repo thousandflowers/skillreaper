@@ -55,15 +55,6 @@ func RenderStarCta(w io.Writer, deadTokens int, color bool) {
 	fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, line))
 }
 
-// RenderStarLink prints the one call to action that is always there: no
-// cooldown, no token threshold, and it never touches NudgeState. RenderStarCta
-// above is the throttled, personalised version — this is the floor, so it
-// carries no figure that could go stale between showings.
-func RenderStarLink(w io.Writer, color bool) {
-	paint := painter(color)
-	fmt.Fprintf(w, "  %s\n", paint(cDim, "⭐ if this bought back context: github.com/thousandflowers/skillreaper"))
-}
-
 // RenderValueFeedback prints a single line after a successful prune or mute
 // operation, showing real savings with a conservative annualised money estimate.
 func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, sessionsPerMonth int, price float64, color bool) {

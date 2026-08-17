@@ -2,3 +2,9 @@
 dist/
 coverage.out
 .DS_Store
+
+# Demo rendering: the tapes are tracked, their rendered output is not.
+# demo-fixture.sh is the exception — the tapes call it, so it has to ship.
+docs/gifs/
+docs/gif-helpers/*
+!docs/gif-helpers/demo-fixture.sh

@@ -149,6 +149,13 @@ npm install -g skillreaper
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```
 
+> Already installed it with Homebrew? You don't need the npm package —
+> both put `reap` and `skillreaper` in the same prefix, so `npm install -g`
+> stops at an EEXIST link error rather than overwriting brew's copy.
+> Pick one route: to switch to npm, run `brew uninstall skillreaper` first.
+> Neither affects `npx skillreaper`, which runs from a cache and never
+> links a global command.
+
 **Binary downloads** — macOS (Intel + Apple Silicon), Linux (amd64 + arm64),
 Windows (amd64 + arm64) — all on the
 [releases page](https://github.com/thousandflowers/skillreaper/releases).

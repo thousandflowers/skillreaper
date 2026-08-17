@@ -38,6 +38,67 @@ func TestNoiseCharsRepeatedLines(t *testing.T) {
 	}
 }
 
+// Terminal colouring is never signal to a model, and a tool that shells out
+// pastes it straight into the result.
+func TestNoiseCharsANSI(t *testing.T) {
+	const open, close = "\x1b[31m", "\x1b[0m"
+	s := open + "ERROR" + close + " build failed"
+	got := noiseChars(s)
+	want := len(open) + len(close)
+	if got != want {
+		t.Errorf("noiseChars = %d, want %d (the escape sequences only)", got, want)
+	}
+	if got >= len(s) {
+		t.Error("the message text must survive as signal")
+	}
+}
+
+// Rule lines and alignment filler carry real byte mass in fixed-width output.
+func TestNoiseCharsSeparatorsAndPadding(t *testing.T) {
+	rule := strings.Repeat("=", payloadRuleMinRun)
+	pad := strings.Repeat(" ", payloadRuleMinRun)
+	if n := noiseChars(rule); n != len(rule) {
+		t.Errorf("separator run: noiseChars = %d, want %d", n, len(rule))
+	}
+	if n := noiseChars("name" + pad + "value"); n != len(pad) {
+		t.Errorf("padding run: noiseChars = %d, want %d", n, len(pad))
+	}
+	// One short of the threshold is ordinary formatting, not chrome.
+	short := strings.Repeat("=", payloadRuleMinRun-1)
+	if n := noiseChars(short); n != 0 {
+		t.Errorf("a %d-char rule is formatting, not noise: got %d", len(short), n)
+	}
+}
+
+func TestNoiseCharsTruncationMarker(t *testing.T) {
+	for _, marker := range []string{
+		"[truncated]",
+		"[content truncated]",
+		"<response clipped>",
+		"... (231 more lines)",
+	} {
+		s := "line one\n" + marker
+		if n := noiseChars(s); n != len(marker) {
+			t.Errorf("marker %q: noiseChars = %d, want %d", marker, n, len(marker))
+		}
+	}
+}
+
+// The point of a shape heuristic is that ordinary output scores clean. If prose
+// or plain code starts counting as noise, every tool looks noisy and the flag
+// stops meaning anything.
+func TestNoiseCharsLeavesProseAlone(t *testing.T) {
+	for _, s := range []string{
+		"the quick brown fox jumps over the lazy dog",
+		"func add(a, b int) int {\n\treturn a + b\n}",
+		"see https://example.com/docs for details",
+	} {
+		if n := noiseChars(s); n != 0 {
+			t.Errorf("ordinary output scored %d noise bytes: %q", n, s)
+		}
+	}
+}
+
 func TestNoiseCharsNoDoubleCount(t *testing.T) {
 	// A data URI also matches the bare base64 rule; the mask must count it once.
 	uri := "data:image/png;base64," + strings.Repeat("Q", 120)

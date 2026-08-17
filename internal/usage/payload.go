@@ -31,6 +31,11 @@ const payloadNoiseMinRun = 80
 // repeated-line noise rule. Short repeats (table borders, "  ", "}") are normal.
 const payloadRepeatedLineMin = 8
 
+// payloadRuleMinRun is the shortest run of a repeated separator character, or
+// of blank padding, treated as chrome. Short runs are ordinary formatting — a
+// "---" under a heading, an indented block — so only a long unbroken run counts.
+const payloadRuleMinRun = 40
+
 var (
 	// A contiguous base64 run: payloadNoiseMinRun+ base64 chars with optional padding.
 	reBase64 = regexp.MustCompile(`[A-Za-z0-9+/]{80,}={0,2}`)
@@ -39,6 +44,19 @@ var (
 	// An HTML/XML tag. Bounded length so a stray "<" in prose is not greedily
 	// matched across the rest of the payload.
 	reHTMLTag = regexp.MustCompile(`<[^>]{1,200}>`)
+	// A terminal control sequence. Tools that shell out paste their colouring
+	// straight into the result; it is never signal to a model, and a colourful
+	// build log carries a lot of it.
+	reANSI = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]")
+	// A long run of one repeated separator character: rule lines and table
+	// borders. Built from payloadRuleMinRun so the threshold has one home.
+	reSeparatorRun = regexp.MustCompile(`(?:-{40,}|={40,}|_{40,}|\*{40,}|#{40,}|~{40,}|─{40,}|═{40,})`)
+	// A long run of blank padding — alignment filler in fixed-width output.
+	rePadding = regexp.MustCompile(`[ \t]{40,}`)
+	// An explicit truncation marker. Few bytes, but the shape is what matters:
+	// the tool returned a payload it had already cut, so what arrived is chrome
+	// wrapped around an answer the caller did not fully get.
+	reTruncated = regexp.MustCompile(`(?i)\[(?:content )?truncated[^\]]{0,40}\]|<response clipped>|(?:\.\.\.|…)\s*\(\d+ more lines?\)`)
 )
 
 // resultContentBlock is the subset of a tool_result content array element we
@@ -107,6 +125,10 @@ func noiseChars(s string) int {
 	markRanges(mask, reDataURI.FindAllStringIndex(s, -1))
 	markRanges(mask, reBase64.FindAllStringIndex(s, -1))
 	markRanges(mask, reHTMLTag.FindAllStringIndex(s, -1))
+	markRanges(mask, reANSI.FindAllStringIndex(s, -1))
+	markRanges(mask, reSeparatorRun.FindAllStringIndex(s, -1))
+	markRanges(mask, rePadding.FindAllStringIndex(s, -1))
+	markRanges(mask, reTruncated.FindAllStringIndex(s, -1))
 	markRepeatedLines(mask, s)
 
 	n := 0

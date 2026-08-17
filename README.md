@@ -85,8 +85,14 @@ prompt-cache hit rate. A typical setup:
 - 370 never used (98 %)
 - 19 823 tok/session dead
 - ~674 000 tok/month burned on irrelevant instructions
+- ~$2.02/month, ~$24/year — the same waste priced instead of counted
 
-<p align="center"><sub>Token figures are estimates — <code>reap</code> counts tokens as <code>ceil(chars / 3.7)</code>. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
+<p align="center"><sub>The money line is one measurement of one stack, n=1, and the
+weakest number here: <code>19 823 × 34 × $3.00 ÷ 1e6</code> — input tokens only, at
+<code>claude-sonnet-4-6</code>'s $3.00/MTok default, with tokens estimated as
+<code>ceil(chars / 3.7)</code> and the monthly session count extrapolated from a
+30-day window. Change the model, the price, or how much you work and it moves;
+the item and token counts do not. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
 
 <p align="center"><em>Measured on my own setup — 34 sessions over 30 days. Run <code>reap</code> to see yours.</em></p>
 

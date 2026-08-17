@@ -1,7 +1,7 @@
 ```
 skillreaper · last 30d · 34 sessions
 7/378 items fired · 1% utilization
-371 never used · ~22720 dead tokens/session · ~$2.32/month
+371 never used · ~22720 dead tokens/session
 
 TOKENS  CATEGORY  NAME                 VERDICT  REASON
 185     skill     import-timesheet     REAP     unused

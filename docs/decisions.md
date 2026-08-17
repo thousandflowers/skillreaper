@@ -5,6 +5,31 @@ contributor does not have to re-litigate them. Newest first. Each entry says
 what was decided and why; if the reasoning stops holding, change the code and
 add a new entry rather than editing an old one.
 
+## 2026-08-17 — `--agent` prints no price; every other format still does
+
+`RenderAgent` omits the `~$X.XX/month` segment. `--json`, `--md` and the
+interactive report keep it.
+
+A dollar figure is not a measurement. It is `dead tokens × sessions × a price per
+token that we do not control` and that moves whenever a provider updates its
+list — the same stack has been reported at $24, $1.54, $1.84, $1.96 and $2.32 in
+two months without its context growing meaningfully. Item counts, token counts
+and utilization are measured facts; the price is a multiplication by an arbitrary
+constant.
+
+That distinction matters more in this format than in any other, because
+`--agent`'s entire contract is that its bytes are pasted verbatim into a
+conversation and then read by a person as the tool's own claim. The other formats
+have a reader who knows what they are looking at: `--json` is parsed by a program
+that can decide what to trust, and `--md` and the interactive report both carry
+the "figures are estimates" framing on screen. Pasted prose carries none of that,
+so a stale price there reads as a stated fact rather than an estimate.
+
+`MoneyPerMonth` stays on `Report` and is still computed — dropping it from one
+renderer is a presentation decision, not a reason to lose the number. The guard
+is `TestRenderAgentOmitsMoney`, which renders a fixture that *has* a non-zero
+`MoneyPerMonth` and fails if a `$` reaches either agent format.
+
 ## 2026-08-17 — The gofmt cleanup waits for PR #22, not the other way round
 
 `internal/cost/cost_test.go` and `internal/platform/platform.go` drifted from

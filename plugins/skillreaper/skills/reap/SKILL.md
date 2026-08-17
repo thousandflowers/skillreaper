@@ -40,6 +40,13 @@ If that fails, print exactly this and nothing else:
 > go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 > ```
 
+## If reap is too old
+
+`--agent` needs reap ≥ 0.5.0. If it exits with
+`flag provided but not defined: -agent`, say the installed build is too old and
+give `brew upgrade skillreaper` (npm: `npm install -g skillreaper@latest`) — an
+upgrade, never the install block above, which they have already done.
+
 ## Pruning
 
 Never prune on your own initiative. `reap prune` is interactive and aborts when

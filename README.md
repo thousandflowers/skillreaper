@@ -102,6 +102,18 @@ files and session transcripts on disk — your data never leaves your machine.
 
 ### Install
 
+**Inside Claude Code** — adds `/skillreaper:reap` and `/skillreaper:gap`, so the
+report renders in the conversation instead of a scrollback you have to re-read:
+
+```
+/plugin marketplace add thousandflowers/skillreaper
+/plugin install skillreaper@skillreaper
+```
+
+The plugin is a thin wrapper: it drives the same `reap` binary, so install that
+too with any line below. The skills fall back to `npx skillreaper` and tell you
+how to install permanently if they can't find it.
+
 ```bash
 # macOS — Homebrew
 brew install thousandflowers/tap/skillreaper

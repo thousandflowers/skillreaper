@@ -482,6 +482,9 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		col := colorEnabled(opts, stdout)
 		report.RenderText(stdout, r, col)
 		tryShowStarCta(opts, stdout, r, col)
+		// Permanent signature, deliberately outside every nudge gate above.
+		// Living in this branch is what excludes it from --json/--md/--quiet.
+		report.RenderFooter(stdout, col)
 	}
 	return 0
 }

@@ -979,3 +979,35 @@ func TestRunGapJSON(t *testing.T) {
 		t.Errorf("gap json missing Loaded key: %s", out.String())
 	}
 }
+
+// TestFooter_AlwaysPrintsExceptMachineFormats locks the footer's contract: it
+// is a signature, not a nudge. It survives --no-nudge and a non-TTY writer
+// (which is what colour=false means here), and it is absent from the three
+// machine-readable modes. Breaking either half breaks a promise to users.
+func TestFooter_AlwaysPrintsExceptMachineFormats(t *testing.T) {
+	const url = "github.com/thousandflowers/skillreaper"
+	claudeDir, claudeJSON := buildFixture(t)
+	base := []string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"}
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"default", nil, true},
+		{"no-nudge still signs", []string{"--no-nudge"}, true},
+		{"json", []string{"--json"}, false},
+		{"markdown", []string{"--md"}, false},
+		{"quiet", []string{"--quiet"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			if code := run(append(base, tc.args...), strings.NewReader(""), &out, &errOut); code != 0 {
+				t.Fatalf("exit = %d: %s", code, errOut.String())
+			}
+			if got := strings.Contains(out.String(), url); got != tc.want {
+				t.Errorf("footer URL present = %v, want %v\noutput: %s", got, tc.want, out.String())
+			}
+		})
+	}
+}

@@ -1,0 +1,24 @@
+{
+  "name": "skillreaper",
+  "displayName": "skillreaper",
+  "description": "Measures what share of your agent's loaded context is ever actually invoked — skills, MCP servers, subagents, hooks and always-loaded prose — from your own session transcripts, then prunes the dead weight reversibly. Reports a real utilization rate, not an estimate.",
+  "version": "0.1.0",
+  "author": {
+    "name": "thousandflowers",
+    "url": "https://github.com/thousandflowers"
+  },
+  "homepage": "https://github.com/thousandflowers/skillreaper",
+  "repository": "https://github.com/thousandflowers/skillreaper",
+  "license": "MIT",
+  "keywords": [
+    "utilization",
+    "context-window",
+    "token-waste",
+    "unused-skills",
+    "mcp",
+    "subagents",
+    "hooks",
+    "pruning",
+    "measurement"
+  ]
+}

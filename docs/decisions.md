@@ -5,6 +5,26 @@ contributor does not have to re-litigate them. Newest first. Each entry says
 what was decided and why; if the reasoning stops holding, change the code and
 add a new entry rather than editing an old one.
 
+## 2026-08-17 — `plugin.json` stays at 0.1.0 while the binary is at 0.5.0
+
+The plugin's `version` is not bumped to match the release it ships alongside.
+
+The two numbers describe different artifacts. `0.5.0` is the binary; `0.1.0` is
+five files that shipped once, yesterday. Coupling them means bumping the plugin
+on every binary release including the ones where no skill changed, and the first
+time that is forgotten the number lies in the other direction — worse than being
+honestly behind.
+
+The version is also **a path component of the install directory**: a remote
+install lands the plugin in
+`~/.claude/plugins/cache/skillreaper/skillreaper/<version>/`, verified today by
+installing from GitHub. Bumping it therefore moves that directory and forces a
+refresh for anyone already installed, in exchange for a cosmetic match. That is
+what settled it: the change is not free, and what it buys is only that two
+numbers on a page agree when they are not measuring the same thing.
+
+Bump it when the skills actually change.
+
 ## 2026-08-17 — `--agent` prints no price; every other format still does
 
 `RenderAgent` omits the `~$X.XX/month` segment. `--json`, `--md` and the

@@ -3,11 +3,13 @@
 </p>
 
 <h1 align="center">
-  Half of what your AI agent loads, it never uses.
+  Most of what your AI agent loads, it never uses.
 </h1>
 <p align="center">
-  skillreaper proves which — from your own transcripts — and prunes the dead
-  weight, so your agent stops wading through tools it never picks.
+  skillreaper finds the <b>unused skills, MCP servers, subagents, hooks and
+  always-loaded prose</b> quietly filling your <b>context window</b> — proven
+  from your own session transcripts — and prunes them reversibly.<br>
+  Runs locally against transcripts you already have. Nothing is ever uploaded.
 </p>
 
 
@@ -27,6 +29,10 @@ reap
 ```
 
 > The installed binary is `reap` — not `skillreaper`.
+
+On my own stack right now: **376 items loaded, 5 ever fired — 1% utilization.**
+That's ~19,700 dead tokens re-sent in every single session, ~510k a month of
+pure token waste, paid for on every request before you type anything.
 
 **One command. Zero config. Read-only.** It reads your real session transcripts,
 finds every skill / MCP / agent your AI loads but never fires, and shows you

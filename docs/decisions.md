@@ -88,6 +88,13 @@ not just the layout: `utilPct` truncates, the spec said "round", so the same dat
 was reported as 1% by `reap gap` and 2% by the skill. In the binary that is one
 `pctOf` and a table test; in prose it was a paragraph nobody could verify.
 
+The verbatim rule has now been broken twice, and only the first break was a
+model rendering a number: the second was an agent retyping an output block into a
+message instead of reading it from a file, adding two words (`you can`) that are
+in no version of the source — inside the session that was verifying this format
+prevents exactly that. The cause is not the actor, it is copying by hand instead
+of generating. Every check that held today went through a file and `diff`.
+
 New functions rather than a flag threaded through the render path. `RenderText`
 already takes a `color bool`, and `color=false` does **not** produce this format
 — the box drawing, the `▰▱` bars, the 60-dash rules and the 44-char name clip

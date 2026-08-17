@@ -426,6 +426,79 @@ func TestMCPPluginPrefixAlias(t *testing.T) {
 	}
 }
 
+// A connector authorised through claude.ai has no entry in any config file, so
+// nothing inventoried it while its tool schemas sat in every prompt. It is now
+// reported from transcript evidence — and never judged, because with no config
+// to read, absence of a call cannot be told apart from absence of the server.
+func TestTranscriptOnlyMCPRows(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 40
+	st.Uses[scan.CatMCP]["headroom"] = 5              // scanned, plain form
+	st.Uses[scan.CatMCP]["plugin_ecc_playwright"] = 3 // scanned, plugin form
+	st.Uses[scan.CatMCP]["claude_ai_Figma"] = 2       // not scanned anywhere
+
+	items := []scan.Item{
+		{Category: scan.CatMCP, Name: "headroom", Source: "user-config", Removable: true},
+		{Category: scan.CatMCP, Name: "playwright", Source: "plugin:ecc@ecc"},
+	}
+	r := Build(items, st, nil, Opts{
+		MinSessions: 10,
+		Cutoff:      time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC),
+	})
+
+	byName := map[string]Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+
+	got, ok := byName["claude_ai_Figma"]
+	if !ok {
+		t.Fatalf("no row for the transcript-only connector; rows: %d", len(r.Rows))
+	}
+	if got.Source != SourceTranscriptOnly {
+		t.Errorf("Source = %q, want %q", got.Source, SourceTranscriptOnly)
+	}
+	if got.Uses != 2 {
+		t.Errorf("Uses = %d, want 2", got.Uses)
+	}
+	if got.Verdict != VerdictInfo {
+		t.Errorf("Verdict = %q — a server with no config entry must never be judged", got.Verdict)
+	}
+	if got.Removable {
+		t.Error("there is nothing on disk to remove")
+	}
+
+	// It must count as loaded, or the utilization denominator stays wrong.
+	if r.Gap == nil {
+		t.Fatal("no gap")
+	}
+	var mcp *GapCat
+	for i := range r.Gap.PerCat {
+		if r.Gap.PerCat[i].Category == scan.CatMCP {
+			mcp = &r.Gap.PerCat[i]
+		}
+	}
+	if mcp == nil {
+		t.Fatal("no mcp gap category")
+	}
+	if mcp.Loaded != 3 || mcp.Fired != 3 {
+		t.Errorf("mcp gap = %d loaded / %d fired, want 3/3", mcp.Loaded, mcp.Fired)
+	}
+
+	// A scanned plugin server must not be duplicated under its transcript key.
+	if _, dup := byName["plugin_ecc_playwright"]; dup {
+		t.Error("plugin server duplicated under its transcript key")
+	}
+	if got := byName["playwright"]; got.Uses != 3 {
+		t.Errorf("scanned plugin row lost its uses: %d", got.Uses)
+	}
+
+	// Informational rows must never be counted as dead weight.
+	if r.DeadCount != 0 {
+		t.Errorf("DeadCount = %d, want 0", r.DeadCount)
+	}
+}
+
 func TestSourcePluginName(t *testing.T) {
 	cases := []struct {
 		source string

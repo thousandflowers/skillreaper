@@ -96,6 +96,8 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		}
 	}
 
+	items = append(items, synthesizeTranscriptOnlyMCP(items, st)...)
+
 	itemKey := func(it scan.Item) string {
 		return strings.ToLower(string(it.Category) + ":" + it.Name)
 	}
@@ -105,6 +107,15 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		switch it.Category {
 		case scan.CatSkill, scan.CatAgent, scan.CatMCP:
 			row.Uses, row.LastUsed = lookupUses(st, it)
+			// A server known only from transcript evidence has no config entry
+			// to read, so absence of a call cannot be told apart from absence of
+			// the server. It is reported, never judged: no verdict path, so it
+			// can never be REAP'd or counted as dead weight.
+			if it.Source == SourceTranscriptOnly {
+				row.Verdict = VerdictInfo
+				r.Rows = append(r.Rows, row)
+				continue
+			}
 			row.ErrorCount, row.LastAttempt = lookupErrors(st, it)
 			vo := VerdictOpts{
 				MinSessions: opts.MinSessions,
@@ -199,6 +210,54 @@ func lookupErrors(st *usage.Stats, it scan.Item) (int, time.Time) {
 		}
 	}
 	return errs, last
+}
+
+// SourceTranscriptOnly marks an MCP server that fired in a transcript but has
+// no entry in any config file skillreaper reads — a connector authorised
+// through claude.ai, for instance. There is nothing on disk to inventory and
+// nothing to prune, so these rows are informational.
+const SourceTranscriptOnly = "transcript-only"
+
+// synthesizeTranscriptOnlyMCP returns a row for every MCP server the
+// transcripts show firing that no scanner found on disk. Without this they were
+// invisible: absent from the inventory, absent from the loaded count, and
+// absent from the utilization denominator, while their tool schemas sat in
+// every prompt.
+//
+// Matching mirrors lookupUses, alias included, so a plugin-shipped server
+// already covered by a scanned row is not duplicated under its
+// plugin_<plugin>_<server> transcript key.
+func synthesizeTranscriptOnlyMCP(items []scan.Item, st *usage.Stats) []scan.Item {
+	if st == nil {
+		return nil
+	}
+	known := map[string]bool{}
+	for _, it := range items {
+		if it.Category != scan.CatMCP {
+			continue
+		}
+		known[it.Name] = true
+		for _, alias := range aliasKeys(it) {
+			known[alias] = true
+		}
+	}
+
+	var out []scan.Item
+	for key := range st.Uses[scan.CatMCP] {
+		if key == "" || known[key] {
+			continue
+		}
+		known[key] = true
+		out = append(out, scan.Item{
+			Category:  scan.CatMCP,
+			Name:      key,
+			Source:    SourceTranscriptOnly,
+			Removable: false,
+		})
+	}
+	// Map iteration is random; the report must not reorder between runs.
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 // aliasKeys returns the extra usage keys an item's firings may be recorded

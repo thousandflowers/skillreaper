@@ -63,8 +63,8 @@ measured by skillreaper · github.com/thousandflowers/skillreaper
 npx skillreaper
 ```
 
-On my own stack right now: **378 items loaded, 7 ever fired — 1% utilization.**
-That's ~19,800 dead tokens re-sent in every single session, ~694k a month of
+On my own stack right now: **380 items loaded, 11 ever fired — 2% utilization.**
+That's ~19,760 dead tokens re-sent in every single session, ~790k a month of
 pure token waste, paid for on every request before you type anything.
 
 **One command. Zero config. Read-only.** It reads your real session transcripts,
@@ -99,20 +99,20 @@ sloppier runs. This isn't about pennies — it's about work quality.
 **Wasted tokens.** Dead instructions eat context every session and hurt
 prompt-cache hit rate. A typical setup:
 
-- 378 items loaded
-- 370 never used (98 %)
-- 19 823 tok/session dead
-- ~694 000 tok/month burned on irrelevant instructions
-- ~$2.08/month, ~$25/year — the same waste priced instead of counted
+- 380 items loaded
+- 368 never used (97 %)
+- 19 760 tok/session dead
+- ~790 000 tok/month burned on irrelevant instructions
+- ~$2.37/month, ~$28/year — the same waste priced instead of counted
 
 <p align="center"><sub>The money line is one measurement of one stack, n=1, and the
-weakest number here: <code>19 823 × 35 × $3.00 ÷ 1e6</code> — input tokens only, at
+weakest number here: <code>19 760 × 40 × $3.00 ÷ 1e6</code> — input tokens only, at
 <code>claude-sonnet-4-6</code>'s $3.00/MTok default, with tokens estimated as
 <code>ceil(chars / 3.7)</code> and the monthly session count extrapolated from a
 30-day window. Change the model, the price, or how much you work and it moves;
 the item and token counts do not. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
 
-<p align="center"><em>Measured on my own setup — 35 sessions over 30 days. Run <code>reap</code> to see yours.</em></p>
+<p align="center"><em>Measured on my own setup — 40 sessions over 30 days. Run <code>reap</code> to see yours.</em></p>
 
 skillreaper measures both, from evidence — no guessing.
 
@@ -131,8 +131,8 @@ files and session transcripts on disk — your data never leaves your machine.
 
 | Before skillreaper | After skillreaper |
 |---|---|
-| 378 items loaded every session | 8 kept · 7 actually fire |
-| 19 823 tok/session dead | Full context budget for real work |
+| 380 items loaded every session | 12 kept · 11 actually fire |
+| 19 760 tok/session dead | Full context budget for real work |
 | ≈ 73 000 dead chars ≈ 29 pages every session (at 500 words/pg) | Zero |
 | Lower cache hit rate = higher latency | Smaller prompt fits in cache |
 
@@ -260,29 +260,38 @@ Every verdict includes a reason suffix explaining *why*.
 Beyond the prune verdicts, `reap gap` shows your **utilization rate** —
 how much of what you load you actually use.
 
+<!-- readme-gap:start -->
 ```
-⟡ loaded vs fired — last 30 days · 47 sessions
+  ⟡ loaded vs fired — last 30 days · 34 sessions
 
-CATEGORY   LOADED  FIRED   UTIL   ────────────       TOKENS
-skills        296      6    2%    ▰▱▱▱▱▱▱▱▱▱    ~15 950 →    71
-mcp            12      1    8%    ▰▱▱▱▱▱▱▱▱▱          0 →     0
-agents         68      3    4%    ▰▱▱▱▱▱▱▱▱▱     ~3 959 →   172
-───────────────────────────────────────────────────────────────
-total         376     10    3%    ▰▱▱▱▱▱▱▱▱▱    ~19 909 →   243
+  CATEGORY   LOADED  FIRED   UTIL                TOKENS
+  skills        298      6     2%   ▱▱▱▱▱▱▱▱▱▱   ~21693 →   278
+  mcp            12      1     8%   ▱▱▱▱▱▱▱▱▱▱         ? →     ?
+  agents         68      0     0%   ▱▱▱▱▱▱▱▱▱▱   ~ 1305 →     0
+  ─────────────────────────────────────────────────────────
+  total         378      7     1%   ▱▱▱▱▱▱▱▱▱▱   ~22998 →   278
+
+  ⟡ mute 2 heavy low-use skills · ~102 tok/session recoverable via `reap mute`
 ```
+<!-- readme-gap:end -->
+
+<p align="center"><sub>Same generated sample stack as the report at the top of this
+page, so the two agree. The numbers further up the page are measured on mine.</sub></p>
 
 Each row breaks down by category (skill, MCP, agent) with item count, token
 weight, and a 10-segment utilization bar. The token column reads
-*loaded → actually used*: `~19 909 → 243` means 19 909 tokens load every
-session and only 243 are ever touched — the gap is dead weight that reloads
-each time. Low utilization (<10 %) is red, medium (<50 %) yellow,
+*loaded → actually used*: the left number loads every session, the right is all
+that is ever touched — the gap between them is dead weight that reloads each
+time. Low utilization (<10 %) is red, medium (<50 %) yellow,
 high (≥50 %) green.
 
 The default `reap` report also includes a compact utilization summary line:
 
+<!-- readme-utilization:start -->
 ```
-⟡ utilization 3%  —  10/376 items fired · ~243/19 909 tok touched (30d)
+  ⟡ utilization 1%  —  7/378 items fired · ~278/22998 tok touched (30d)
 ```
+<!-- readme-utilization:end -->
 
 This is the **real** gap between what your agent carries and what it fires —
 complementary to the shock box (which only counts items that are safe to prune

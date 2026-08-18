@@ -46,4 +46,9 @@ const ToolSurfaceAll = -1
 type Warning struct {
 	Path string
 	Msg  string
+	// Advisory marks a warning that is a caveat about the evidence rather than
+	// a failure to read something. An empty directory reads perfectly and has
+	// nothing to say about usage; an unreadable one is a different animal, and
+	// callers deciding an exit status need to tell them apart.
+	Advisory bool
 }

@@ -1454,3 +1454,39 @@ func TestKeepResolvesBareNamesAndRejectsUnknownOnes(t *testing.T) {
 		}
 	})
 }
+
+// Issue #43. The fix for #32 exits 1 when nothing was inventoried and warnings
+// were raised, so an unreadable directory stops looking like a clean stack. An
+// empty Claude directory hits the same condition for the opposite reason: it
+// reads perfectly and has nothing in it, which is what a first run looks like.
+func TestEmptyDirIsNotAFailedScanButUnreadableOneIs(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: chmod 000 grants access anyway")
+	}
+	t.Run("empty directory succeeds", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), ".claude")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		var out, errOut bytes.Buffer
+		if code := run([]string{"--claude-dir", dir, "--no-nudge", "--no-banner"},
+			strings.NewReader(""), &out, &errOut); code != 0 {
+			t.Errorf("exit = %d for an empty but perfectly readable directory; stderr = %q", code, errOut.String())
+		}
+	})
+	t.Run("unreadable directory fails", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), ".claude")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o000); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+		var out, errOut bytes.Buffer
+		if code := run([]string{"--claude-dir", dir, "--no-nudge", "--no-banner"},
+			strings.NewReader(""), &out, &errOut); code == 0 {
+			t.Error("exit = 0 for a directory that could not be read at all")
+		}
+	})
+}

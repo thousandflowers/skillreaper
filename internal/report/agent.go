@@ -81,7 +81,11 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 		for _, row := range shown {
 			// Names are never truncated: a clipped identifier is not something
 			// the reader can act on, and the column is sized to the content.
-			tw.row(fmt.Sprintf("%d", row.Tokens), string(row.Category), row.Name, row.Verdict, row.Reason)
+			tok := fmt.Sprintf("%d", row.Tokens)
+			if row.WeightUnknown {
+				tok = "?"
+			}
+			tw.row(tok, string(row.Category), row.Name, row.Verdict, row.Reason)
 		}
 		tw.flush()
 		if len(dead) > top {

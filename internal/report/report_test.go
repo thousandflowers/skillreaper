@@ -520,3 +520,46 @@ func TestSourcePluginName(t *testing.T) {
 		}
 	}
 }
+
+// Issue #27. An MCP server's per-session cost is its tool schemas, which the
+// host injects and never writes to disk in a form skillreaper can read: no
+// transcript record declares them either, so Tokens stays 0. The text and
+// markdown tables already print "?" for that, but the JSON and --agent outputs
+// published a bare 0, which a reader takes as "this server is free" rather than
+// "this was never measured".
+func TestMCPWeightIsReportedAsUnknownNotZero(t *testing.T) {
+	items := []scan.Item{
+		{Category: scan.CatSkill, Name: "deadskill", Platform: "claude-code", Path: "/x/skills/deadskill/SKILL.md", DescChars: 400, Removable: true},
+		{Category: scan.CatMCP, Name: "deadserver", Platform: "claude-code", Path: "/x/.claude.json", Description: "uvx deadserver", Removable: true},
+	}
+	st := usage.NewStats(30)
+	st.Sessions = 40
+	r := Build(items, st, nil, Opts{MinSessions: 10, WindowDays: 30, Cutoff: time.Now().AddDate(0, 0, -30)})
+
+	var mcp, skill *Row
+	for i := range r.Rows {
+		switch r.Rows[i].Name {
+		case "deadserver":
+			mcp = &r.Rows[i]
+		case "deadskill":
+			skill = &r.Rows[i]
+		}
+	}
+	if mcp == nil || skill == nil {
+		t.Fatalf("rows missing: %+v", r.Rows)
+	}
+	if !mcp.WeightUnknown {
+		t.Error("MCP row: WeightUnknown = false, so Tokens 0 is published as a measurement")
+	}
+	if skill.WeightUnknown {
+		t.Error("skill row: WeightUnknown = true, but its description length is right there on disk")
+	}
+
+	var buf bytes.Buffer
+	RenderAgent(&buf, r, 20)
+	for _, line := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(line, "deadserver") && !strings.Contains(line, "?") {
+			t.Errorf("--agent line publishes a numeric weight for an unmeasured server: %q", line)
+		}
+	}
+}

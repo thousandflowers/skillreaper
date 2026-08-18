@@ -16,8 +16,9 @@ import (
 // Opts tunes report generation.
 type Opts struct {
 	MinSessions  int
-	GraceDays    int // items installed this recently → REVIEW(grace)
-	MinTokens    int // items below this token weight → KEEP(tiny)
+	GraceDays    int    // items installed this recently → REVIEW(grace)
+	MinTokens    int    // items below this token weight → KEEP(tiny)
+	Model        string // model ID for tokenizer-specific estimates; empty → default ratio
 	PricePerMTok float64
 	Cutoff       time.Time // start of the evidence window
 	WindowDays   int
@@ -100,7 +101,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 	}
 
 	for _, it := range items {
-		row := Row{Item: it, Tokens: cost.Tokens(it.DescChars)}
+		row := Row{Item: it, Tokens: cost.TokensFor(opts.Model, it.DescChars)}
 		switch it.Category {
 		case scan.CatSkill, scan.CatAgent, scan.CatMCP:
 			row.Uses, row.LastUsed = lookupUses(st, it)

@@ -29,6 +29,32 @@ func TestTokens(t *testing.T) {
 	}
 }
 
+func TestTokensFor(t *testing.T) {
+	cases := []struct {
+		name        string
+		modelID     string
+		chars, want int
+	}{
+		{"empty model uses default", "", 37, 10},
+		{"unknown model uses default", "unknown-model", 37, 10},
+		{"claude keeps default ratio", "claude-sonnet-4-6", 37, 10},
+		{"claude round up", "claude-sonnet-4-6", 38, 11},
+		{"gpt-4o exact ratio", "gpt-4o", 40, 10},
+		{"gpt-4o round up", "gpt-4o", 41, 11},
+		{"gpt-4o-mini", "gpt-4o-mini", 400, 100},
+		{"o3-mini", "o3-mini", 400, 100},
+		{"zero chars", "gpt-4o", 0, 0},
+		{"negative chars", "gpt-4o", -5, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := TokensFor(c.modelID, c.chars); got != c.want {
+				t.Errorf("TokensFor(%q, %d) = %d, want %d", c.modelID, c.chars, got, c.want)
+			}
+		})
+	}
+}
+
 func TestMoneyPerMonth(t *testing.T) {
 	cases := []struct {
 		name             string

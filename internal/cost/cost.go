@@ -39,13 +39,43 @@ func LookupPrice(modelID string) (float64, bool) {
 // CharsPerToken is the documented estimation ratio (x10 to stay integer).
 const charsPerTokenX10 = 37
 
-// Tokens estimates the token count for a number of characters,
-// rounding up: ceil(chars / 3.7).
+// TokenRatios maps model IDs to their average characters per token (x10 to
+// stay integer). Each entry overrides the default 3.7 ratio for models whose
+// tokenizer packs characters differently. Models absent from this map use
+// the default ratio. Keep this in sync with ModelPricing: when adding a
+// model whose tokenizer differs from the default, add its ratio here too.
+var TokenRatios = map[string]int{
+	// OpenAI's o200k_base tokenizer averages ~4.0 characters per token for
+	// English prose, slightly more than the ~3.7 default. OpenAI documents
+	// the rule of thumb as "1 token ~= 4 chars in English":
+	// https://platform.openai.com/tokenizer
+	"gpt-4o":      40,
+	"gpt-4o-mini": 40,
+	"o3-mini":     40,
+}
+
+// Tokens estimates the token count for a number of characters using the
+// default ratio, rounding up: ceil(chars / 3.7).
 func Tokens(chars int) int {
+	return tokensWithRatio(chars, charsPerTokenX10)
+}
+
+// TokensFor estimates the token count for a number of characters using the
+// ratio for the given model ID, falling back to the default 3.7 ratio when
+// the model is empty or has no entry in TokenRatios.
+func TokensFor(modelID string, chars int) int {
+	ratio, ok := TokenRatios[modelID]
+	if !ok {
+		ratio = charsPerTokenX10
+	}
+	return tokensWithRatio(chars, ratio)
+}
+
+func tokensWithRatio(chars, ratioX10 int) int {
 	if chars <= 0 {
 		return 0
 	}
-	return (chars*10 + charsPerTokenX10 - 1) / charsPerTokenX10
+	return (chars*10 + ratioX10 - 1) / ratioX10
 }
 
 // MoneyPerMonth estimates the monthly dollar cost of dead-weight tokens:

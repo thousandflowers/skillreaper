@@ -472,3 +472,64 @@ func TestSanitizeName(t *testing.T) {
 		t.Errorf("entry name = %q", e.Name)
 	}
 }
+
+// Issue #41. gather returns items from every detected platform, but the source
+// confinement check was always made against the Claude directory, so an
+// OpenCode or Cursor item earned a REAP verdict and then could not be acted on.
+// The caller treats the refusal as fatal, so `reap prune` stopped partway.
+func TestQuarantineItemUsesTheItemsOwnRoot(t *testing.T) {
+	claudeDir := t.TempDir()
+	otherRoot := t.TempDir()
+	skillDir := filepath.Join(otherRoot, "skills", "deadskill")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(skillDir, "SKILL.md")
+	if err := os.WriteFile(src, []byte("---\nname: deadskill\n---\nbody"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	it := scan.Item{
+		Category: scan.CatSkill, Name: "deadskill", Platform: "opencode",
+		Path: src, RootDir: otherRoot, Removable: true,
+	}
+	e, err := QuarantineItem(claudeDir, it)
+	if err != nil {
+		t.Fatalf("quarantine refused an item inside its own platform root: %v", err)
+	}
+	if _, err := os.Stat(skillDir); !os.IsNotExist(err) {
+		t.Error("source still in place after quarantine")
+	}
+	if _, err := os.Stat(e.To); err != nil {
+		t.Errorf("quarantined copy missing at %s: %v", e.To, err)
+	}
+	if err := Restore(claudeDir, e.ID); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if _, err := os.Stat(src); err != nil {
+		t.Errorf("restore did not put the item back at its original path: %v", err)
+	}
+}
+
+// The confinement itself must survive the change: an item that claims a root it
+// does not live under is still refused, which is the property that keeps a
+// crafted Path from moving a file out of the tree it belongs to.
+func TestQuarantineItemStillRefusesAPathOutsideItsRoot(t *testing.T) {
+	claudeDir := t.TempDir()
+	root := t.TempDir()
+	outside := t.TempDir()
+	src := filepath.Join(outside, "victim.md")
+	if err := os.WriteFile(src, []byte("not yours"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	it := scan.Item{
+		Category: scan.CatAgent, Name: "victim", Platform: "opencode",
+		Path: src, RootDir: root, Removable: true,
+	}
+	if _, err := QuarantineItem(claudeDir, it); err == nil {
+		t.Error("quarantined a path outside the root the item declared")
+	}
+	if _, err := os.Stat(src); err != nil {
+		t.Error("the file outside the root was moved anyway")
+	}
+}

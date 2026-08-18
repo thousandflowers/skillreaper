@@ -32,11 +32,16 @@ type Manifest struct {
 
 // Entry records one reversible prune action.
 type Entry struct {
-	ID         string          `json:"id"`
-	Category   string          `json:"category"`
-	Name       string          `json:"name"`
-	From       string          `json:"from,omitempty"` // original path (file/dir moves)
-	To         string          `json:"to,omitempty"`   // quarantine path
+	ID       string `json:"id"`
+	Category string `json:"category"`
+	Name     string `json:"name"`
+	From     string `json:"from,omitempty"` // original path (file/dir moves)
+	// Root is the platform config directory From lived under, recorded at prune
+	// time so restore can bound the write to the same tree the item came from.
+	// Empty in manifests written before multi-platform pruning; those entries
+	// fall back to the Claude directory, which is where they came from.
+	Root       string          `json:"root,omitempty"`
+	To         string          `json:"to,omitempty"` // quarantine path
 	ConfigPath string          `json:"configPath,omitempty"`
 	JSONScope  string          `json:"jsonScope,omitempty"` // "" = top-level mcpServers, else project path
 	Payload    json.RawMessage `json:"payload,omitempty"`   // removed MCP server config
@@ -102,7 +107,15 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 	if filepath.Base(src) == "SKILL.md" {
 		src = filepath.Dir(src)
 	}
-	if err := existingPathWithin(claudeDir, src); err != nil {
+	// The source is checked against the platform the item came from, not against
+	// the Claude directory: with several platforms scanned at once those are not
+	// the same tree. The quarantine and the manifest still live in claudeDir,
+	// which is checked separately below.
+	root := it.RootDir
+	if root == "" {
+		root = claudeDir
+	}
+	if err := existingPathWithin(root, src); err != nil {
 		return Entry{}, err
 	}
 	if _, err := os.Stat(src); err != nil {
@@ -130,6 +143,7 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		Category:  string(it.Category),
 		Name:      it.Name,
 		From:      src,
+		Root:      root,
 		To:        dest,
 		Timestamp: time.Now(),
 	}
@@ -396,13 +410,20 @@ func restoreEntry(claudeDir string, e *Entry) error {
 		return nil
 	}
 
-	// File move: both the quarantine source and the restore destination must
-	// stay within the Claude directory, so a tampered manifest cannot move a
-	// file to (or from) an arbitrary location.
+	// File move. The quarantine side always stays inside the Claude directory,
+	// which is where the reaped store lives. The destination is bounded by the
+	// platform root recorded when the item was pruned, because an item from
+	// another platform does not belong under the Claude directory and pinning
+	// it there is what made multi-platform prune impossible. Entries written
+	// before Root existed fall back to the old bound.
 	if err := existingPathWithin(claudeDir, e.To); err != nil {
 		return err
 	}
-	if err := parentWithinForWrite(claudeDir, e.From); err != nil {
+	restoreRoot := e.Root
+	if restoreRoot == "" {
+		restoreRoot = claudeDir
+	}
+	if err := parentWithinForWrite(restoreRoot, e.From); err != nil {
 		return err
 	}
 	if err := os.Rename(e.To, e.From); err != nil {

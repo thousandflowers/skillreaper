@@ -19,11 +19,17 @@ const (
 
 // Item is one entry in the agent-stack inventory.
 type Item struct {
-	Category    Category
-	Name        string // invocation key: "graphify", "ecc:plan", mcp server name
-	Platform    string // platform ID: "claude-code", "opencode", "cursor", etc.
-	Source      string // "personal", "plugin:<name@mkt>", "user-config", "project:<path>"
-	Path        string
+	Category Category
+	Name     string // invocation key: "graphify", "ecc:plan", mcp server name
+	Platform string // platform ID: "claude-code", "opencode", "cursor", etc.
+	Source   string // "personal", "plugin:<name@mkt>", "user-config", "project:<path>"
+	Path     string
+	// RootDir is the platform config directory this item was found under. The
+	// confinement checks in prune and mute anchor to it: with several platforms
+	// scanned at once, anchoring everything to the Claude directory refused
+	// every item that legitimately lives somewhere else. Empty means "assume
+	// the Claude directory", which is what a directly constructed Item gets.
+	RootDir     string
 	Description string    // text injected into context (skills/agents) or display string
 	DescChars   int       // chars injected every session
 	BodyChars   int       // chars loaded on invocation (SKILL.md body)

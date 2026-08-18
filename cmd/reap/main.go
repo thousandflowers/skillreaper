@@ -437,8 +437,9 @@ func gather(opts options) (*report.Report, error) {
 			if parsed.IncompleteEvidence && !evidenceBlind[pid] {
 				evidenceBlind[pid] = true
 				warns = append(warns, scan.Warning{
-					Path: p.ConfigDirAbs,
-					Msg:  fmt.Sprintf("%s usage evidence is incomplete because at least one transcript record exceeded the parser limit or could not be read; its items are shown as REVIEW, not REAP/MUTE.", p.Name),
+					Path:     p.ConfigDirAbs,
+					Msg:      fmt.Sprintf("%s usage evidence is incomplete because at least one transcript record exceeded the parser limit or could not be read; its items are shown as REVIEW, not REAP/MUTE.", p.Name),
+					Advisory: true,
 				})
 			}
 			if st == nil {
@@ -499,8 +500,9 @@ func gather(opts options) (*report.Report, error) {
 				reason = fmt.Sprintf("its transcripts use a format skillreaper does not parse yet (%s)", p.TranscriptType)
 			}
 			warns = append(warns, scan.Warning{
-				Path: p.ConfigDirAbs,
-				Msg:  fmt.Sprintf("%s usage is not counted because %s; its items are shown as REVIEW, not REAP/MUTE.", p.Name, reason),
+				Path:     p.ConfigDirAbs,
+				Msg:      fmt.Sprintf("%s usage is not counted because %s; its items are shown as REVIEW, not REAP/MUTE.", p.Name, reason),
+				Advisory: true,
 			})
 		}
 	}
@@ -609,13 +611,23 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 	// "0 items never used", the same exit 0. The warnings say otherwise, but the
 	// banner is the loudest thing on the page and a wrapping script sees only
 	// the status. Name it and exit non-zero so the two can be told apart.
-	if len(r.Rows) == 0 && len(r.Warnings) > 0 {
+	// Only a warning that means "I could not read this" turns an empty
+	// inventory into a failure. An empty directory raises advisory warnings
+	// about missing evidence, reads perfectly, and is what a first run looks
+	// like: exiting 1 there would make the very first command look broken.
+	failed := 0
+	for _, w := range r.Warnings {
+		if !w.Advisory {
+			failed++
+		}
+	}
+	if len(r.Rows) == 0 && failed > 0 {
 		noun := "warnings"
-		if len(r.Warnings) == 1 {
+		if failed == 1 {
 			noun = "warning"
 		}
-		fmt.Fprintf(stderr, "error: nothing could be inventoried, with %d %s raised. A failed scan, not a clean stack.\n",
-			len(r.Warnings), noun)
+		fmt.Fprintf(stderr, "error: nothing could be inventoried, with %d read %s. A failed scan, not a clean stack.\n",
+			failed, noun)
 		return 1
 	}
 	return 0

@@ -182,6 +182,27 @@ func TestShouldShowStarCtaBoundary(t *testing.T) {
 	}
 }
 
+func TestShouldShowStarCtaLifetimeCap(t *testing.T) {
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	// Long past any cooldown: only the lifetime cap can stop it now.
+	old := now.AddDate(0, 0, -400)
+
+	if !ShouldShowStarCta(now, NudgeState{LastStarCtaAt: old, StarCtaCount: maxStarCtaShowings - 1}) {
+		t.Errorf("one showing below the cap should still be allowed")
+	}
+	if ShouldShowStarCta(now, NudgeState{LastStarCtaAt: old, StarCtaCount: maxStarCtaShowings}) {
+		t.Errorf("at the cap the CTA must never show again, cooldown or not")
+	}
+	if ShouldShowStarCta(now, NudgeState{LastStarCtaAt: old, StarCtaCount: maxStarCtaShowings + 7}) {
+		t.Errorf("past the cap must stay closed, not wrap around")
+	}
+	// The cap outranks the never-shown shortcut: a state carrying a count with
+	// no timestamp is what an install upgraded mid-life looks like.
+	if ShouldShowStarCta(now, NudgeState{StarCtaCount: maxStarCtaShowings}) {
+		t.Errorf("the cap must be checked before the zero-timestamp case")
+	}
+}
+
 func TestShouldShowShareHint(t *testing.T) {
 	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 	past := now.AddDate(0, 0, -40)  // 40 days ago → outside 30-day cooldown

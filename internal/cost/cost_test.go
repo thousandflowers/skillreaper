@@ -7,7 +7,7 @@ import (
 
 func TestTokens(t *testing.T) {
 	cases := []struct {
-		name       string
+		name        string
 		chars, want int
 	}{
 		{"zero", 0, 0},
@@ -57,9 +57,9 @@ func TestTokensFor(t *testing.T) {
 
 func TestMoneyPerMonth(t *testing.T) {
 	cases := []struct {
-		name                   string
+		name             string
 		tokens, sessions int
-		price, want       float64
+		price, want      float64
 	}{
 		{"standard", 1000, 60, 3.0, 0.18},
 		{"zero tokens", 0, 100, 3.0, 0},
@@ -104,8 +104,8 @@ func TestLookupPrice(t *testing.T) {
 
 func TestLookupPriceKnownModels(t *testing.T) {
 	models := []struct {
-		name  string
-		id    string
+		name      string
+		id        string
 		wantPrice float64
 	}{
 		{"opus 4.7", "claude-opus-4-7", 5.0},

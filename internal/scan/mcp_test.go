@@ -50,6 +50,53 @@ func TestScanMCP(t *testing.T) {
 	}
 }
 
+// A plugin may declare its MCP servers inline in .claude-plugin/plugin.json
+// instead of a dedicated .mcp.json. Reading only .mcp.json left those servers
+// with no row at all — invisible rather than merely miscounted.
+func TestScanMCPPluginManifestServers(t *testing.T) {
+	home := buildFixtureHome(t)
+	plugDir := filepath.Join(home, "plugins", "cache", "mkt", "coolplug", "1.0.0")
+	mustWrite(t, filepath.Join(plugDir, ".mcp.json"),
+		`{"mcpServers":{"dedicated":{"command":"npx","args":["dedicated-mcp"]},"both":{"command":"npx","args":["from-mcp-json"]}}}`)
+	mustWrite(t, filepath.Join(plugDir, ".claude-plugin", "plugin.json"),
+		`{"name":"coolplug","mcpServers":{"manifest":{"command":"node","args":["mcp/dist/index.js"]},"both":{"command":"node","args":["from-manifest"]}}}`)
+
+	claudeJSON := filepath.Join(home, "dotclaude.json")
+	mustWrite(t, claudeJSON, `{"mcpServers":{}}`)
+
+	items, warns := ScanMCP(claudeJSON, home, "test")
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(items) != 3 {
+		t.Fatalf("got %d items, want 3 (dedicated, both, manifest): %+v", len(items), items)
+	}
+
+	for _, name := range []string{"dedicated", "manifest", "both"} {
+		it := findItem(items, name)
+		if it == nil {
+			t.Errorf("%s: no row", name)
+			continue
+		}
+		if it.Source != "plugin:coolplug@mkt" {
+			t.Errorf("%s: Source = %q", name, it.Source)
+		}
+		if it.Removable {
+			t.Errorf("%s: plugin-shipped server must not be removable", name)
+		}
+	}
+
+	// Declared in both files: one row, and .mcp.json wins.
+	if it := findItem(items, "both"); it != nil {
+		if it.Description != "npx from-mcp-json" {
+			t.Errorf("both: Description = %q, want the .mcp.json definition", it.Description)
+		}
+		if filepath.Base(it.Path) != ".mcp.json" {
+			t.Errorf("both: Path = %q, want the .mcp.json path", it.Path)
+		}
+	}
+}
+
 func TestScanMCPMissingFile(t *testing.T) {
 	home := t.TempDir()
 	items, warns := ScanMCP(filepath.Join(home, "nope.json"), home, "test")

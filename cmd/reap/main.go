@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -44,7 +45,8 @@ func version() string {
 	return Version
 }
 
-const usageText = `reap — evidence-based pruning for your Claude Code agent stack
+const usageText = `reap — evidence-based pruning for your AI-agent stack
+Reads Claude Code, Codex CLI, OpenCode, Cursor, OpenClaw and Hermes.
 
 Usage:
   reap [flags]              scan and report (read-only)
@@ -83,6 +85,7 @@ type options struct {
 	model          string
 	asJSON         bool
 	asMarkdown     bool
+	asAgent        bool
 	noColor        bool
 	yes            bool
 	all            bool
@@ -120,6 +123,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.Float64Var(&opts.price, "price", 0, "input price per million tokens (USD) — used when --model is unknown or unset")
 	fs.BoolVar(&opts.asJSON, "json", false, "output JSON")
 	fs.BoolVar(&opts.asMarkdown, "md", false, "output Markdown")
+	fs.BoolVar(&opts.asAgent, "agent", false, "output compact plain text for an agent to paste verbatim")
 	fs.BoolVar(&opts.noColor, "no-color", false, "disable colors")
 	fs.BoolVar(&opts.noNudge, "no-nudge", false, "suppress the star-CTA prompt")
 	fs.BoolVar(&opts.yes, "yes", false, "prune: apply without confirmation")
@@ -477,6 +481,11 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		}
 	case opts.asMarkdown:
 		report.RenderMarkdown(stdout, r)
+	case opts.asAgent:
+		// Its own case, like --json and --md: living outside the default branch
+		// is what keeps RenderFooter and the star-CTA away from this format
+		// without a hand-written gate. RenderAgent writes its own signature.
+		report.RenderAgent(stdout, r)
 	case opts.quiet:
 		// audit silently — used to warm caches without printing
 	default:
@@ -504,6 +513,8 @@ func cmdGap(opts options, stdout, stderr io.Writer) int {
 		}
 	case opts.asMarkdown:
 		report.RenderGapMarkdown(stdout, r)
+	case opts.asAgent:
+		report.RenderGapAgent(stdout, r)
 	default:
 		report.RenderGap(stdout, r, colorEnabled(opts, stdout))
 	}
@@ -593,7 +604,24 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 		candidates = append(candidates, row)
 	}
 
+	// --json and --quiet are non-interactive by definition: a confirmation
+	// prompt cannot be answered on a stream someone is piping into jq, and it
+	// cannot even be read on one they silenced. Both therefore describe the plan
+	// and stop unless --yes was given as well.
+	machine := opts.asJSON || opts.quiet
+
+	totalTok := 0
+	for _, row := range candidates {
+		totalTok += row.Tokens
+	}
+
 	if len(candidates) == 0 {
+		switch {
+		case opts.asJSON:
+			return writePruneJSON(stdout, stderr, nil, 0, skipped, false, nil)
+		case opts.quiet:
+			return 0
+		}
 		fmt.Fprintln(stdout, "Nothing to reap. Your stack is clean (or evidence is insufficient).")
 		if skipped > 0 {
 			fmt.Fprintf(stdout, "%d unused plugin items can only be disabled via /plugin in Claude Code.\n", skipped)
@@ -601,23 +629,28 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	totalTok := 0
-	for _, row := range candidates {
-		totalTok += row.Tokens
-	}
-	fmt.Fprintf(stdout, "\n🧹  %d items unused · reclaim ~%s tok/session\n\n", len(candidates), humanTok(totalTok))
-	for _, row := range candidates {
-		weight := fmt.Sprintf("~%d tok", row.Tokens)
-		if row.Category == scan.CatMCP || row.Category == scan.CatHook {
-			weight = "?"
+	if !machine {
+		fmt.Fprintf(stdout, "\n🧹  %d items unused · reclaim ~%s tok/session\n\n", len(candidates), humanTok(totalTok))
+		for _, row := range candidates {
+			weight := fmt.Sprintf("~%d tok", row.Tokens)
+			if row.Category == scan.CatMCP || row.Category == scan.CatHook {
+				weight = "?"
+			}
+			fmt.Fprintf(stdout, "  %-6s  %-40s  %s\n", row.Category, row.Name, weight)
 		}
-		fmt.Fprintf(stdout, "  %-6s  %-40s  %s\n", row.Category, row.Name, weight)
-	}
-	if skipped > 0 {
-		fmt.Fprintf(stdout, "\n  (%d unused plugin items skipped — disable via /plugin)\n", skipped)
+		if skipped > 0 {
+			fmt.Fprintf(stdout, "\n  (%d unused plugin items skipped — disable via /plugin)\n", skipped)
+		}
 	}
 
 	if !opts.yes {
+		if machine {
+			// Nothing was touched: report the plan and leave the tree alone.
+			if opts.asJSON {
+				return writePruneJSON(stdout, stderr, candidates, totalTok, skipped, false, nil)
+			}
+			return 0
+		}
 		prompt := fmt.Sprintf("\nPrune all %d items? This quarantines them (reversible). [Y/n] ", len(candidates))
 		if !confirm(stdin, stdout, prompt) {
 			fmt.Fprintln(stdout, "aborted")
@@ -626,6 +659,7 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	selected := candidates
+	var done []prune.Entry
 	for _, row := range selected {
 		var e prune.Entry
 		var err error
@@ -643,13 +677,73 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error reaping %s: %v\n", row.Name, err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "reaped %s %s (id %s)\n", row.Category, row.Name, e.ID)
+		done = append(done, e)
+		if !machine {
+			fmt.Fprintf(stdout, "reaped %s %s (id %s)\n", row.Category, row.Name, e.ID)
+		}
+	}
+	if opts.asJSON {
+		return writePruneJSON(stdout, stderr, selected, totalTok, skipped, true, done)
+	}
+	if opts.quiet {
+		return 0
 	}
 	fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore --all (or a single id)\n")
 	col := colorEnabled(opts, stdout)
 	report.RenderValueFeedback(stdout, "pruned", len(candidates), totalTok, r.SessionsPerMonth, opts.price, col)
 	tryShowShareHint(opts, stdout, col)
 	tryShowStarCta(opts, stdout, r, col)
+	return 0
+}
+
+// writePruneJSON emits the prune plan, or its result when --yes carried it out,
+// as a single JSON document. Applied is explicit rather than implied by a
+// non-empty entries list: a plan over zero candidates and a completed prune of
+// zero candidates are different facts, and a caller checking whether its disk
+// changed should not have to infer which one it got.
+func writePruneJSON(w, stderr io.Writer, candidates []report.Row, totalTok, skipped int, applied bool, done []prune.Entry) int {
+	type item struct {
+		Category string `json:"category"`
+		Name     string `json:"name"`
+		Tokens   int    `json:"tokens"`
+		Path     string `json:"path,omitempty"`
+	}
+	type entry struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		Category string `json:"category"`
+	}
+	out := struct {
+		Candidates         []item  `json:"candidates"`
+		TotalTokens        int     `json:"total_tokens"`
+		SkippedPluginItems int     `json:"skipped_plugin_items"`
+		Applied            bool    `json:"applied"`
+		Pruned             []entry `json:"pruned"`
+	}{
+		Candidates:         make([]item, 0, len(candidates)),
+		TotalTokens:        totalTok,
+		SkippedPluginItems: skipped,
+		Applied:            applied,
+		Pruned:             make([]entry, 0, len(done)),
+	}
+	for _, row := range candidates {
+		out.Candidates = append(out.Candidates, item{
+			Category: string(row.Category), Name: row.Name, Tokens: row.Tokens, Path: row.Path,
+		})
+	}
+	for i, e := range done {
+		name, cat := e.ID, ""
+		if i < len(candidates) {
+			name, cat = candidates[i].Name, string(candidates[i].Category)
+		}
+		out.Pruned = append(out.Pruned, entry{ID: e.ID, Name: name, Category: cat})
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(out); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
 	return 0
 }
 
@@ -1103,7 +1197,11 @@ func tryShowStarCta(opts options, stdout io.Writer, r *report.Report, color bool
 	if isNudgeDisabled(opts) {
 		return
 	}
-	if opts.asJSON || opts.asMarkdown {
+	// Every format that must stay clean is named here rather than relied on for
+	// living outside the default branch of a switch. cmdPrune calls this too, and
+	// a gate that is really just a position in one switch statement is one
+	// refactor away from leaking a CTA into --quiet or into pasted --agent bytes.
+	if opts.asJSON || opts.asMarkdown || opts.asAgent || opts.quiet {
 		return
 	}
 	if !color {

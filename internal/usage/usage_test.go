@@ -307,3 +307,38 @@ func TestParseUnreadableSubdirMarksEvidenceIncomplete(t *testing.T) {
 		t.Errorf("accessible transcript should still be parsed; seen-skill uses = %d, want 1", got)
 	}
 }
+
+// Real transcripts carry three shapes of MCP tool name. Pin the server segment
+// the parser extracts from each, since report.aliasKeys is written against
+// exactly these keys.
+func TestParseMCPToolPrefixForms(t *testing.T) {
+	dir := t.TempDir()
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		// Plain: a server from the user or project config.
+		`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","name":"mcp__headroom__headroom_stats","input":{}}]}}`,
+		// Plugin-shipped: the server name is prefixed with plugin_<plugin>_.
+		`{"type":"assistant","timestamp":"2026-06-01T10:01:00Z","message":{"content":[{"type":"tool_use","name":"mcp__plugin_ecc_playwright__browser_navigate","input":{}}]}}`,
+		// Plugin-shipped with a hyphen in the plugin name.
+		`{"type":"assistant","timestamp":"2026-06-01T10:02:00Z","message":{"content":[{"type":"tool_use","name":"mcp__plugin_superpowers-chrome_chrome__use_browser","input":{}}]}}`,
+		// Remote claude.ai connector: no config row exists for these, so the key
+		// is recorded but matches nothing. Pinned so the shape is not lost.
+		`{"type":"assistant","timestamp":"2026-06-01T10:03:00Z","message":{"content":[{"type":"tool_use","name":"mcp__claude_ai_Figma__get_metadata","input":{}}]}}`,
+	)
+
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]int{
+		"headroom":                         1,
+		"plugin_ecc_playwright":            1,
+		"plugin_superpowers-chrome_chrome": 1,
+		"claude_ai_Figma":                  1,
+	}
+	for key, n := range want {
+		if got := st.Uses[scan.CatMCP][key]; got != n {
+			t.Errorf("Uses[mcp][%q] = %d, want %d", key, got, n)
+		}
+	}
+}

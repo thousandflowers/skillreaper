@@ -294,6 +294,113 @@ func TestRunPruneAndRestore(t *testing.T) {
 	}
 }
 
+func TestRunPruneJSONEmitsValidJSON(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	// No --yes: the plan, and nothing touched. A prompt here would be
+	// unanswerable on a stream headed for jq, so there must not be one.
+	code := run([]string{
+		"prune", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--json",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+
+	var plan struct {
+		Candidates []struct {
+			Category string `json:"category"`
+			Name     string `json:"name"`
+			Tokens   int    `json:"tokens"`
+		} `json:"candidates"`
+		TotalTokens int  `json:"total_tokens"`
+		Applied     bool `json:"applied"`
+		Pruned      []struct {
+			ID string `json:"id"`
+		} `json:"pruned"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatalf("prune --json did not emit JSON: %v\noutput:\n%s", err, out.String())
+	}
+	if len(plan.Candidates) == 0 {
+		t.Error("plan lists no candidates")
+	}
+	if plan.Applied {
+		t.Error("applied must be false without --yes")
+	}
+	if len(plan.Pruned) != 0 {
+		t.Error("nothing may be pruned without --yes")
+	}
+	if plan.TotalTokens <= 0 {
+		t.Error("total_tokens should sum the candidates")
+	}
+	if strings.Contains(out.String(), "[Y/n]") || strings.Contains(out.String(), "🧹") {
+		t.Error("the human plan leaked into the JSON stream")
+	}
+	if _, err := os.Stat(filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")); err != nil {
+		t.Error("a plan must not move anything")
+	}
+
+	// With --yes it acts, and still emits one JSON document.
+	out.Reset()
+	code = run([]string{
+		"prune", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--json", "--yes",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	plan.Applied = false
+	if err := json.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatalf("prune --json --yes did not emit JSON: %v\noutput:\n%s", err, out.String())
+	}
+	if !plan.Applied {
+		t.Error("applied must be true after --yes")
+	}
+	if len(plan.Pruned) == 0 {
+		t.Error("pruned should list what moved")
+	}
+	if _, err := os.Stat(filepath.Join(claudeDir, "skills", "deadskill")); !os.IsNotExist(err) {
+		t.Error("deadskill should be quarantined")
+	}
+}
+
+func TestRunPruneQuietPrintsNothing(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	// Without --yes: silent, and a no-op.
+	code := run([]string{
+		"prune", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--quiet",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	if out.Len() != 0 {
+		t.Errorf("--quiet wrote %d bytes to stdout:\n%s", out.Len(), out.String())
+	}
+	if _, err := os.Stat(filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")); err != nil {
+		t.Error("--quiet without --yes must not move anything")
+	}
+
+	// With --yes: still silent, but it acts.
+	code = run([]string{
+		"prune", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
+		"--min-sessions", "1", "--quiet", "--yes",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	if out.Len() != 0 {
+		t.Errorf("--quiet --yes wrote %d bytes to stdout:\n%s", out.Len(), out.String())
+	}
+	if _, err := os.Stat(filepath.Join(claudeDir, "skills", "deadskill")); !os.IsNotExist(err) {
+		t.Error("deadskill should be quarantined")
+	}
+}
+
 func TestRunPruneInteractiveAbort(t *testing.T) {
 	claudeDir, claudeJSON := buildFixture(t)
 	var out, errOut bytes.Buffer

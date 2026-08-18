@@ -1,6 +1,30 @@
+```
+skillreaper · last 30d · 34 sessions
+7/378 items fired · 1% utilization
+371 never used · ~22720 dead tokens/session
+
+TOKENS  CATEGORY  NAME                 VERDICT  REASON
+185     skill     import-timesheet     REAP     unused
+185     skill     render-playlist      REAP     unused
+177     skill     review-sitemap       REAP     unused
+163     skill     deploy-dataset       REAP     unused
+159     skill     validate-manifest    REAP     unused
+157     skill     parse-contract       REAP     unused
+149     skill     extract-receipt      REAP     unused
+145     skill     sync-changelog       REAP     unused
+111     skill     summarise-timesheet  REAP     unused
+110     skill     export-timesheet     REAP     unused
+(361 more never-used items not shown — use --json for all)
+
+To prune: reap prune   (interactive, reversible via reap restore --all)
+
+measured by skillreaper · github.com/thousandflowers/skillreaper
+```
+
 <p align="center">
-  <img src="docs/reap-demo.gif" alt="reap in action" width="800"><br>
-  <sub>Demo runs against a sample fixture. The numbers below are from my own stack.</sub>
+  <sub>Real <code>reap --agent</code> output, run against a generated sample stack
+  (<a href="docs/gif-helpers/hero-fixture.sh">hero-fixture.sh</a>) — not anyone's
+  install. The numbers further down are measured on mine.</sub>
 </p>
 
 <h1 align="center">
@@ -25,14 +49,11 @@
 <br>
 
 ```bash
-brew install thousandflowers/tap/skillreaper
-reap
+npx skillreaper
 ```
 
-> The installed binary is `reap` — not `skillreaper`.
-
-On my own stack right now: **376 items loaded, 5 ever fired — 1% utilization.**
-That's ~19,700 dead tokens re-sent in every single session, ~510k a month of
+On my own stack right now: **378 items loaded, 7 ever fired — 1% utilization.**
+That's ~19,800 dead tokens re-sent in every single session, ~694k a month of
 pure token waste, paid for on every request before you type anything.
 
 **One command. Zero config. Read-only.** It reads your real session transcripts,
@@ -40,6 +61,8 @@ finds every skill / MCP / agent your AI loads but never fires, and shows you
 exactly what it costs you.
 
 <br>
+
+## Why this exists
 
 ### Why I built this
 
@@ -56,7 +79,7 @@ binary for every major OS.
 
 <br>
 
-### Two problems, one cause
+### Two costs of context bloat
 
 **Wrong-tool picks.** Buried in a wall of irrelevant options, your agent
 wastes turns reaching for the wrong tool. More turns = slower, costlier,
@@ -65,14 +88,20 @@ sloppier runs. This isn't about pennies — it's about work quality.
 **Wasted tokens.** Dead instructions eat context every session and hurt
 prompt-cache hit rate. A typical setup:
 
-- 376 items loaded
-- 363 never used (97 %)
-- 19 528 tok/session dead
-- ~918 000 tok/month burned on irrelevant instructions
+- 378 items loaded
+- 370 never used (98 %)
+- 19 823 tok/session dead
+- ~694 000 tok/month burned on irrelevant instructions
+- ~$2.08/month, ~$25/year — the same waste priced instead of counted
 
-<p align="center"><sub>Token figures are estimates — <code>reap</code> counts tokens as <code>ceil(chars / 3.7)</code>. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
+<p align="center"><sub>The money line is one measurement of one stack, n=1, and the
+weakest number here: <code>19 823 × 35 × $3.00 ÷ 1e6</code> — input tokens only, at
+<code>claude-sonnet-4-6</code>'s $3.00/MTok default, with tokens estimated as
+<code>ceil(chars / 3.7)</code> and the monthly session count extrapolated from a
+30-day window. Change the model, the price, or how much you work and it moves;
+the item and token counts do not. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
 
-<p align="center"><em>Measured on my own setup — 47 sessions over 30 days. Run <code>reap</code> to see yours.</em></p>
+<p align="center"><em>Measured on my own setup — 35 sessions over 30 days. Run <code>reap</code> to see yours.</em></p>
 
 skillreaper measures both, from evidence — no guessing.
 
@@ -87,20 +116,37 @@ files and session transcripts on disk — your data never leaves your machine.
 
 <br>
 
-### Before → After
+### Before → After: what removing token waste buys
 
 | Before skillreaper | After skillreaper |
 |---|---|
-| 376 items loaded every session | 13 kept · 10 actually fire |
-| 19 528 tok/session dead | Full context budget for real work |
-| ≈ 72 000 dead chars ≈ 29 pages every session (at 500 words/pg) | Zero |
+| 378 items loaded every session | 8 kept · 7 actually fire |
+| 19 823 tok/session dead | Full context budget for real work |
+| ≈ 73 000 dead chars ≈ 29 pages every session (at 500 words/pg) | Zero |
 | Lower cache hit rate = higher latency | Smaller prompt fits in cache |
 
 <br>
 
 <p align="center">If this looks useful → <a href="https://github.com/thousandflowers/skillreaper">⭐ star the repo</a></p>
 
+## Getting started
+
 ### Install
+
+**Inside Claude Code** — adds `/skillreaper:reap` and `/skillreaper:gap`, so the
+report renders in the conversation instead of a scrollback you have to re-read:
+
+```
+/plugin marketplace add thousandflowers/skillreaper
+/plugin install skillreaper@skillreaper
+```
+
+The plugin is a thin wrapper: it drives the same binary, so install that too
+with any line below. The skills fall back to `npx skillreaper` and tell you how
+to install permanently if they can't find it.
+
+**Install permanently** — Homebrew and npm install both names, `reap` and
+`skillreaper`, so either one works. `go install` gives you `reap`:
 
 ```bash
 # macOS — Homebrew
@@ -109,16 +155,16 @@ brew install thousandflowers/tap/skillreaper
 # Any platform — npm (downloads the matching prebuilt, checksum-verified)
 npm install -g skillreaper
 
-# No install — one-shot via npx
-npx skillreaper
-
 # Any platform — Go (Go ≥ 1.24)
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```
 
-> Brew and Go install the command as `reap`; npm/npx expose it as
-> `skillreaper`. Same tool — every `reap …` example below works under either
-> name.
+> Already installed it with Homebrew? You don't need the npm package —
+> both put `reap` and `skillreaper` in the same prefix, so `npm install -g`
+> stops at an EEXIST link error rather than overwriting brew's copy.
+> Pick one route: to switch to npm, run `brew uninstall skillreaper` first.
+> Neither affects `npx skillreaper`, which runs from a cache and never
+> links a global command.
 
 **Binary downloads** — macOS (Intel + Apple Silicon), Linux (amd64 + arm64),
 Windows (amd64 + arm64) — all on the
@@ -159,6 +205,19 @@ reap --mute-threshold 0.20    # firing rate below which MUTE triggers (default 2
 reap version                  # print version
 ```
 
+<br>
+
+### Demo
+
+<p align="center">
+  <img src="docs/reap-demo.gif" alt="reap in action" width="800"><br>
+  <sub>Recorded against a small sample fixture
+  (<a href="docs/gif-helpers/demo-fixture.sh">demo-fixture.sh</a>), so the
+  numbers are the fixture's, not a real stack's.</sub>
+</p>
+
+<br>
+
 Everything is **reversible**. `reap prune` moves files to a `reaped/`
 directory with a versioned manifest. Nothing is ever deleted. Run
 `reap restore --all` and everything goes back exactly where it was.
@@ -168,6 +227,8 @@ Claude directory, so an interrupted prune, mute, or hook edit leaves the
 original file intact — never a half-written mix.
 
 <br>
+
+## Reading the report
 
 ### Verdicts
 
@@ -183,7 +244,7 @@ Every verdict includes a reason suffix explaining *why*.
 
 <br>
 
-### Loaded vs fired
+### Loaded vs fired: measuring context-window utilization
 
 Beyond the prune verdicts, `reap gap` shows your **utilization rate** —
 how much of what you load you actually use.
@@ -229,7 +290,9 @@ mute does not catch it.
 
 <br>
 
-### route — usage-informed lazy-load plan (opt-in)
+## Beyond pruning
+
+### route — context engineering for large tool libraries
 
 After pruning, a library of hundreds of legit skills still grows resident
 context linearly. `reap route` proposes a category-router organization driven by
@@ -283,6 +346,8 @@ Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.
 
 
 
+## Transparency and internals
+
 ### Platform support
 
 | Platform | Full support |
@@ -296,7 +361,7 @@ Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.
 
 <br>
 
-### How it works
+### How the evidence is gathered
 
 1. **Auto-detect** — probes every known config directory. Only installed
    platforms are scanned. No flags needed.
@@ -349,7 +414,7 @@ lazy tool loading. These two optimizations are complementary, not competing.
 
 <br>
 
-### Design
+### Design and internals
 
 - **100 % local**, zero dependencies, single static binary (Go ≥ 1.24)
 - **Multi-platform** — adding a new platform is one struct in

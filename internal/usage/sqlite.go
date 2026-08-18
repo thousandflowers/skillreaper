@@ -142,11 +142,23 @@ func parseSQLiteRows(r io.Reader, st *Stats, cutoff time.Time) (int, error) {
 		}
 	}
 
-	sc := bufio.NewScanner(r)
-	sc.Split(splitSQLiteRows)
-	sc.Buffer(make([]byte, 0, 256*1024), maxLineBytes)
-	for sc.Scan() {
-		raw := sc.Bytes()
+	br := bufio.NewReaderSize(r, 256*1024)
+	overlong := false
+	for {
+		raw, tooLong, rerr := readDelim(br, sqliteRowSep[0], maxLineBytes)
+		if rerr != nil {
+			if rerr == io.EOF {
+				break
+			}
+			flush()
+			return len(sessions), rerr
+		}
+		if tooLong {
+			// The row is unreadable, but the rows behind it are not.
+			overlong = true
+			st.IncompleteEvidence = true
+			continue
+		}
 		if len(bytes.TrimSpace(raw)) == 0 {
 			continue
 		}
@@ -175,26 +187,13 @@ func parseSQLiteRows(r io.Reader, st *Stats, cutoff time.Time) (int, error) {
 		// no init block, so no dead-tool weight.
 		recordBlocks(st, blocks, ts, "", pending, mcpPending, nil)
 	}
-	if err := sc.Err(); err != nil {
-		flush()
-		return len(sessions), err
-	}
 	flush()
-
+	if overlong {
+		// Still reported: the caller merges the partial stats and needs to know
+		// they are partial.
+		return len(sessions), fmt.Errorf("at least one row exceeded the %d byte parser limit and was skipped", maxLineBytes)
+	}
 	return len(sessions), nil
-}
-
-func splitSQLiteRows(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	if i := bytes.IndexByte(data, sqliteRowSep[0]); i >= 0 {
-		return i + 1, data[:i], nil
-	}
-	if atEOF {
-		if len(data) == 0 {
-			return 0, nil, nil
-		}
-		return len(data), data, nil
-	}
-	return 0, nil, nil
 }
 
 // parseSQLiteTime reads created_at, which OpenCode may store as RFC3339 or as

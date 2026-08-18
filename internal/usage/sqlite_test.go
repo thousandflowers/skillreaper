@@ -165,3 +165,47 @@ func TestParseSQLiteBadFile(t *testing.T) {
 		t.Error("expected an error for a non-sqlite file, got nil")
 	}
 }
+
+// Issue #42, the sqlite twin of #33. The scanner here stops for good at a row
+// over maxLineBytes, so every row after it is dropped. The existing overlong
+// test puts the long row last, which is why it never covered this. The error is
+// still reported: what changes is that the rows behind the long one survive.
+func TestParseSQLiteResumesAfterAnOverlongRow(t *testing.T) {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		t.Skip("sqlite3 CLI not available")
+	}
+	db := filepath.Join(t.TempDir(), "opencode.db")
+	hugeInput := strings.Repeat("x", maxLineBytes)
+	seed := `
+CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, created_at INTEGER);
+INSERT INTO messages (session_id, role, content, created_at) VALUES
+ ('s1','assistant','[{"type":"tool_use","name":"Skill","input":{"skill":"before-overlong"}}]', 1717200000),
+ ('s1','assistant','[{"type":"tool_use","name":"Skill","input":{"skill":"overlong","pad":"` + hugeInput + `"}}]', 1717200001),
+ ('s1','assistant','[{"type":"tool_use","name":"Skill","input":{"skill":"after-overlong"}}]', 1717200002);
+`
+	cmd := exec.Command("sqlite3", db)
+	cmd.Stdin = strings.NewReader(seed)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("seed sqlite: %v\n%s", err, out)
+	}
+
+	st, err := ParseSQLite(db, time.Unix(1717100000, 0), 30)
+	if st == nil {
+		t.Fatal("expected stats even with an overlong row")
+	}
+	if err == nil {
+		t.Error("an overlong row should still be reported to the caller")
+	}
+	if !st.IncompleteEvidence {
+		t.Error("expected the evidence to be marked incomplete")
+	}
+	if got := st.Uses[scan.CatSkill]["before-overlong"]; got != 1 {
+		t.Errorf("before-overlong uses = %d, want 1", got)
+	}
+	if got := st.Uses[scan.CatSkill]["after-overlong"]; got != 1 {
+		t.Errorf("after-overlong uses = %d, want 1: every row past the overlong one was dropped", got)
+	}
+	if got := st.Uses[scan.CatSkill]["overlong"]; got != 0 {
+		t.Errorf("overlong uses = %d, want 0: that row really is unreadable", got)
+	}
+}

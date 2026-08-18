@@ -262,7 +262,7 @@ func parseFile(path, project string, st *Stats) {
 
 	br := bufio.NewReaderSize(f, 256*1024)
 	for {
-		line, tooLong, rerr := readLine(br, maxLineBytes)
+		line, tooLong, rerr := readDelim(br, '\n', maxLineBytes)
 		if rerr != nil {
 			if rerr != io.EOF {
 				st.MalformedLines++
@@ -422,24 +422,32 @@ func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string
 	}
 }
 
-// readLine returns the next line from br without its terminator. A line longer
-// than max is dropped and reported with tooLong, leaving the reader positioned
-// at the start of the following line.
+// readDelim returns the next record from br, without its delimiter. A record
+// longer than max is dropped and reported with tooLong, leaving the reader at
+// the start of the following one.
 //
-// bufio.Scanner cannot do that last part: one line over its buffer makes Scan
-// return false for good, so a single 12MB tool result silently discarded every
-// record after it in the same transcript and the loss was reported as one
-// unreadable line.
-func readLine(br *bufio.Reader, max int) (line []byte, tooLong bool, err error) {
+// bufio.Scanner cannot do that last part: one record over its buffer makes Scan
+// return false for good, so a single oversized entry silently discarded every
+// record after it in the same file and the loss was reported as one unreadable
+// line. The delimiter is a parameter because the JSONL transcripts split on
+// newlines and OpenCode's SQLite dump splits on \x1e.
+func readDelim(br *bufio.Reader, delim byte, max int) (rec []byte, tooLong bool, err error) {
 	var buf []byte
+	trim := func(b []byte) []byte {
+		b = bytes.TrimSuffix(b, []byte{delim})
+		if delim == '\n' {
+			b = bytes.TrimSuffix(b, []byte{'\r'})
+		}
+		return b
+	}
 	for {
-		chunk, e := br.ReadSlice('\n')
+		chunk, e := br.ReadSlice(delim)
 		// Checked before appending, and on every chunk: the final chunk of an
-		// over-long line arrives with the newline and no ErrBufferFull, so a
-		// check confined to the buffer-full branch lets that line through.
+		// over-long record arrives with the delimiter and no ErrBufferFull, so
+		// a check confined to the buffer-full branch lets that record through.
 		if len(buf)+len(chunk) > max {
 			for e == bufio.ErrBufferFull {
-				_, e = br.ReadSlice('\n')
+				_, e = br.ReadSlice(delim)
 			}
 			if e != nil && e != io.EOF {
 				return nil, true, e
@@ -458,6 +466,6 @@ func readLine(br *bufio.Reader, max int) (line []byte, tooLong bool, err error) 
 				return nil, false, e
 			}
 		}
-		return bytes.TrimRight(buf, "\r\n"), false, nil
+		return trim(buf), false, nil
 	}
 }

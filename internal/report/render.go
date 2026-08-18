@@ -195,6 +195,17 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		paint(cBRed, shockLine),
 		paint(cBold+cBRed, shockMid),
 		paint(cBRed, shockBot))
+	// Without this line the box reads as the whole bill. It is not: the dead
+	// items whose weight could never be measured contribute 0 to it.
+	if r.DeadUnknownWeight > 0 {
+		noun := "items"
+		if r.DeadUnknownWeight == 1 {
+			noun = "item"
+		}
+		fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf(
+			"a floor, not a total: %d unused %s (MCP servers, hooks) carry weight that was never measured",
+			r.DeadUnknownWeight, noun)))
+	}
 	if r.DeadToolChars > 0 {
 		// DeadToolChars is a total summed across every session; divide to show
 		// the per-session average the label promises.
@@ -311,7 +322,7 @@ func renderSection(w io.Writer, rows []Row, paint func(code, s string) string) {
 		tw := newTable(w)
 		tw.row("NAME", "TOK", "SRC", "PERM", "USES", "LAST", "JUDGMENT")
 		for _, row := range items {
-			weight := weightDisplay(row.Tokens, maxTok, row.Category, paint)
+			weight := weightDisplay(row.Tokens, maxTok, row.WeightUnknown, paint)
 			src := shortSource(row.Source)
 			perm := permDisplay(row)
 
@@ -363,8 +374,8 @@ func permDisplay(row Row) string {
 
 // weightDisplay returns a compact visual representation of token weight:
 // a number like "~248" with a mini bar proportional to maxTok.
-func weightDisplay(tok, maxTok int, cat scan.Category, _ func(code, s string) string) string {
-	if cat == scan.CatMCP || cat == scan.CatHook {
+func weightDisplay(tok, maxTok int, unknown bool, _ func(code, s string) string) string {
+	if unknown {
 		return "   ?"
 	}
 	if maxTok == 0 {
@@ -390,6 +401,10 @@ func RenderMarkdown(w io.Writer, r *Report) {
 	fmt.Fprintf(w, "Window: last %d days · %d sessions analyzed\n\n", r.WindowDays, r.Sessions)
 	fmt.Fprintf(w, "**%d items never used · ~%d dead tokens/session · ~$%.2f/month**\n",
 		r.DeadCount, r.DeadTokensPerSession, r.MoneyPerMonth)
+	if r.DeadUnknownWeight > 0 {
+		fmt.Fprintf(w, "\nA floor, not a total: %d unused items (MCP servers, hooks) carry weight that was never measured.\n",
+			r.DeadUnknownWeight)
+	}
 
 	for _, sec := range sectionTitles {
 		rows := filterRows(r.Rows, sec.cat)
@@ -401,7 +416,7 @@ func RenderMarkdown(w io.Writer, r *Report) {
 		fmt.Fprintln(w, "|---|---|---|---|---|---|---|")
 		for _, row := range rows {
 			weight := fmt.Sprintf("~%d tok", row.Tokens)
-			if row.Category == scan.CatMCP || row.Category == scan.CatHook {
+			if row.WeightUnknown {
 				weight = "?"
 			}
 			uses, last := "-", "-"

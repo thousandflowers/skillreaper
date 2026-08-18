@@ -41,14 +41,21 @@ type Opts struct {
 // Row is one inventory item with its evidence and verdict.
 type Row struct {
 	scan.Item
-	Uses        int
-	LastUsed    time.Time
-	Verdict     string
-	Reason      string    // why this verdict was assigned
-	Tokens      int       // estimated per-session weight
-	Kept        bool      // user manually marked this as keep
-	ErrorCount  int       // invocations that errored in the window
-	LastAttempt time.Time // most recent attempt (success or error)
+	Uses     int
+	LastUsed time.Time
+	Verdict  string
+	Reason   string // why this verdict was assigned
+	Tokens   int    // estimated per-session weight
+	Kept     bool   // user manually marked this as keep
+	// WeightUnknown marks a row whose per-session cost could not be measured,
+	// as distinct from one measured at zero. An MCP server's cost is its tool
+	// schemas and a hook's is its injected output: the host builds both at
+	// runtime, neither is on disk in a form we can read, and no transcript
+	// record declares them. Tokens stays 0 for these, and without this flag a
+	// reader takes that 0 for "free" instead of "never measured".
+	WeightUnknown bool
+	ErrorCount    int       // invocations that errored in the window
+	LastAttempt   time.Time // most recent attempt (success or error)
 }
 
 // Report is the full result of a scan.
@@ -60,6 +67,10 @@ type Report struct {
 	Rows                 []Row
 	DeadCount            int
 	DeadTokensPerSession int
+	// DeadUnknownWeight counts dead items excluded from DeadTokensPerSession
+	// because their weight was never measurable. The total below is a floor,
+	// not an estimate, whenever this is above zero.
+	DeadUnknownWeight    int
 	MuteCount            int // skills flagged MUTE (heavy + rarely fired)
 	MuteTokensPerSession int // per-session tokens recoverable by muting them
 	DeadToolChars        int // from init-based tool-declaration tracking
@@ -104,6 +115,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 
 	for _, it := range items {
 		row := Row{Item: it, Tokens: cost.TokensFor(opts.Model, it.DescChars)}
+		row.WeightUnknown = it.Category == scan.CatMCP || it.Category == scan.CatHook
 		switch it.Category {
 		case scan.CatSkill, scan.CatAgent, scan.CatMCP:
 			row.Uses, row.LastUsed = lookupUses(st, it)
@@ -160,6 +172,11 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		switch row.Verdict {
 		case VerdictReap:
 			r.DeadCount++
+			if row.WeightUnknown {
+				// Counted, but its weight cannot join the total: adding 0 would
+				// quietly understate the headline by whatever it really costs.
+				r.DeadUnknownWeight++
+			}
 			r.DeadTokensPerSession += row.Tokens
 		case VerdictMute:
 			r.MuteCount++

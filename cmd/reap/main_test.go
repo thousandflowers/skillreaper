@@ -1404,3 +1404,53 @@ func TestReportOnUnreadableDirDoesNotLookLikeACleanStack(t *testing.T) {
 		t.Errorf("stderr does not say the inventory failed: %q", errOut.String())
 	}
 }
+
+// keep is the one command whose entire job is protecting an item from prune,
+// and it took args[0] literally: only the exact "category:name" form ever
+// matched the lookup in report.Build. A bare name, or a name with a typo, or a
+// name that does not exist at all, was written to overrides.json, answered with
+// "This item will be excluded from prune", and matched nothing.
+func TestKeepResolvesBareNamesAndRejectsUnknownOnes(t *testing.T) {
+	verdictOf := func(t *testing.T, claudeDir, claudeJSON, name string) (string, bool) {
+		t.Helper()
+		var out bytes.Buffer
+		if code := run([]string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--json", "--min-sessions", "1"},
+			strings.NewReader(""), &out, io.Discard); code != 0 {
+			t.Fatalf("report exit = %d", code)
+		}
+		var r report.Report
+		if err := json.Unmarshal(out.Bytes(), &r); err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range r.Rows {
+			if row.Name == name {
+				return row.Verdict, row.Kept
+			}
+		}
+		t.Fatalf("%s not in report", name)
+		return "", false
+	}
+
+	t.Run("bare name is resolved", func(t *testing.T) {
+		claudeDir, claudeJSON := buildFixture(t)
+		var out, errOut bytes.Buffer
+		if code := run([]string{"keep", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "deadskill"},
+			strings.NewReader(""), &out, &errOut); code != 0 {
+			t.Fatalf("keep exit = %d, stderr = %q", code, errOut.String())
+		}
+		v, kept := verdictOf(t, claudeDir, claudeJSON, "deadskill")
+		if v != "KEEP" || !kept {
+			t.Errorf("verdict = %s kept = %v, want KEEP/true: the keep was written but never matched", v, kept)
+		}
+	})
+
+	t.Run("unknown name is refused", func(t *testing.T) {
+		claudeDir, claudeJSON := buildFixture(t)
+		var out, errOut bytes.Buffer
+		code := run([]string{"keep", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "no-such-item-anywhere"},
+			strings.NewReader(""), &out, &errOut)
+		if code == 0 {
+			t.Errorf("exit = 0 for an item that does not exist; stdout = %q", out.String())
+		}
+	})
+}

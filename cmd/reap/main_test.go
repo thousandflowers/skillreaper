@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/thousandflowers/skillreaper/internal/banner"
 	"github.com/thousandflowers/skillreaper/internal/hook"
 	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/report"
@@ -1156,5 +1158,98 @@ func TestDedupeByPathKeepsServersSharingAConfigFile(t *testing.T) {
 	}
 	if mcp != 2 {
 		t.Errorf("kept %d MCP servers, want both", mcp)
+	}
+}
+
+// stubTerminal makes the banner's terminal probe report an interactive
+// terminal of the given width for the duration of one test.
+func stubTerminal(t *testing.T, tty bool, cols int) {
+	t.Helper()
+	original := banner.Detect
+	banner.Detect = func(io.Writer) (bool, int, bool) { return tty, cols, tty }
+	t.Cleanup(func() { banner.Detect = original })
+}
+
+// The usage text is the only place the wordmark belongs: the user is looking
+// at the tool rather than running it.
+func TestRunBannerOnTerminal(t *testing.T) {
+	for _, args := range [][]string{{"--help"}, {"-h"}} {
+		t.Run(args[0], func(t *testing.T) {
+			stubTerminal(t, true, 80)
+			var out, errOut bytes.Buffer
+
+			run(args, strings.NewReader(""), &out, &errOut)
+
+			if !strings.Contains(errOut.String(), banner.Mark) {
+				t.Errorf("stderr = %q, want it to contain the wordmark", errOut.String())
+			}
+			if strings.Contains(out.String(), "----------/") {
+				t.Error("wordmark leaked into stdout")
+			}
+		})
+	}
+}
+
+func TestRunBannerSuppressed(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	base := []string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"}
+
+	tests := []struct {
+		name    string
+		args    []string
+		tty     bool
+		noColor string
+	}{
+		{name: "bare invocation runs the scan", args: base, tty: true},
+		{name: "stdout is not a terminal", args: base, tty: false},
+		{name: "json", args: append(append([]string{}, base...), "--json"), tty: true},
+		{name: "markdown", args: append(append([]string{}, base...), "--md"), tty: true},
+		{name: "agent", args: append(append([]string{}, base...), "--agent"), tty: true},
+		{name: "no-banner", args: append(append([]string{}, base...), "--no-banner"), tty: true},
+		{name: "NO_COLOR", args: base, tty: true, noColor: "1"},
+		{name: "narrow terminal", args: base, tty: true},
+		{name: "version flag", args: []string{"--version"}, tty: true},
+		{name: "version subcommand", args: []string{"version"}, tty: true},
+		{name: "help with no-banner", args: []string{"--help", "--no-banner"}, tty: true},
+		{name: "named command", args: append(append([]string{}, base...), "gap"), tty: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cols := 80
+			if tt.name == "narrow terminal" {
+				cols = 19
+			}
+			stubTerminal(t, tt.tty, cols)
+			t.Setenv("NO_COLOR", tt.noColor)
+			var out, errOut bytes.Buffer
+
+			run(tt.args, strings.NewReader(""), &out, &errOut)
+
+			if strings.Contains(errOut.String(), "----------/") {
+				t.Errorf("wordmark printed anyway; stderr = %q", errOut.String())
+			}
+			if strings.Contains(out.String(), "----------/") {
+				t.Errorf("wordmark reached stdout; stdout = %q", out.String())
+			}
+		})
+	}
+}
+
+func TestRunVersionPrintsOnlyTheVersion(t *testing.T) {
+	// A banner here would corrupt every pipe, grep and pasted bug report.
+	stubTerminal(t, true, 80)
+	for _, args := range [][]string{{"--version"}, {"-v"}, {"version"}} {
+		t.Run(args[0], func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			if code := run(args, strings.NewReader(""), &out, &errOut); code != 0 {
+				t.Fatalf("exit = %d, stderr = %q", code, errOut.String())
+			}
+			if got, want := out.String(), "reap "+version()+"\n"; got != want {
+				t.Errorf("stdout = %q, want exactly %q", got, want)
+			}
+			if got := errOut.String(); got != "" {
+				t.Errorf("stderr = %q, want empty", got)
+			}
+		})
 	}
 }

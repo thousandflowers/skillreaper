@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thousandflowers/skillreaper/internal/banner"
 	"github.com/thousandflowers/skillreaper/internal/cost"
 	"github.com/thousandflowers/skillreaper/internal/hook"
 	"github.com/thousandflowers/skillreaper/internal/mute"
@@ -109,6 +110,7 @@ type options struct {
 	dryRun         bool
 	quiet          bool
 	noNudge        bool
+	noBanner       bool
 	listKeep       bool
 	removeKeep     string
 	claudeDir      string
@@ -144,6 +146,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&opts.asAgent, "agent", false, "output compact plain text for an agent to paste verbatim")
 	fs.BoolVar(&opts.noColor, "no-color", false, "disable colors")
 	fs.BoolVar(&opts.noNudge, "no-nudge", false, "suppress the star-CTA prompt")
+	fs.BoolVar(&opts.noBanner, "no-banner", false, "suppress the wordmark shown above the default report and the usage text")
 	fs.BoolVar(&opts.yes, "yes", false, "prune: apply without confirmation")
 	fs.BoolVar(&opts.all, "all", false, "mute/restore/unmute: act on every eligible item")
 	fs.BoolVar(&opts.dryRun, "dry-run", false, "install-hook: print the change without writing")
@@ -153,7 +156,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.StringVar(&opts.claudeDir, "claude-dir", "", "Claude Code directory (default ~/.claude)")
 	fs.StringVar(&opts.claudeJSON, "claude-json", "", "Claude config file (default ~/.claude.json)")
 	fs.StringVar(&opts.claudeVersion, "claude-version", "", "manifest: Claude Code version this skill was tested on")
+	// flag calls Usage the moment it sees -h, before any flag written after it
+	// has been parsed, so the opt-out has to be legible straight from args or
+	// `reap --help --no-banner` would print the thing it just opted out of.
+	optedOut := noBannerRequested(args)
 	fs.Usage = func() {
+		o := bannerOptions(opts)
+		o.NoBanner = o.NoBanner || optedOut
+		banner.Print(stderr, stdout, o)
 		fmt.Fprintf(stderr, usageText, platformNames())
 		fs.PrintDefaults()
 	}
@@ -193,6 +203,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	switch cmd {
 	case "":
+		// No banner here: a bare `reap` is the scan, and the wordmark belongs
+		// to the surfaces a user looks at, never in front of working output.
+		// The usage text is the only call site.
 		return cmdReport(opts, stdout, stderr)
 	case "gap":
 		return cmdGap(opts, stdout, stderr)
@@ -237,6 +250,31 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		fs.Usage()
 		return 2
+	}
+}
+
+// noBannerRequested reports whether --no-banner appears anywhere in args,
+// without waiting for the flag package to reach it.
+func noBannerRequested(args []string) bool {
+	for _, a := range args {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if name != "no-banner" {
+			continue
+		}
+		return !hasValue || (value != "false" && value != "0")
+	}
+	return false
+}
+
+// bannerOptions maps the output-format flags onto the banner's own view of
+// them, so the suppression rules stay in one package instead of being restated
+// at each call site.
+func bannerOptions(o options) banner.Options {
+	return banner.Options{
+		JSON:     o.asJSON,
+		Markdown: o.asMarkdown,
+		Agent:    o.asAgent,
+		NoBanner: o.noBanner,
 	}
 }
 

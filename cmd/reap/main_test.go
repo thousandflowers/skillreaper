@@ -1373,3 +1373,34 @@ func TestPlatformWithoutTranscriptsIsNotReapedOnAnotherPlatformsSessions(t *test
 		t.Fatal("blindskill never reached the report")
 	}
 }
+
+// Issue #32. With the config directory unreadable, every scanner returns
+// nothing and the banner prints "0 items never used · ~$0.00/month" with exit
+// 0, which is exactly what a genuinely clean stack prints. The warnings say the
+// opposite, but the banner is the loudest thing on the page and a wrapping
+// script sees only the exit status.
+func TestReportOnUnreadableDirDoesNotLookLikeACleanStack(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: chmod 000 grants access anyway")
+	}
+	root := t.TempDir()
+	dir := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"--claude-dir", dir, "--no-nudge", "--no-banner"},
+		strings.NewReader(""), &out, &errOut)
+
+	if code == 0 {
+		t.Errorf("exit = 0, so a caller cannot tell an unreadable directory from a clean stack")
+	}
+	if !strings.Contains(errOut.String(), "could not") && !strings.Contains(errOut.String(), "nothing") {
+		t.Errorf("stderr does not say the inventory failed: %q", errOut.String())
+	}
+}

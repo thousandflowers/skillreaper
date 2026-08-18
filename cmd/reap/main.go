@@ -604,6 +604,20 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		// Living in this branch is what excludes it from --json/--md/--quiet.
 		report.RenderFooter(stdout, col)
 	}
+	// Nothing inventoried while warnings were raised is a failed scan, and it
+	// renders identically to a genuinely clean stack: the same banner, the same
+	// "0 items never used", the same exit 0. The warnings say otherwise, but the
+	// banner is the loudest thing on the page and a wrapping script sees only
+	// the status. Name it and exit non-zero so the two can be told apart.
+	if len(r.Rows) == 0 && len(r.Warnings) > 0 {
+		noun := "warnings"
+		if len(r.Warnings) == 1 {
+			noun = "warning"
+		}
+		fmt.Fprintf(stderr, "error: nothing could be inventoried, with %d %s raised. A failed scan, not a clean stack.\n",
+			len(r.Warnings), noun)
+		return 1
+	}
 	return 0
 }
 

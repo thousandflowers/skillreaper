@@ -85,3 +85,26 @@ func displayPath(path string) string {
 	}
 	return path
 }
+
+// ScanProseFile inventories one named always-loaded prose file. ScanProse
+// looks for CLAUDE.md by name, so platforms whose global prose is called
+// something else — Codex's AGENTS.md, Gemini's GEMINI.md — need the path
+// declared in platform.Info to actually be read. Declaring HasProse and
+// inventorying nothing is worse than declaring neither: it implies coverage
+// that does not exist. Returns nothing for a missing path or a directory,
+// so callers can hand it any ProseDirs entry.
+func ScanProseFile(path, platformID string) []Item {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return nil
+	}
+	return []Item{{
+		Category:  CatProse,
+		Name:      displayPath(path),
+		Platform:  platformID,
+		Source:    "global",
+		Path:      path,
+		DescChars: int(info.Size()),
+		Removable: false,
+	}}
+}

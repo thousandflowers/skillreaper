@@ -360,6 +360,7 @@ Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.
 | **OpenCode** | ✅ (usage evidence needs the `sqlite3` CLI; inventory-only without it) |
 | **Cursor** | Inventory only (no local transcripts) |
 | **OpenClaw** | Inventory only (no session history) |
+| **Gemini CLI** | Inventory only (session history is stored in a layout skillreaper does not parse yet, so its items surface as REVIEW, never REAP) |
 
 <br>
 

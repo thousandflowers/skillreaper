@@ -72,3 +72,36 @@ func TestScanProseSkipsSymlinkedRulesRootOutsideTree(t *testing.T) {
 		t.Fatalf("warnings = %d, want 1", len(warns))
 	}
 }
+
+func TestScanProseFileReadsANamedFile(t *testing.T) {
+	// ScanProse only knows the name CLAUDE.md, so a platform whose global
+	// prose is GEMINI.md or AGENTS.md gets nothing unless the named path is
+	// read directly.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "GEMINI.md")
+	body := "# prose\nloaded into every session.\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	items := ScanProseFile(path, "gemini")
+	if len(items) != 1 {
+		t.Fatalf("ScanProseFile returned %d items, want 1", len(items))
+	}
+	if items[0].Category != CatProse || items[0].Platform != "gemini" {
+		t.Errorf("got category %q platform %q", items[0].Category, items[0].Platform)
+	}
+	if items[0].DescChars != len(body) {
+		t.Errorf("DescChars = %d, want %d", items[0].DescChars, len(body))
+	}
+	if items[0].Removable {
+		t.Error("prose must not be marked removable")
+	}
+
+	if got := ScanProseFile(filepath.Join(dir, "missing.md"), "gemini"); got != nil {
+		t.Errorf("missing file returned %v, want nil", got)
+	}
+	if got := ScanProseFile(dir, "gemini"); got != nil {
+		t.Errorf("directory returned %v, want nil", got)
+	}
+}

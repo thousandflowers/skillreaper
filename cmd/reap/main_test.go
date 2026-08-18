@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/hook"
+	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/report"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
@@ -1116,5 +1117,44 @@ func TestFooter_AlwaysPrintsExceptMachineFormats(t *testing.T) {
 				t.Errorf("footer URL present = %v, want %v\noutput: %s", got, tc.want, out.String())
 			}
 		})
+	}
+}
+
+func TestUsageBannerListsEverySupportedPlatform(t *testing.T) {
+	// The banner used to hand-type the platform list, so adding Gemini CLI
+	// left it advertising six platforms out of seven. It is derived now, and
+	// this fails if anyone types it back.
+	var out, errb bytes.Buffer
+	run([]string{"--help"}, strings.NewReader(""), &out, &errb)
+	banner := out.String() + errb.String()
+	for _, p := range platform.All() {
+		if !strings.Contains(banner, p.Name) {
+			t.Errorf("usage banner does not mention %q:\n%s", p.Name, banner)
+		}
+	}
+}
+
+func TestDedupeByPathKeepsServersSharingAConfigFile(t *testing.T) {
+	// Every MCP server declared in ~/.claude.json carries that file as its
+	// Path, so a path-only key would collapse them all into one and silently
+	// erase most of the inventory.
+	items := []scan.Item{
+		{Category: scan.CatMCP, Platform: "claude-code", Path: "/c/.claude.json", Name: "serena"},
+		{Category: scan.CatMCP, Platform: "claude-code", Path: "/c/.claude.json", Name: "inaz"},
+		{Category: scan.CatProse, Platform: "claude-code", Path: "/c/CLAUDE.md", Name: "~/CLAUDE.md"},
+		{Category: scan.CatProse, Platform: "claude-code", Path: "/c/CLAUDE.md", Name: "~/CLAUDE.md"},
+	}
+	got := dedupeByPath(items)
+	if len(got) != 3 {
+		t.Fatalf("dedupeByPath returned %d items, want 3: %+v", len(got), got)
+	}
+	mcp := 0
+	for _, it := range got {
+		if it.Category == scan.CatMCP {
+			mcp++
+		}
+	}
+	if mcp != 2 {
+		t.Errorf("kept %d MCP servers, want both", mcp)
 	}
 }

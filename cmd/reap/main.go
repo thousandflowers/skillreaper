@@ -45,8 +45,24 @@ func version() string {
 	return Version
 }
 
+// platformNames renders every supported platform as prose for the usage
+// banner. Deriving it from platform.All means adding a platform cannot leave
+// the banner claiming a shorter list, which is exactly how Gemini CLI went
+// missing from it.
+func platformNames() string {
+	all := platform.All()
+	names := make([]string, len(all))
+	for i, p := range all {
+		names[i] = p.Name
+	}
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
 const usageText = `reap — evidence-based pruning for your AI-agent stack
-Reads Claude Code, Codex CLI, OpenCode, Cursor, OpenClaw and Hermes.
+Reads %s.
 
 Usage:
   reap [flags]              scan and report (read-only)
@@ -138,7 +154,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.StringVar(&opts.claudeJSON, "claude-json", "", "Claude config file (default ~/.claude.json)")
 	fs.StringVar(&opts.claudeVersion, "claude-version", "", "manifest: Claude Code version this skill was tested on")
 	fs.Usage = func() {
-		fmt.Fprint(stderr, usageText)
+		fmt.Fprintf(stderr, usageText, platformNames())
 		fs.PrintDefaults()
 	}
 	// Go's flag.Parse stops at the first positional argument, so flags placed
@@ -280,6 +296,25 @@ func requireClaudeDir(opts options, stderr io.Writer) bool {
 	return true
 }
 
+// dedupeByPath drops the same item found twice: ProseDirs names prose files
+// that ScanProse already inventories, and listing one twice would double-count
+// its tokens. Name is part of the key because several MCP servers legitimately
+// share the config file that declares them — keying on the path alone would
+// collapse them into one.
+func dedupeByPath(items []scan.Item) []scan.Item {
+	seen := make(map[string]bool, len(items))
+	out := items[:0]
+	for _, it := range items {
+		key := string(it.Category) + "\x00" + it.Platform + "\x00" + it.Path + "\x00" + it.Name
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, it)
+	}
+	return out
+}
+
 // gather runs every scanner plus transcript parsers across all
 // detected platforms and joins the result into a report.
 func gather(opts options) (*report.Report, error) {
@@ -324,12 +359,20 @@ func gather(opts options) (*report.Report, error) {
 		collect(scan.ScanHooks(dir, pid))
 		collect(scan.ScanProse(dir, cwd, pid))
 
-		for _, proseDir := range p.ProseDirs {
-			if info, err := os.Stat(proseDir); err == nil && info.IsDir() {
-				collect(scan.ScanProse(proseDir, "", pid))
+		for _, prosePath := range p.ProseDirs {
+			info, err := os.Stat(prosePath)
+			if err != nil {
+				continue
+			}
+			if info.IsDir() {
+				collect(scan.ScanProse(prosePath, "", pid))
+			} else {
+				collect(scan.ScanProseFile(prosePath, pid), nil)
 			}
 		}
 	}
+
+	items = dedupeByPath(items)
 
 	cutoff := time.Now().AddDate(0, 0, -opts.days)
 

@@ -394,7 +394,11 @@ func gather(opts options) (*report.Report, error) {
 	var items []scan.Item
 	var warns []scan.Warning
 	cwd, _ := os.Getwd()
+	root := ""
 	collect := func(i []scan.Item, w []scan.Warning) {
+		for k := range i {
+			i[k].RootDir = root
+		}
 		items = append(items, i...)
 		warns = append(warns, w...)
 	}
@@ -402,6 +406,7 @@ func gather(opts options) (*report.Report, error) {
 	for _, p := range platforms {
 		dir := p.ConfigDirAbs
 		pid := string(p.ID)
+		root = dir
 
 		collect(scan.ScanSkills(dir, pid))
 		collect(scan.ScanAgents(dir, pid))

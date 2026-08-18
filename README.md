@@ -63,9 +63,11 @@ measured by skillreaper · github.com/thousandflowers/skillreaper
 npx skillreaper
 ```
 
+<!-- readme-mine-headline:start -->
 On my own stack right now: **380 items loaded, 11 ever fired — 2% utilization.**
 That's ~19,760 dead tokens re-sent in every single session, ~790k a month of
 pure token waste, paid for on every request before you type anything.
+<!-- readme-mine-headline:end -->
 
 **One command. Zero config. Read-only.** It reads your real session transcripts,
 finds every skill / MCP / agent your AI loads but never fires, and shows you
@@ -99,8 +101,9 @@ sloppier runs. This isn't about pennies — it's about work quality.
 **Wasted tokens.** Dead instructions eat context every session and hurt
 prompt-cache hit rate. A typical setup:
 
+<!-- readme-mine-costs:start -->
 - 380 items loaded
-- 368 never used (97 %)
+- 368 never used (96 %)
 - 19 760 tok/session dead
 - ~790 000 tok/month burned on irrelevant instructions
 - ~$2.37/month, ~$28/year — the same waste priced instead of counted
@@ -112,7 +115,8 @@ weakest number here: <code>19 760 × 40 × $3.00 ÷ 1e6</code> — input tokens 
 30-day window. Change the model, the price, or how much you work and it moves;
 the item and token counts do not. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
 
-<p align="center"><em>Measured on my own setup — 40 sessions over 30 days. Run <code>reap</code> to see yours.</em></p>
+<p align="center"><em>Measured on my own setup — 40 sessions over 30 days, 2026-08-18. Run <code>reap</code> to see yours.</em></p>
+<!-- readme-mine-costs:end -->
 
 skillreaper measures both, from evidence — no guessing.
 
@@ -129,12 +133,14 @@ files and session transcripts on disk — your data never leaves your machine.
 
 ### Before → After: what removing token waste buys
 
+<!-- readme-mine-table:start -->
 | Before skillreaper | After skillreaper |
 |---|---|
 | 380 items loaded every session | 12 kept · 11 actually fire |
 | 19 760 tok/session dead | Full context budget for real work |
 | ≈ 73 000 dead chars ≈ 29 pages every session (at 500 words/pg) | Zero |
 | Lower cache hit rate = higher latency | Smaller prompt fits in cache |
+<!-- readme-mine-table:end -->
 
 <br>
 
@@ -456,6 +462,7 @@ internal/
   atomicfile/   crash-safe writes (temp file + rename)
   hook/         SessionStart install/uninstall + nudge state
   cost/         model pricing
+  readme/       maintainer-only README figure generator (not shipped)
 docs/           demo assets
 ```
 

@@ -41,3 +41,26 @@ readme-numbers:
 	replace gap "$$dir/gap.txt"; \
 	replace utilization "$$dir/utilization.txt"; \
 	echo "README.md: measured blocks regenerated"
+
+# MAINTAINER ONLY — do not run this unless the README's "measured on my own
+# setup" figures are supposed to become *your* figures.
+#
+# readme-numbers above regenerates the sample-stack blocks and is what a
+# contributor runs; it only ever touches readme-numbers / readme-gap /
+# readme-utilization. This target only ever touches readme-mine-*. The two sets
+# cannot overwrite each other, so a contributor running the normal target can
+# never replace a real measurement with fixture data.
+#
+# One run, decoded once, every figure derived from it — mixing two runs is how
+# the page ended up carrying two different totals for the same stack.
+#
+#   make readme-mine
+#   make readme-mine && git diff --exit-code README.md   # stable within a day
+.PHONY: readme-mine
+readme-mine:
+	@set -eu; \
+	json="$$(mktemp)"; \
+	go run ./cmd/reap -json -no-nudge > "$$json"; \
+	test -s "$$json" || { echo "reap produced no JSON" >&2; exit 1; }; \
+	go run ./internal/readme README.md < "$$json"; \
+	echo "README.md: figures regenerated from this machine's own transcripts"

@@ -116,6 +116,12 @@ type options struct {
 	claudeDir      string
 	claudeJSON     string
 	claudeVersion  string
+
+	// claudeDirExplicit records that --claude-dir was passed. claudeDir itself
+	// cannot carry that meaning: fillDefaults also fills it from detection so
+	// the state commands have a directory, and gather must not read that as a
+	// request to scan Claude Code alone.
+	claudeDirExplicit bool
 }
 
 func main() {
@@ -298,6 +304,7 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 }
 
 func fillDefaults(opts *options) error {
+	opts.claudeDirExplicit = opts.claudeDir != ""
 	if opts.claudeDir == "" {
 		detected := platform.Detect()
 		for _, p := range detected {
@@ -353,12 +360,17 @@ func dedupeByPath(items []scan.Item) []scan.Item {
 	return out
 }
 
+// detectPlatforms is platform.Detect behind a variable so a test can supply a
+// fixed platform set instead of whatever happens to be installed on the machine
+// running the suite.
+var detectPlatforms = platform.Detect
+
 // gather runs every scanner plus transcript parsers across all
 // detected platforms and joins the result into a report.
 func gather(opts options) (*report.Report, error) {
 	var platforms []platform.Info
 
-	if opts.claudeDir != "" {
+	if opts.claudeDirExplicit {
 		// Override mode: --claude-dir was provided (test fixture or manual).
 		p := platform.Info{
 			ID:             platform.ClaudeCode,
@@ -373,7 +385,7 @@ func gather(opts options) (*report.Report, error) {
 		}
 		platforms = append(platforms, p)
 	} else {
-		platforms = platform.Detect()
+		platforms = detectPlatforms()
 		if len(platforms) == 0 {
 			return nil, fmt.Errorf("no supported AI coding platform found")
 		}

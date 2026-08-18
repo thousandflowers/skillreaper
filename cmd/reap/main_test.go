@@ -1253,3 +1253,65 @@ func TestRunVersionPrintsOnlyTheVersion(t *testing.T) {
 		})
 	}
 }
+
+// Issue #29. On a machine with Claude Code installed, fillDefaults resolves
+// opts.claudeDir so the state commands have somewhere to read and write. gather
+// then read that same field as "the user passed --claude-dir" and scanned Claude
+// Code alone, so every other detected platform was dropped and the six platforms
+// promised in --help were never actually read. Every other test in this file
+// passes --claude-dir, which is exactly why none of them caught it.
+func TestGatherScansEveryDetectedPlatform(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+
+	codexDir := t.TempDir()
+	skill := filepath.Join(codexDir, "skills", "codexonly")
+	if err := os.MkdirAll(skill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"),
+		[]byte("---\nname: codexonly\ndescription: lives only on codex\n---\nbody"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := detectPlatforms
+	t.Cleanup(func() { detectPlatforms = orig })
+	detectPlatforms = func() []platform.Info {
+		return []platform.Info{
+			{
+				ID: platform.ClaudeCode, Name: "Claude Code",
+				ConfigDirAbs: claudeDir, ConfigFileAbs: claudeJSON,
+				TranscriptType: "jsonl", HasTranscripts: true,
+				TranscriptDirs: []string{filepath.Join(claudeDir, "projects")},
+			},
+			{
+				ID: platform.CodexCLI, Name: "Codex CLI",
+				ConfigDirAbs: codexDir, TranscriptType: "jsonl",
+			},
+		}
+	}
+
+	// Exactly what fillDefaults leaves behind when no --claude-dir was given:
+	// claudeDir resolved for state, but never requested by the user.
+	opts := options{claudeDir: claudeDir, claudeJSON: claudeJSON, days: 30}
+
+	r, err := gather(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var sawCodex, sawClaude bool
+	for _, row := range r.Rows {
+		switch row.Name {
+		case "codexonly":
+			sawCodex = true
+		case "deadskill":
+			sawClaude = true
+		}
+	}
+	if !sawClaude {
+		t.Errorf("Claude Code skills missing from the report (%d rows)", len(r.Rows))
+	}
+	if !sawCodex {
+		t.Errorf("codexonly missing: gather scanned Claude Code alone and dropped the other detected platform (%d rows)", len(r.Rows))
+	}
+}

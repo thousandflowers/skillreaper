@@ -104,3 +104,22 @@ func TestReadRegularFileWithinRejectsFinalSymlink(t *testing.T) {
 		t.Fatal("expected final symlink to be rejected")
 	}
 }
+
+// Issue #36. Sanitize promises a segment that cannot escape its directory, but
+// "." and ".." are single filenames that traverse and survive the replacer
+// untouched. Neither caller can be made to escape today; the contract is still
+// false, and the next caller is the one that pays for it.
+func TestSanitizeNeutralizesTraversalSegments(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"..", "--"},
+		{".", "-"},
+		{"../../etc/passwd", "..-..-etc-passwd"}, // inert once separators go
+		{"a/../../b", "a-..-..-b"},               // likewise
+		{"..foo", "..foo"},                       // not a traversal segment
+		{"normal-name", "normal-name"},
+	} {
+		if got := Sanitize(tc.in); got != tc.want {
+			t.Errorf("Sanitize(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

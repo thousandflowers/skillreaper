@@ -34,8 +34,17 @@ func WithinDir(root, target string) bool {
 // Sanitize rewrites characters that are unsafe in a path segment (path
 // separators and the Windows drive separator) into dashes, so an item name
 // can be used as a single filename without escaping its directory.
+//
+// "." and ".." need the same treatment even though they contain nothing
+// unsafe: they are single filenames that still traverse, so leaving them
+// intact would break the promise made just above. Longer names that merely
+// start with dots ("..foo") are ordinary filenames and pass through.
 func Sanitize(name string) string {
-	return strings.NewReplacer(":", "-", "/", "-", "\\", "-").Replace(name)
+	out := strings.NewReplacer(":", "-", "/", "-", "\\", "-").Replace(name)
+	if out == "." || out == ".." {
+		return strings.Repeat("-", len(out))
+	}
+	return out
 }
 
 // ExistingPathWithin resolves root and target and returns the resolved target

@@ -693,7 +693,16 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	itemKey := strings.ToLower(args[0])
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	itemKey, err := resolveKeepKey(r, args[0])
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
 	if err := override.AddKeep(opts.claudeDir, itemKey); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
@@ -1344,4 +1353,52 @@ func tryShowStarCta(opts options, stdout io.Writer, r *report.Report, color bool
 	st.LastStarCtaAt = now
 	st.StarCtaCount++
 	_ = hook.SaveNudgeState(opts.claudeDir, st)
+}
+
+// resolveKeepKey turns what the user typed into the category-qualified key that
+// report.Build actually looks up.
+//
+// keep used to store args[0] verbatim, so only the exact "category:name" form
+// ever matched. A bare name, a typo, or an item that does not exist was written
+// to overrides.json and answered with "This item will be excluded from prune"
+// while matching nothing. keep is the one command whose whole job is protecting
+// an item from prune, so failing silently is the worst thing it can do.
+func resolveKeepKey(r *report.Report, arg string) (string, error) {
+	want := strings.ToLower(strings.TrimSpace(arg))
+	if want == "" {
+		return "", fmt.Errorf("empty item name")
+	}
+	seen := map[string]bool{}
+	var matches []string
+	add := func(key string) {
+		if !seen[key] {
+			seen[key] = true
+			matches = append(matches, key)
+		}
+	}
+	for _, row := range r.Rows {
+		key := override.ItemKey(string(row.Category), row.Name)
+		if key == want {
+			// Already qualified: keep taking it, so existing scripts still work.
+			return key, nil
+		}
+		name := strings.ToLower(row.Name)
+		if name == want {
+			add(key)
+			continue
+		}
+		// Namespaced items ("ecc:plan") are commonly referred to by their leaf,
+		// the same shorthand findItem accepts for why and mute.
+		if i := strings.LastIndexByte(name, ':'); i >= 0 && name[i+1:] == want {
+			add(key)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return "", fmt.Errorf("no item named %q in the inventory; run reap to list what is there", arg)
+	default:
+		return "", fmt.Errorf("%q matches %s; use the full key", arg, strings.Join(matches, ", "))
+	}
 }

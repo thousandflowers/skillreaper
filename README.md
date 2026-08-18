@@ -5,10 +5,7 @@ S           K           I          L          L
 ######  #####   ####### ######  #####   ###### 
 ##  ##  ##      ##   ## ##      ##      ##  ## 
 ##   ## ####### ##   ## ##      ####### ##   ##
-```
 
-<!-- readme-numbers:start -->
-```
 skillreaper · last 30d · 34 sessions
 7/378 items fired · 1% utilization
 371 never used · ~22720 dead tokens/session

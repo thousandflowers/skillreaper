@@ -116,7 +116,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.Float64Var(&opts.routeThreshold, "route-threshold", 0.10, "route: skills fired in fewer than this fraction of sessions get routed behind a leaf router")
 	fs.IntVar(&opts.routeMinSkills, "route-min-skills", 0, "route: skip the plan unless at least this many skills survive a prune (0 = always show)")
 	fs.StringVar(&opts.apmDiff, "diff", "", "apm: reconcile the proposed manifest against an existing apm.yml at this path")
-	fs.StringVar(&opts.model, "model", "", "model ID for pricing lookup (overrides --price)")
+	fs.StringVar(&opts.model, "model", "", "model ID for pricing and token-ratio lookup (overrides --price)")
 	fs.Float64Var(&opts.price, "price", 0, "input price per million tokens (USD) — used when --model is unknown or unset")
 	fs.BoolVar(&opts.asJSON, "json", false, "output JSON")
 	fs.BoolVar(&opts.asMarkdown, "md", false, "output Markdown")

@@ -45,8 +45,10 @@ const charsPerTokenX10 = 37
 // the default ratio. Keep this in sync with ModelPricing: when adding a
 // model whose tokenizer differs from the default, add its ratio here too.
 var TokenRatios = map[string]int{
-	// OpenAI's tiktoken/cl100k_base tokenizer averages ~4.0 characters per
-	// token for English prose, slightly more than the ~3.7 default.
+	// OpenAI's o200k_base tokenizer averages ~4.0 characters per token for
+	// English prose, slightly more than the ~3.7 default. OpenAI documents
+	// the rule of thumb as "1 token ~= 4 chars in English":
+	// https://platform.openai.com/tokenizer
 	"gpt-4o":      40,
 	"gpt-4o-mini": 40,
 	"o3-mini":     40,

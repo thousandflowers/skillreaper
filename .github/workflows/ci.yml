@@ -16,9 +16,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Vet
+      - name: Format
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
-      - run: go vet ./...
+      - name: Vet
+        run: go vet ./...
       - name: Test
         run: go test -race ./... -coverprofile=coverage.out
       - name: Coverage

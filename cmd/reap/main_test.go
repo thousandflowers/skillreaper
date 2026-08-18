@@ -1315,3 +1315,61 @@ func TestGatherScansEveryDetectedPlatform(t *testing.T) {
 		t.Errorf("codexonly missing: gather scanned Claude Code alone and dropped the other detected platform (%d rows)", len(r.Rows))
 	}
 }
+
+// Issue #30. A platform is held at REVIEW only when it advertises transcripts
+// and none could be parsed. Cursor and OpenClaw declare HasTranscripts: false,
+// so they skipped that branch entirely and their items were judged with Uses: 0
+// against the merged session count, which Claude Code dominates. The result is
+// a REAP verdict built on evidence that cannot exist, and reap prune acts on it.
+func TestPlatformWithoutTranscriptsIsNotReapedOnAnotherPlatformsSessions(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+
+	blindDir := t.TempDir()
+	skill := filepath.Join(blindDir, "skills", "blindskill")
+	if err := os.MkdirAll(skill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"),
+		[]byte("---\nname: blindskill\ndescription: on a platform we cannot observe\n---\nbody"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := detectPlatforms
+	t.Cleanup(func() { detectPlatforms = orig })
+	detectPlatforms = func() []platform.Info {
+		return []platform.Info{
+			{
+				ID: platform.ClaudeCode, Name: "Claude Code",
+				ConfigDirAbs: claudeDir, ConfigFileAbs: claudeJSON,
+				TranscriptType: "jsonl", HasTranscripts: true,
+				TranscriptDirs: []string{filepath.Join(claudeDir, "projects")},
+			},
+			{
+				ID: platform.OpenClaw, Name: "OpenClaw",
+				ConfigDirAbs: blindDir, TranscriptType: "none", HasTranscripts: false,
+			},
+		}
+	}
+
+	opts := options{claudeDir: claudeDir, claudeJSON: claudeJSON, days: 30, minSessions: 1}
+
+	r, err := gather(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, row := range r.Rows {
+		if row.Name != "blindskill" {
+			continue
+		}
+		found = true
+		if row.Verdict == "REAP" || row.Verdict == "MUTE" {
+			t.Errorf("blindskill got %s/%q, but OpenClaw exposes no transcripts: the verdict rests on Claude Code's sessions, not on evidence about this item",
+				row.Verdict, row.Reason)
+		}
+	}
+	if !found {
+		t.Fatal("blindskill never reached the report")
+	}
+}

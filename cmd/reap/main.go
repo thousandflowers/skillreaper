@@ -474,14 +474,20 @@ func gather(opts options) (*report.Report, error) {
 				}
 			}
 		}
-		// A platform that advertises transcripts but yielded no usable
-		// evidence — OpenCode without the sqlite3 CLI, or no session files on
-		// disk — is "evidence-blind". Its items must not be REAP'd or MUTE'd
-		// on missing data, so flag the platform and tell the user why.
-		if !parsedAny && p.HasTranscripts {
+		// A platform that yielded no usable evidence is "evidence-blind", and
+		// there are two ways to get there: it advertises transcripts and none
+		// could be read (OpenCode without the sqlite3 CLI, or no session files
+		// on disk), or it exposes no transcripts at all, in which case no
+		// amount of scanning will ever produce evidence about its items.
+		// Either way the items must not be REAP'd or MUTE'd against a session
+		// count that belongs to some other platform, so flag it and say why.
+		if !parsedAny {
 			evidenceBlind[pid] = true
 			reason := "no session transcripts were found"
-			if p.TranscriptType == "sqlite" {
+			switch {
+			case !p.HasTranscripts:
+				reason = "it exposes no session transcripts at all, so nothing can be observed about its items"
+			case p.TranscriptType == "sqlite":
 				if errors.Is(sqliteErr, usage.ErrNoSQLite) {
 					reason = "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH"
 				} else if sqliteErr != nil {
@@ -489,7 +495,7 @@ func gather(opts options) (*report.Report, error) {
 				} else {
 					reason = "no SQLite session history was found"
 				}
-			} else if p.TranscriptType != "jsonl" {
+			case p.TranscriptType != "jsonl":
 				reason = fmt.Sprintf("its transcripts use a format skillreaper does not parse yet (%s)", p.TranscriptType)
 			}
 			warns = append(warns, scan.Warning{

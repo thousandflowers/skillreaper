@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -259,10 +260,25 @@ func parseFile(path, project string, st *Stats) {
 	mcpPending := map[string]string{}
 	parsedInit := false
 
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 256*1024), maxLineBytes)
-	for sc.Scan() {
-		line := sc.Bytes()
+	br := bufio.NewReaderSize(f, 256*1024)
+	for {
+		line, tooLong, rerr := readLine(br, maxLineBytes)
+		if rerr != nil {
+			if rerr != io.EOF {
+				st.MalformedLines++
+				st.IncompleteEvidence = true
+			}
+			break
+		}
+		if tooLong {
+			// The record itself is lost, but the file keeps being read.
+			st.MalformedLines++
+			st.IncompleteEvidence = true
+			continue
+		}
+		if len(line) == 0 {
+			continue
+		}
 
 		var e entry
 		if err := json.Unmarshal(line, &e); err != nil {
@@ -301,10 +317,6 @@ func parseFile(path, project string, st *Stats) {
 			continue
 		}
 		recordBlocks(st, blocks, ts, project, pending, mcpPending, used)
-	}
-	if sc.Err() != nil {
-		st.MalformedLines++
-		st.IncompleteEvidence = true
 	}
 
 	// A Skill invocation with no matching tool_result (session ended, or the
@@ -407,5 +419,45 @@ func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string
 				rec(ps.key, ps.ts)
 			}
 		}
+	}
+}
+
+// readLine returns the next line from br without its terminator. A line longer
+// than max is dropped and reported with tooLong, leaving the reader positioned
+// at the start of the following line.
+//
+// bufio.Scanner cannot do that last part: one line over its buffer makes Scan
+// return false for good, so a single 12MB tool result silently discarded every
+// record after it in the same transcript and the loss was reported as one
+// unreadable line.
+func readLine(br *bufio.Reader, max int) (line []byte, tooLong bool, err error) {
+	var buf []byte
+	for {
+		chunk, e := br.ReadSlice('\n')
+		// Checked before appending, and on every chunk: the final chunk of an
+		// over-long line arrives with the newline and no ErrBufferFull, so a
+		// check confined to the buffer-full branch lets that line through.
+		if len(buf)+len(chunk) > max {
+			for e == bufio.ErrBufferFull {
+				_, e = br.ReadSlice('\n')
+			}
+			if e != nil && e != io.EOF {
+				return nil, true, e
+			}
+			return nil, true, nil
+		}
+		buf = append(buf, chunk...)
+		if e == bufio.ErrBufferFull {
+			continue
+		}
+		if e != nil {
+			if e == io.EOF && len(buf) == 0 {
+				return nil, false, io.EOF
+			}
+			if e != io.EOF {
+				return nil, false, e
+			}
+		}
+		return bytes.TrimRight(buf, "\r\n"), false, nil
 	}
 }

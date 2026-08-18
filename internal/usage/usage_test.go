@@ -342,3 +342,35 @@ func TestParseMCPToolPrefixForms(t *testing.T) {
 		}
 	}
 }
+
+// Issue #33. bufio.Scanner stops for good at a line over its limit, so every
+// record after a 12MB tool result is silently dropped and the loss is reported
+// as "1 unreadable line". The existing overlong test puts the long line last,
+// which is why it never caught this.
+func TestParseResumesAfterAnOverlongLine(t *testing.T) {
+	dir := t.TempDir()
+	overlong := `{"type":"assistant","timestamp":"2026-06-01T10:01:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"hidden-skill"}}],"pad":"` +
+		strings.Repeat("x", maxLineBytes) + `"}}`
+	writeTranscript(t, filepath.Join(dir, "proj-a", "s1.jsonl"),
+		`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"before-skill"}}]}}`,
+		overlong,
+		`{"type":"assistant","timestamp":"2026-06-01T10:02:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"after-skill"}}]}}`,
+	)
+
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Uses[scan.CatSkill]["before-skill"]; got != 1 {
+		t.Errorf("before-skill uses = %d, want 1", got)
+	}
+	if got := st.Uses[scan.CatSkill]["after-skill"]; got != 1 {
+		t.Errorf("after-skill uses = %d, want 1: everything past the overlong line was dropped", got)
+	}
+	if got := st.Uses[scan.CatSkill]["hidden-skill"]; got != 0 {
+		t.Errorf("hidden-skill uses = %d, want 0: that record really is unparseable", got)
+	}
+	if !st.IncompleteEvidence {
+		t.Error("the overlong line should still mark the evidence incomplete")
+	}
+}

@@ -117,6 +117,19 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
+          # registry-url is what makes npm attempt the OIDC exchange at all.
+          # Without it npm never asks for a trusted-publishing credential and
+          # falls straight through to classic auth, which fails as ENEEDAUTH
+          # with no mention of OIDC anywhere in the output.
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+      - name: Drop the empty auth token setup-node wrote
+        # registry-url also writes `_authToken=${NODE_AUTH_TOKEN}` into .npmrc.
+        # With no NPM_TOKEN secret that expands to an empty string, npm reads it
+        # as "auth is already configured", skips OIDC, and publishes with empty
+        # credentials. Removing the line is what lets trusted publishing run.
+        # See npm/documentation#1960 and actions/setup-node#1551.
+        run: sed -i '/_authToken/d' "$HOME/.npmrc" || true
       - name: Publish to npm
         run: |
           cd npm

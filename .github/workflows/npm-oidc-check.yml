@@ -1,0 +1,65 @@
+# Answers "is the workflow side of npm trusted publishing correct?" without
+# publishing anything and without spending a tag. Run it from the Actions tab.
+#
+# It exists because v0.6.0 and v0.6.1 both shipped to Homebrew and stalled at
+# npm, and the registry's only reply was a 404 that says nothing about which
+# side is wrong. Everything below is a fact the release run never printed.
+name: npm OIDC check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Version gate
+        run: |
+          NPM_V="$(npm -v)"
+          echo "npm: $NPM_V"
+          MAJ=${NPM_V%%.*}; REST=${NPM_V#*.}; MIN=${REST%%.*}; PAT=${REST#*.}
+          if [ "$MAJ" -gt 11 ] || { [ "$MAJ" -eq 11 ] && { [ "$MIN" -gt 5 ] || { [ "$MIN" -eq 5 ] && [ "$PAT" -ge 1 ]; }; }; }; then
+            echo "npm version OK for trusted publishing"
+          else
+            echo "npm $NPM_V is below 11.5.1 — this alone explains the 404"
+          fi
+
+      - name: Is an OIDC token actually available to this job?
+        run: |
+          if [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+            echo "OIDC endpoint present: id-token: write was granted"
+          else
+            echo "OIDC endpoint MISSING: id-token: write was not granted to this job"
+          fi
+
+      - name: What setup-node left in .npmrc
+        run: |
+          echo "--- ~/.npmrc"
+          cat "$HOME/.npmrc" 2>/dev/null || echo "(no ~/.npmrc)"
+          if grep -q '_authToken' "$HOME/.npmrc" 2>/dev/null; then
+            echo ">>> _authToken present: npm will treat auth as configured and skip OIDC"
+          else
+            echo ">>> no _authToken line: OIDC is free to run"
+          fi
+
+      - name: Claims the registry will be matched against
+        run: |
+          echo "repository:        $GITHUB_REPOSITORY"
+          echo "repository_owner:  $GITHUB_REPOSITORY_OWNER"
+          echo "workflow file:     $(basename "$GITHUB_WORKFLOW_REF" | cut -d@ -f1)"
+          echo "environment:       ${GITHUB_ENVIRONMENT:-(none)}"
+          echo
+          echo "The trusted publisher on npmjs.com must match owner, repo and"
+          echo "workflow filename exactly, and its environment field must be"
+          echo "empty unless this job declares one."

@@ -3,6 +3,8 @@ package banner
 import (
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -62,20 +64,34 @@ func TestPrintSuppressedWithoutTerminal(t *testing.T) {
 	}
 }
 
-func TestMarkIsTwoLinesOfElevenColumns(t *testing.T) {
-	lines := strings.Split(Mark, "\n")
-	if len(lines) != 2 {
-		t.Fatalf("mark has %d lines, want 2", len(lines))
-	}
-	for i, l := range lines {
-		if len(l) != 11 {
-			t.Errorf("line %d is %d columns, want 11", i+1, len(l))
-		}
-		for _, r := range l {
-			if r > 126 || r < 32 {
-				t.Errorf("line %d contains a non-printable-ASCII rune %q", i+1, r)
+func TestMarkIsPrintableASCIIWithinItsDeclaredWidth(t *testing.T) {
+	for name, mark := range map[string]string{"Mark": Mark, "MarkNarrow": MarkNarrow} {
+		for i, l := range strings.Split(mark, "\n") {
+			if len(l) > markWidth {
+				t.Errorf("%s line %d is %d columns, wider than markWidth %d", name, i+1, len(l), markWidth)
+			}
+			for _, r := range l {
+				if r > 126 || r < 32 {
+					t.Errorf("%s line %d contains a non-printable-ASCII rune %q", name, i+1, r)
+				}
 			}
 		}
+	}
+	if got := len(strings.Split(MarkNarrow, "\n")); got != 2 {
+		t.Errorf("MarkNarrow has %d lines, want 2: it exists to fit where Mark cannot", got)
+	}
+}
+
+// The README opens with the same lettering the binary prints. They were copied
+// once and would drift silently, each looking right on its own, so the test
+// holds them to each other rather than to a duplicate of the art.
+func TestMarkMatchesTheREADME(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), Mark) {
+		t.Error("the wordmark in banner.go does not appear verbatim in README.md")
 	}
 }
 

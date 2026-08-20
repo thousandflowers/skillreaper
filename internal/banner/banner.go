@@ -12,12 +12,28 @@ import (
 	"os"
 )
 
-// Mark is the runtime wordmark: 11 columns, 2 lines, ASCII only, no color.
-const Mark = `skillreaper
+// Mark is the runtime wordmark, the same block lettering the README opens
+// with. ASCII only, no color: it has to survive a pipe into a file, a paste
+// into an issue, and a terminal with no color support.
+const Mark = `S           K           I          L          L
+######  #######   ###   ######  ####### ###### 
+##   ## ##       ## ##  ##   ## ##      ##   ##
+######  #####   ####### ######  #####   ###### 
+##  ##  ##      ##   ## ##      ##      ##  ## 
+##   ## ####### ##   ## ##      ####### ##   ##`
+
+// MarkNarrow is the fallback for terminals too narrow for the block lettering,
+// where the wide mark would wrap into noise. It is the mark skillreaper used
+// everywhere before the block form led the report.
+const MarkNarrow = `skillreaper
 ----------/`
 
-// minWidth is the narrowest terminal that still gets the mark. Below this a
-// terminal is being used as a strip of status text, not read as a page.
+// markWidth is how wide the block lettering is; a terminal narrower than this
+// gets MarkNarrow instead of a wrapped mess.
+const markWidth = 47
+
+// minWidth is the narrowest terminal that still gets any mark at all. Below
+// this a terminal is being used as a strip of status text, not read as a page.
 const minWidth = 20
 
 // Options carries the flags that make a run undecorated: every
@@ -42,7 +58,11 @@ func Print(errOut, stdOut io.Writer, o Options) {
 	if !allow(o, tty, cols, widthKnown, os.Getenv("NO_COLOR")) {
 		return
 	}
-	fmt.Fprintln(errOut, Mark)
+	mark := Mark
+	if widthKnown && cols < markWidth {
+		mark = MarkNarrow
+	}
+	fmt.Fprintln(errOut, mark)
 }
 
 // allow is the whole decision, split out so it can be tested without a

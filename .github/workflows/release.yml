@@ -123,13 +123,25 @@ jobs:
           # with no mention of OIDC anywhere in the output.
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
-      - name: Drop the empty auth token setup-node wrote
-        # registry-url also writes `_authToken=${NODE_AUTH_TOKEN}` into .npmrc.
-        # With no NPM_TOKEN secret that expands to an empty string, npm reads it
-        # as "auth is already configured", skips OIDC, and publishes with empty
-        # credentials. Removing the line is what lets trusted publishing run.
+      - name: Drop the placeholder auth token setup-node wrote
+        # registry-url also writes `_authToken=${NODE_AUTH_TOKEN}` into an npmrc
+        # and sets NODE_AUTH_TOKEN to the literal placeholder XXXXX-XXXXX-XXXXX.
+        # npm reads that as "auth is already configured", never asks for an OIDC
+        # credential, and publishes with a token the registry rejects — as a 404
+        # that mentions neither auth nor OIDC.
+        #
+        # The file is NOT ~/.npmrc: setup-node writes it under the runner temp
+        # directory and points NPM_CONFIG_USERCONFIG at it. Editing $HOME/.npmrc
+        # is a no-op, which is exactly what v0.6.1 shipped.
         # See npm/documentation#1960 and actions/setup-node#1551.
-        run: sed -i '/_authToken/d' "$HOME/.npmrc" || true
+        run: |
+          NPMRC="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          echo "editing $NPMRC"
+          sed -i '/_authToken/d' "$NPMRC"
+          if grep -q '_authToken' "$NPMRC"; then
+            echo "_authToken survived the strip; OIDC would be skipped again" >&2
+            exit 1
+          fi
       - name: Publish to npm
         run: |
           cd npm

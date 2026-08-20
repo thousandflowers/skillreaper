@@ -604,6 +604,13 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 	case opts.quiet:
 		// audit silently — used to warm caches without printing
 	default:
+		// The wordmark leads the report, which is what --no-banner has always
+		// described ("shown above the default report and the usage text") and
+		// what the README shows. Until now it only ever appeared on --help.
+		// banner.Print applies its own gate: nothing for --json/--md/--agent,
+		// nothing when the output is not a terminal, nothing when NO_COLOR is
+		// set, so piped and machine-read output is unaffected.
+		banner.Print(stderr, stdout, bannerOptions(opts))
 		col := colorEnabled(opts, stdout)
 		report.RenderText(stdout, r, col)
 		tryShowStarCta(opts, stdout, r, col)

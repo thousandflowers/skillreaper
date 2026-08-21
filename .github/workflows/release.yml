@@ -144,6 +144,10 @@ jobs:
           fi
       - name: Publish to npm
         run: |
+          # npm renders the README on the package page; the wrapper
+          # directory has no copy of its own, so pull the canonical one
+          # in at publish time.
+          cp README.md npm/README.md
           cd npm
           VERSION="${GITHUB_REF_NAME#v}"
           npm version "$VERSION" --no-git-tag-version --allow-same-version

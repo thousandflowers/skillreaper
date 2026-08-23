@@ -52,6 +52,8 @@ measured by skillreaper · github.com/thousandflowers/skillreaper
   <a href="https://github.com/thousandflowers/skillreaper/issues"><img src="https://badgen.net/github/open-issues/thousandflowers/skillreaper" alt="Issues"></a>
   <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/downloads/thousandflowers/skillreaper/total?cacheSeconds=6400&color=success" alt="Downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
+  <a href="https://github.com/avelino/awesome-go#artificial-intelligence"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Go"></a>
+  <a href="https://github.com/VoltAgent/awesome-agent-skills#community-skills"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Agent Skills"></a>
 </p>
 
 <br>

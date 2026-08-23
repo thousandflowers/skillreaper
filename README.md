@@ -469,6 +469,19 @@ docs/           demo assets
 
 ---
 
+### Where it is used
+
+Included in [awesome-go](https://github.com/avelino/awesome-go#artificial-intelligence)
+(182k ★, Artificial Intelligence section) and
+[awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills#community-skills)
+(30k ★). Three external contributors, 17 merged commits. The verdict logic has
+been ported into another project with attribution in the code
+([lean-agency](https://github.com/badithya-ms/lean-agency)).
+
+<br>
+
+---
+
 ### Acknowledgements
 
 v0.2.0 ideas were inspired by work from the r/claudeskills community:

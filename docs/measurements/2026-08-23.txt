@@ -1,0 +1,514 @@
+# Measurement — 2026-08-23
+
+Raw, unedited output. One run, one machine, one binary. Every figure the
+README and the portfolio quote for 'my own installation' comes from this file.
+
+    binary:  reap v0.6.4-0.20260823202752-d0a36218d1b7
+    built:   from branch docs/verifiable-adoption @ d0a3621
+    host:    Darwin arm64
+    date:    2026-08-23
+
+Commands, in order:
+    reap -no-color -no-nudge
+    reap gap -no-color -no-nudge
+    reap -json -no-nudge   (header fields only, full JSON not inlined)
+
+================================================================
+$ reap -no-color -no-nudge
+================================================================
+
+  ⟡ skillreaper — evidence-based pruning for your agent stack
+
+  window:  last 30 days · 55 sessions
+
+  ╔════════════════════════════════════════════════════════════════════╗
+  ║  367 items never used · ~19755 dead tokens/session · ~$3.26/month  ║
+  ╚════════════════════════════════════════════════════════════════════╝
+  a floor, not a total: 10 unused items (MCP servers, hooks) carry weight that was never measured
+
+  ⟡ utilization 3%  —  13/382 items fired · ~331/20281 tok touched (30d)
+
+  ── SKILLS (description injected every session) ────────────────────────────────────────────────────────────
+      ▸ reap  289 items · ~15796 tok/session
+NAME                                        TOK          SRC  PERM  USES  LAST   JUDGMENT
+ecc:flox-environments                       ~336  ▰▰▰▰▰  ext  all   0     never  REAP · unused
+ecc:openclaw-persona-forge                  ~209  ▰▰▰▱▱  ext  all   0     never  REAP · unused
+ecc:intent-driven-development               ~161  ▰▰▱▱▱  ext  all   0     never  REAP · unused
+ecc:tinystruct-patterns                     ~133  ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:recsys-pipeline-architect               ~124  ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:data-scraper-agent                      ~113  ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:react-performance                       ~111  ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:autonomous-agent-harness                ~109  ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:agent-architecture-audit                ~105  ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:click-path-audit                        ~103  ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:angular-developer                       ~96   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:social-publisher                        ~94   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:connections-optimizer                   ~93   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:github-ops                              ~93   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:lead-intelligence                       ~93   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:plan-orchestrate                        ~93   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:investor-materials                      ~92   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:workspace-surface-audit                 ~92   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:frontend-slides                         ~90   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:article-writing                         ~89   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:video-editing                           ~88   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:product-capability                      ~87   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:marketing-campaign                      ~86   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:prisma-patterns                         ~86   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:market-research                         ~85   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:continuous-learning                     ~84   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:customer-billing-ops                    ~84   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:agent-sort                              ~82   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:architecture-decision-records           ~82   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ios-icon-gen                            ~82   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:react-testing                           ~82   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:dart-flutter-patterns                   ~80   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:fal-ai-media                            ~80   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ito-market-intelligence                 ~80   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:prediction-market-oracle-research       ~80   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:project-flow-ops                        ~80   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:dmux-workflows                          ~79   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:social-graph-ranker                     ~78   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:google-workspace-ops                    ~77   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:react-patterns                          ~76   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:finance-billing-ops                     ~75   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:frontend-design-direction               ~75   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:investor-outreach                       ~75   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:canary-watch                            ~74   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:content-engine                          ~74   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:orch-build-mvp                          ~74   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:seo                                     ~74   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:brand-voice                             ~73   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:manim-video                             ~73   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:orch-pipeline                           ~73   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:crosspost                               ~72   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:prediction-market-risk-review           ~72   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:codebase-onboarding                     ~71   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:continuous-learning-v2                  ~71   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:flutter-dart-code-review                ~71   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:knowledge-ops                           ~71   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:codehealth-mcp                          ~70   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:gateguard                               ~70   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ito-basket-compare                      ~70   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ito-trade-planner                       ~70   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:skill-comply                            ~70   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ai-regression-testing                   ~69   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:healthcare-phi-compliance               ~69   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:opensource-pipeline                     ~69   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:orch-change-feature                     ~69   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:recursive-decision-ledger               ~69   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ui-demo                                 ~69   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:deep-research                           ~68   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:healthcare-eval-harness                 ~68   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:java-coding-standards                   ~68   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:unified-notifications-ops               ~68   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:vite-patterns                           ~68   ▰▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:automation-audit-ops                    ~67   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:code-tour                               ~67   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:make-interfaces-feel-better             ~67   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:orch-add-feature                        ~67   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:uncloud                                 ~67   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:cost-tracking                           ~66   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:hermes-imports                          ~66   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:mle-workflow                            ~66   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:motion-advanced                         ~66   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:orch-refine-code                        ~66   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:x-api                                   ~66   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:django-celery                           ~65   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:email-ops                               ~65   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:healthcare-emr-patterns                 ~65   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:security-scan                           ~65   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:configure-ecc                           ~64   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:database-migrations                     ~64   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:documentation-lookup                    ~64   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:hipaa-compliance                        ~64   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:agent-payment-x402                      ~63   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:healthcare-cdss-patterns                ~63   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:homelab-vlan-segmentation               ~63   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ito-data-atlas-agent                    ~63   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:motion-foundations                      ~63   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:orch-fix-defect                         ~63   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:quarkus-patterns                        ~63   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:scientific-thinking-literature-review   ~63   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:agentic-os                              ~62   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:defi-amm-security                       ~62   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ecc-tools-cost-audit                    ~62   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:llm-trading-agent-security              ~62   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:messages-ops                            ~62   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:network-config-validation               ~62   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:parallel-execution-optimizer            ~62   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:security-review                         ~62   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:benchmark-optimization-loop             ~61   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:blender-motion-state-inspection         ~61   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:fastapi-patterns                        ~61   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:latency-critical-systems                ~61   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:evm-token-decimals                      ~60   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:hexagonal-architecture                  ~60   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:research-ops                            ~60   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:exa-search                              ~59   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:motion-patterns                         ~59   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:nodejs-keccak256                        ~59   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:terminal-ops                            ~59   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:jira-integration                        ~58   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:production-audit                        ~58   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:api-connector-builder                   ~57   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:data-throughput-accelerator             ~57   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:security-bounty-hunter                  ~57   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:context-budget                          ~56   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:dashboard-builder                       ~56   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:scientific-thinking-scholar-evaluation  ~56   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:cpp-coding-standards                    ~55   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:hookify-rules                           ~55   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:quarkus-tdd                             ~55   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:repo-scan                               ~55   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:coding-standards                        ~54   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:perl-security                           ~54   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:git-workflow                            ~53   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:homelab-network-readiness               ~53   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:homelab-wireguard-vpn                   ~53   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:kotlin-patterns                         ~53   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:scientific-db-pubmed-database           ~53   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:android-clean-architecture              ~52   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:claude-devfleet                         ~52   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:laravel-plugin-discovery                ~52   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:netmiko-ssh-automation                  ~52   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:scientific-pkg-gget                     ~52   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:skill-scout                             ~52   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:deployment-patterns                     ~51   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:foundation-models-on-device             ~51   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:scientific-db-uspto-database            ~51   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:skill-stocktake                         ~51   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:tdd-workflow                            ~51   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:cisco-ios-patterns                      ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:compose-multiplatform-patterns          ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:council                                 ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ecc-guide                               ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:error-handling                          ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:homelab-pihole-dns                      ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:kubernetes-patterns                     ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:product-lens                            ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:quarkus-verification                    ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:springboot-patterns                     ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:swift-concurrency-6-2                   ~50   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:django-security                         ~49   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:homelab-network-setup                   ~49   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:kotlin-exposed-patterns                 ~49   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:kotlin-testing                          ~49   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:network-interface-health                ~49   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:regex-vs-llm-structured-text            ~49   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:remotion-video-creation                 ~49   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:swift-protocol-di-testing               ~49   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:swiftui-patterns                        ~49   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:gan-style-harness                       ~48   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:laravel-security                        ~48   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:nutrient-document-processing            ~48   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:pytorch-patterns                        ~48   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:springboot-security                     ~48   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:django-verification                     ~47   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:nestjs-patterns                         ~47   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:network-bgp-diagnostics                 ~47   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:quarkus-security                        ~47   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:springboot-tdd                          ~47   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ui-to-vue                               ~47   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:api-design                              ~46   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:content-hash-cache-pattern              ~46   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:dotnet-patterns                         ~46   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:golang-testing                          ~46   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:springboot-verification                 ~46   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:dynamic-workflow-mode                   ~45   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:jpa-patterns                            ~45   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:kotlin-coroutines-flows                 ~45   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:kotlin-ktor-patterns                    ~45   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:laravel-patterns                        ~45   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:laravel-verification                    ~45   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:liquid-glass-design                     ~45   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:redis-patterns                          ~45   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:rust-testing                            ~45   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:agent-introspection-debugging           ~44   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:backend-patterns                        ~44   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:docker-patterns                         ~44   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:plankton-code-quality                   ~44   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:agent-eval                              ~43   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:clickhouse-io                           ~43   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:cost-aware-llm-pipeline                 ~43   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:cpp-testing                             ~43   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:django-patterns                         ~43   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:nuxt4-patterns                          ~43   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:search-first                            ~43   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:swift-actor-persistence                 ~43   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:team-agent-orchestration                ~43   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:autonomous-loops                        ~42   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:fsharp-testing                          ~42   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:python-patterns                         ~42   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:rust-patterns                           ~42   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:strategic-compact                       ~42   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:agent-harness-construction              ~40   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:django-tdd                              ~40   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:e2e-testing                             ~40   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:laravel-tdd                             ~40   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:postgres-patterns                       ~40   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:csharp-testing                          ~39   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:santa-method                            ~39   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:browser-qa                              ~38   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:bun-runtime                             ~38   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:frontend-patterns                       ~38   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:golang-patterns                         ~38   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:mysql-patterns                          ~38   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:perl-testing                            ~38   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:python-testing                          ~38   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:rules-distill                           ~38   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:windows-desktop-e2e                     ~38   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:visa-doc-translate                      ~37   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:benchmark                               ~36   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:motion-ui                               ~36   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:nextjs-turbopack                        ~36   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ralphinho-rfc-pipeline                  ~36   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:safety-guard                            ~36   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:executing-plans                 ~36   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:agentic-engineering                     ~35   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:ai-first-engineering                    ~35   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:design-system                           ~35   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:perl-patterns                           ~35   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:enterprise-agent-ops                    ~34   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:subagent-driven-development     ~34   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:systematic-debugging            ~34   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:continuous-agent-loop                   ~33   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:eval-harness                            ~33   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:iterative-retrieval                     ~31   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:test-driven-development         ~31   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:nanoclaw-repl                           ~30   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:writing-plans                   ~30   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:accessibility                           ~26   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:team-builder                            ~23   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:verification-loop                       ~23   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:finishing-a-development-branch  ~12   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:verification-before-completion  ~12   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:dispatching-parallel-agents     ~11   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:carrier-relationship-management         ~10   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:logistics-exception-management          ~10   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:requesting-code-review          ~10   ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:inventory-demand-planning               ~9    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:returns-reverse-logistics               ~9    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:receiving-code-review           ~9    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:using-git-worktrees             ~9    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:customs-trade-compliance                ~8    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:production-scheduling                   ~8    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:quality-nonconformance                  ~8    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:token-budget-advisor                    ~8    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:using-superpowers               ~8    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:writing-skills                  ~8    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+caveman:caveman-commit                      ~7    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+caveman:caveman-compress                    ~7    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:energy-procurement                      ~7    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:mcp-server-patterns                     ~7    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ponytail:ponytail-debt                      ~7    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ponytail:ponytail-help                      ~7    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ponytail:ponytail-review                    ~7    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+superpowers:brainstorming                   ~7    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+blender-continuity                          ~6    ▱▱▱▱▱  own  all   0     never  REAP · unused
+caveman:caveman-help                        ~6    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+caveman:caveman-review                      ~6    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+caveman:caveman-stats                       ~6    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:prompt-optimizer                        ~6    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+impeccable:impeccable                       ~6    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+caveman:cavecrew                            ~5    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+caveman:caveman                             ~5    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:blueprint                               ~5    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ecc:frontend-a11y                           ~5    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+ponytail:ponytail                           ~5    ▱▱▱▱▱  ext  all   0     never  REAP · unused
+fable-mode                                  ~3    ▱▱▱▱▱  own  all   0     never  REAP · unused
+ecc:inherit-legacy-style                    ~146  ▰▰▱▱▱  ext  7     0     never  REAP · unused
+ecc:videodb                                 ~161  ▰▰▱▱▱  ext  1     0     never  REAP · unused
+superpowers-chrome:browsing                 ~63   ▱▱▱▱▱  ext  1     0     never  REAP · unused
+
+      ▸ mute  2 items · ~150 tok/session
+NAME              TOK          SRC  PERM  USES  LAST        JUDGMENT
+skillreaper:reap  ~79   ▰▱▱▱▱  ext  all   9     2026-08-17  MUTE · heavy-rare
+skillreaper:gap   ~71   ▰▱▱▱▱  ext  all   5     2026-08-17  MUTE · heavy-rare
+
+      ▸ review  1 items · ~126 tok/session
+NAME                  TOK          SRC  PERM  USES  LAST   JUDGMENT
+self-improving-agent  ~126  ▰▱▱▱▱  own  all   0     never  REVIEW · no-transcript
+
+      ▸ keep  8 items · ~250 tok/session
+NAME                     TOK          SRC  PERM  USES  LAST        JUDGMENT
+graphify                 ~96   ▰▱▱▱▱  own  all   13    2026-08-17  KEEP · used
+ecc:ck                   ~69   ▰▱▱▱▱  ext  all   0     never       KEEP · claude-md-ref
+graphify                 ~63   ▱▱▱▱▱  own  all   13    2026-08-17  KEEP · used
+ponytail:ponytail-audit  ~7    ▱▱▱▱▱  ext  all   2     2026-08-17  KEEP · used
+submit-to-awesome        ~5    ▱▱▱▱▱  own  all   2     2026-08-18  KEEP · used
+ship-release             ~4    ▱▱▱▱▱  own  all   6     2026-08-22  KEEP · used
+afk-guard                ~3    ▱▱▱▱▱  own  all   2     2026-08-22  KEEP · used
+repo-audit               ~3    ▱▱▱▱▱  own  all   4     2026-08-22  KEEP · used
+
+  ── MCP SERVERS (tool schemas injected; weight unknown without running them) ────────────────────────────────────────────────────────────
+      ▸ reap  10 items
+NAME                 TOK   SRC   PERM  USES  LAST   JUDGMENT
+blender                 ?  proj  -     0     never  REAP · unused
+caveman-shrink          ?  proj  -     0     never  REAP · unused
+context7                ?  ext   -     0     never  REAP · unused
+exa                     ?  ext   -     0     never  REAP · unused
+findskills              ?  proj  -     0     never  REAP · unused
+github                  ?  ext   -     0     never  REAP · unused
+inaz                    ?  usr   -     0     never  REAP · unused
+memory                  ?  ext   -     0     never  REAP · unused
+sequential-thinking     ?  ext   -     0     never  REAP · unused
+serena                  ?  usr   -     0     never  REAP · unused
+
+      ▸ keep  3 items
+NAME        TOK   SRC  PERM  USES  LAST        JUDGMENT
+chrome         ?  ext  -     4     2026-08-23  KEEP · used
+headroom       ?  usr  -     29    2026-08-10  KEEP · used
+playwright     ?  ext  -     7     2026-08-22  KEEP · used
+
+      · info  1 items
+NAME             TOK   SRC              PERM  USES  LAST  JUDGMENT
+claude_ai_Figma     ?  transcript-only  -     -     -     -
+
+  ── AGENTS (description injected every session) ────────────────────────────────────────────────────────────
+      ▸ reap  68 items · ~3959 tok/session
+NAME                             TOK          SRC  PERM  USES  LAST   JUDGMENT
+ecc:react-build-resolver         ~95   ▰▰▰▰▰  ext  6     0     never  REAP · unused
+ecc:chief-of-staff               ~85   ▰▰▰▰▱  ext  6     0     never  REAP · unused
+ecc:e2e-runner                   ~85   ▰▰▰▰▱  ext  6     0     never  REAP · unused
+ecc:java-build-resolver          ~82   ▰▰▰▰▱  ext  6     0     never  REAP · unused
+ecc:django-build-resolver        ~76   ▰▰▰▰▱  ext  6     0     never  REAP · unused
+ecc:opensource-packager          ~76   ▰▰▰▰▱  ext  6     0     never  REAP · unused
+ecc:performance-optimizer        ~75   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:dart-build-resolver          ~74   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:pytorch-build-resolver       ~74   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:security-reviewer            ~74   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:database-reviewer            ~73   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:harmonyos-app-resolver       ~71   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:opensource-forker            ~70   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:build-error-resolver         ~67   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:swift-build-resolver         ~67   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:refactor-cleaner             ~63   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:kotlin-build-resolver        ~59   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:rust-build-resolver          ~58   ▰▰▰▱▱  ext  6     0     never  REAP · unused
+ecc:doc-updater                  ~56   ▰▰▱▱▱  ext  6     0     never  REAP · unused
+ecc:cpp-build-resolver           ~51   ▰▰▱▱▱  ext  6     0     never  REAP · unused
+ecc:go-build-resolver            ~50   ▰▰▱▱▱  ext  6     0     never  REAP · unused
+ecc:code-simplifier              ~49   ▰▰▱▱▱  ext  6     0     never  REAP · unused
+ecc:gan-generator                ~45   ▰▰▱▱▱  ext  6     0     never  REAP · unused
+ecc:marketing-agent              ~92   ▰▰▰▰▱  ext  5     0     never  REAP · unused
+superpowers-chrome:browser-user  ~76   ▰▰▰▰▱  ext  5     0     never  REAP · unused
+ecc:seo-specialist               ~68   ▰▰▰▱▱  ext  5     0     never  REAP · unused
+ecc:a11y-architect               ~63   ▰▰▰▱▱  ext  5     0     never  REAP · unused
+ecc:tdd-guide                    ~53   ▰▰▱▱▱  ext  5     0     never  REAP · unused
+ecc:gan-evaluator                ~48   ▰▰▱▱▱  ext  5     0     never  REAP · unused
+ecc:harness-optimizer            ~32   ▰▱▱▱▱  ext  5     0     never  REAP · unused
+ecc:loop-operator                ~29   ▰▱▱▱▱  ext  5     0     never  REAP · unused
+caveman:cavecrew-builder         ~7    ▱▱▱▱▱  ext  5     0     never  REAP · unused
+ecc:opensource-sanitizer         ~88   ▰▰▰▰▱  ext  4     0     never  REAP · unused
+ecc:flutter-reviewer             ~78   ▰▰▰▰▱  ext  4     0     never  REAP · unused
+ecc:mle-reviewer                 ~78   ▰▰▰▰▱  ext  4     0     never  REAP · unused
+ecc:react-reviewer               ~78   ▰▰▰▰▱  ext  4     0     never  REAP · unused
+ecc:java-reviewer                ~75   ▰▰▰▱▱  ext  4     0     never  REAP · unused
+ecc:typescript-reviewer          ~70   ▰▰▰▱▱  ext  4     0     never  REAP · unused
+ecc:django-reviewer              ~67   ▰▰▰▱▱  ext  4     0     never  REAP · unused
+ecc:swift-reviewer               ~64   ▰▰▰▱▱  ext  4     0     never  REAP · unused
+ecc:docs-lookup                  ~62   ▰▰▰▱▱  ext  4     0     never  REAP · unused
+ecc:fsharp-reviewer              ~57   ▰▰▰▱▱  ext  4     0     never  REAP · unused
+ecc:code-architect               ~56   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:csharp-reviewer              ~56   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:code-reviewer                ~55   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:kotlin-reviewer              ~55   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:php-reviewer                 ~55   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:python-reviewer              ~55   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:rust-reviewer                ~54   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:go-reviewer                  ~50   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:cpp-reviewer                 ~49   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:fastapi-reviewer             ~47   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:gan-planner                  ~47   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:pr-test-analyzer             ~39   ▰▰▱▱▱  ext  4     0     never  REAP · unused
+ecc:silent-failure-hunter        ~33   ▰▱▱▱▱  ext  4     0     never  REAP · unused
+caveman:cavecrew-investigator    ~9    ▱▱▱▱▱  ext  4     0     never  REAP · unused
+ecc:planner                      ~61   ▰▰▰▱▱  ext  3     0     never  REAP · unused
+ecc:healthcare-reviewer          ~60   ▰▰▰▱▱  ext  3     0     never  REAP · unused
+ecc:architect                    ~58   ▰▰▰▱▱  ext  3     0     never  REAP · unused
+ecc:network-troubleshooter       ~49   ▰▰▱▱▱  ext  3     0     never  REAP · unused
+ecc:code-explorer                ~47   ▰▰▱▱▱  ext  3     0     never  REAP · unused
+ecc:type-design-analyzer         ~31   ▰▱▱▱▱  ext  3     0     never  REAP · unused
+ecc:comment-analyzer             ~30   ▰▱▱▱▱  ext  3     0     never  REAP · unused
+caveman:cavecrew-reviewer        ~8    ▱▱▱▱▱  ext  3     0     never  REAP · unused
+ecc:network-architect            ~53   ▰▰▱▱▱  ext  2     0     never  REAP · unused
+ecc:network-config-reviewer      ~49   ▰▰▱▱▱  ext  2     0     never  REAP · unused
+ecc:homelab-architect            ~47   ▰▰▱▱▱  ext  2     0     never  REAP · unused
+ecc:conversation-analyzer        ~46   ▰▰▱▱▱  ext  2     0     never  REAP · unused
+
+  ── HOOKS (report-only: output cost varies per event) ────────────────────────────────────────────────────────────
+      · info  1 items
+NAME          TOK   SRC            PERM  USES  LAST  JUDGMENT
+PreToolUse#0     ?  settings.json  -     -     -     -
+
+  ── ALWAYS-LOADED PROSE (CLAUDE.md, rules) ────────────────────────────────────────────────────────────
+      · info  24 items · ~8702 tok/session
+NAME                                          TOK          SRC     PERM  USES  LAST  JUDGMENT
+~/.claude/rules/ecc/typescript/coding-style…  ~1160 ▰▰▰▰▰  rules   -     -     -     -
+~/.claude/rules/ecc/common/code-review.md     ~947  ▰▰▰▰▱  rules   -     -     -     -
+~/.claude/rules/ecc/common/coding-style.md    ~686  ▰▰▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/common/development-work…  ~609  ▰▰▱▱▱  rules   -     -     -     -
+~/.claude/CLAUDE.md                           ~583  ▰▰▱▱▱  global  -     -     -     -
+~/.claude/CLAUDE.md                           ~583  ▰▰▱▱▱  global  -     -     -     -
+~/.claude/rules/ecc/python/fastapi.md         ~470  ▰▰▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/common/performance.md     ~449  ▰▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/common/agents.md          ~440  ▰▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/common/testing.md         ~379  ▰▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/typescript/patterns.md    ~279  ▰▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/common/patterns.md        ~277  ▰▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/common/security.md        ~233  ▰▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/python/patterns.md        ~223  ▱▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/common/hooks.md           ~208  ▱▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/python/coding-style.md    ~193  ▱▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/common/git-workflow.md    ~169  ▱▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/python/testing.md         ~158  ▱▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/typescript/hooks.md       ~152  ▱▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/typescript/security.md    ~145  ▱▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/python/security.md        ~142  ▱▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/python/hooks.md           ~115  ▱▱▱▱▱  rules   -     -     -     -
+~/.claude/rules/ecc/typescript/testing.md     ~102  ▱▱▱▱▱  rules   -     -     -     -
+~/.gemini/GEMINI.md                           ~0    ▱▱▱▱▱  global  -     -     -     -
+
+  ── 4 warnings ──
+    /Users/eugeniozamengopontrelli/.codex/config.toml: unreadable JSON: invalid character 'p' looking for beginning of value
+    /Users/eugeniozamengopontrelli/.gemini: Gemini CLI usage is not counted because its transcripts use a format skillreaper does not parse yet (gemini-json); its items are shown as REVIEW, not REAP/MUTE.
+    /Users/eugeniozamengopontrelli/.openclaw: OpenClaw usage is not counted because it exposes no session transcripts at all, so nothing can be observed about its items; its items are shown as REVIEW, not REAP/MUTE.
+    /Users/eugeniozamengopontrelli/.config/opencode: OpenCode usage is not counted because no SQLite session history was found; its items are shown as REVIEW, not REAP/MUTE.
+
+  ▸ reap prune  — 367 items · ~19755 tok/session reclaimed
+  ▸ reap mute  — skillreaper:reap, skillreaper:gap (~150 tok total)
+
+  All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all
+
+  ⟡ skillreaper · github.com/thousandflowers/skillreaper
+
+
+================================================================
+$ reap gap -no-color -no-nudge
+================================================================
+
+  ⟡ loaded vs fired — last 30 days · 55 sessions
+
+  CATEGORY   LOADED  FIRED   UTIL                TOKENS
+  skills        300      9     3%   ▱▱▱▱▱▱▱▱▱▱   ~16322 →   331
+  mcp            14      4    28%   ▰▰▱▱▱▱▱▱▱▱         ? →     ?
+  agents         68      0     0%   ▱▱▱▱▱▱▱▱▱▱   ~ 3959 →     0
+  ─────────────────────────────────────────────────────────
+  total         382     13     3%   ▱▱▱▱▱▱▱▱▱▱   ~20281 →   331
+
+  ⟡ mute 2 heavy low-use skills · ~150 tok/session recoverable via `reap mute`
+
+  ⟡ payload quality — when an MCP tool fires, is the result signal or noise?
+  high firing rate + low quality = context burned every call (not caught by mute)
+
+  TOOL                                      CALLS QUALITY                       AVG
+  mcp__headroom__headroom_stats                 1     93%   ▰▰▰▰▰▰▰▰▰▱   ~      608
+  mcp__claude_ai_Figma__download_assets         5     96%   ▰▰▰▰▰▰▰▰▰▱   ~      812
+  mcp__headroom__headroom_retrieve             28     99%   ▰▰▰▰▰▰▰▰▰▱   ~     1.2k
+  mcp__plugin_ecc_playwright__browser_nav…      6    100%   ▰▰▰▰▰▰▰▰▰▰   ~       97
+  mcp__plugin_superpowers-chrome_chrome__…      4    100%   ▰▰▰▰▰▰▰▰▰▰   ~      176
+  mcp__claude_ai_Figma__get_metadata            3    100%   ▰▰▰▰▰▰▰▰▰▰   ~     1.1k
+  mcp__claude_ai_Figma__get_screenshot          1    100%   ▰▰▰▰▰▰▰▰▰▰   ~      496
+  mcp__claude_ai_Figma__whoami                  1    100%   ▰▰▰▰▰▰▰▰▰▰   ~      357
+  mcp__plugin_ecc_playwright__browser_res…      1    100%   ▰▰▰▰▰▰▰▰▰▰   ~       97

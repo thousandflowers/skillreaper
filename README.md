@@ -52,6 +52,8 @@ measured by skillreaper · github.com/thousandflowers/skillreaper
   <a href="https://github.com/thousandflowers/skillreaper/issues"><img src="https://badgen.net/github/open-issues/thousandflowers/skillreaper" alt="Issues"></a>
   <a href="https://github.com/thousandflowers/skillreaper/releases"><img src="https://img.shields.io/github/downloads/thousandflowers/skillreaper/total?cacheSeconds=6400&color=success" alt="Downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
+  <a href="https://github.com/avelino/awesome-go#artificial-intelligence"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Go"></a>
+  <a href="https://github.com/VoltAgent/awesome-agent-skills#community-skills"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Agent Skills"></a>
 </p>
 
 <br>
@@ -61,10 +63,14 @@ npx skillreaper
 ```
 
 <!-- readme-mine-headline:start -->
-On my own stack right now: **380 items loaded, 11 ever fired — 2% utilization.**
-That's ~19,760 dead tokens re-sent in every single session, ~790k a month of
+On my own installation, measured 2026-08-23: **382 items loaded, 13 ever fired — 3% utilization.**
+That's ~19,755 dead tokens re-sent in every single session, ~1087k a month of
 pure token waste, paid for on every request before you type anything.
 <!-- readme-mine-headline:end -->
+
+<sub>Measured 2026-08-23 on my own installation; raw output in
+<a href="docs/measurements/">docs/measurements/</a>. Every "on my own installation"
+figure on this page comes from that one run.</sub>
 
 **One command. Zero config. Read-only.** It reads your real session transcripts,
 finds every skill / MCP / agent your AI loads but never fires, and shows you
@@ -99,20 +105,20 @@ sloppier runs. This isn't about pennies — it's about work quality.
 prompt-cache hit rate. A typical setup:
 
 <!-- readme-mine-costs:start -->
-- 380 items loaded
-- 368 never used (96 %)
-- 19 760 tok/session dead
-- ~790 000 tok/month burned on irrelevant instructions
-- ~$2.37/month, ~$28/year — the same waste priced instead of counted
+- 382 items loaded
+- 367 never used (96 %)
+- 19 755 tok/session dead
+- ~1 087 000 tok/month burned on irrelevant instructions
+- ~$3.26/month, ~$39/year — the same waste priced instead of counted
 
 <p align="center"><sub>The money line is one measurement of one stack, n=1, and the
-weakest number here: <code>19 760 × 40 × $3.00 ÷ 1e6</code> — input tokens only, at
+weakest number here: <code>19 755 × 55 × $3.00 ÷ 1e6</code> — input tokens only, at
 <code>claude-sonnet-4-6</code>'s $3.00/MTok default, with tokens estimated as
 <code>ceil(chars / 3.7)</code> and the monthly session count extrapolated from a
 30-day window. Change the model, the price, or how much you work and it moves;
 the item and token counts do not. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
 
-<p align="center"><em>Measured on my own setup — 40 sessions over 30 days, 2026-08-18. Run <code>reap</code> to see yours.</em></p>
+<p align="center"><em>Measured on my own setup — 55 sessions over 30 days, 2026-08-23. Run <code>reap</code> to see yours.</em></p>
 <!-- readme-mine-costs:end -->
 
 skillreaper measures both, from evidence — no guessing.
@@ -133,10 +139,12 @@ files and session transcripts on disk — your data never leaves your machine.
 <!-- readme-mine-table:start -->
 | Before skillreaper | After skillreaper |
 |---|---|
-| 380 items loaded every session | 12 kept · 11 actually fire |
-| 19 760 tok/session dead | Full context budget for real work |
+| 382 items loaded every session | 15 kept · 13 actually fire |
+| 19 755 tok/session dead | Full context budget for real work |
 | ≈ 73 000 dead chars ≈ 29 pages every session (at 500 words/pg) | Zero |
 | Lower cache hit rate = higher latency | Smaller prompt fits in cache |
+
+<sub>My own installation, measured 2026-08-23.</sub>
 <!-- readme-mine-table:end -->
 
 <br>
@@ -295,6 +303,9 @@ The default `reap` report also includes a compact utilization summary line:
   ⟡ utilization 1%  —  7/378 items fired · ~278/22998 tok touched (30d)
 ```
 <!-- readme-utilization:end -->
+
+<p align="center"><sub>Same generated sample stack, not my install — as with the two
+blocks above it.</sub></p>
 
 This is the **real** gap between what your agent carries and what it fires —
 complementary to the shock box (which only counts items that are safe to prune
@@ -462,6 +473,19 @@ internal/
   readme/       maintainer-only README figure generator (not shipped)
 docs/           demo assets
 ```
+
+<br>
+
+---
+
+### Where it is used
+
+Included in [awesome-go](https://github.com/avelino/awesome-go#artificial-intelligence)
+(182k ★, Artificial Intelligence section) and
+[awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills#community-skills)
+(30k ★). Three external contributors, 17 merged commits. The verdict logic has
+been ported into another project with attribution in the code
+([lean-agency](https://github.com/badithya-ms/lean-agency)).
 
 <br>
 

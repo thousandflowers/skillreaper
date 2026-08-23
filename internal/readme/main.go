@@ -96,10 +96,10 @@ func blocks(r *report.Report) []block {
 
 	return []block{
 		{"mine-headline", fmt.Sprintf(
-			`On my own stack right now: **%d items loaded, %d ever fired — %s utilization.**
+			`On my own installation, measured %s: **%d items loaded, %d ever fired — %s utilization.**
 That's ~%s dead tokens re-sent in every single session, ~%dk a month of
 pure token waste, paid for on every request before you type anything.`,
-			loaded, fired, pct(fired, loaded), commas(tok), roundTo(monthly, 1000)/1000)},
+			measured, loaded, fired, pct(fired, loaded), commas(tok), roundTo(monthly, 1000)/1000)},
 
 		{"mine-costs", fmt.Sprintf(
 			`- %s items loaded
@@ -127,8 +127,10 @@ the item and token counts do not. See <a href="#limitations-transparency">Limita
 | %s items loaded every session | %d kept · %d actually fire |
 | %s tok/session dead | Full context budget for real work |
 | ≈ %s dead chars ≈ %d pages every session (at 500 words/pg) | Zero |
-| Lower cache hit rate = higher latency | Smaller prompt fits in cache |`,
-			spaced(loaded), kept, fired, spaced(tok), spaced(chars), pages)},
+| Lower cache hit rate = higher latency | Smaller prompt fits in cache |
+
+<sub>My own installation, measured %s.</sub>`,
+			spaced(loaded), kept, fired, spaced(tok), spaced(chars), pages, measured)},
 	}
 }
 

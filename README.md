@@ -474,6 +474,9 @@ internal/
 docs/           demo assets
 ```
 
+What is planned, parked, and decided against → [ROADMAP.md](ROADMAP.md).
+Why the non-obvious choices were made → [docs/decisions.md](docs/decisions.md).
+
 <br>
 
 ---

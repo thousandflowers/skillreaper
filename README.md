@@ -478,6 +478,37 @@ docs/           demo assets
 
 ---
 
+### Roadmap
+
+Tracked as issues, grouped by the problem they solve.
+
+- **Docs** — split read-only from writing commands and add a "First 60 seconds"
+  ([#50](https://github.com/thousandflowers/skillreaper/issues/50)); surface
+  `by-project`, `share` and `install-hook`
+  ([#51](https://github.com/thousandflowers/skillreaper/issues/51)).
+- **Teams** — `reap apm` is what reproduces a lean set across a team, but
+  coordinates resolve only from `apm.lock.yaml`, so a repo without one gets
+  placeholders. Plus scanning every detected platform, not only Claude Code
+  ([#41](https://github.com/thousandflowers/skillreaper/issues/41)).
+- **Better verdicts** — `--since` / `--until` and a window that respects the
+  corpus ([#53](https://github.com/thousandflowers/skillreaper/issues/53));
+  telling rare apart from dead
+  ([#54](https://github.com/thousandflowers/skillreaper/issues/54)); measuring
+  wrong-tool picks
+  ([#55](https://github.com/thousandflowers/skillreaper/issues/55)).
+- **Over time** — `reap snapshot` / `reap diff` over the existing `--json`
+  payload ([#52](https://github.com/thousandflowers/skillreaper/issues/52)).
+
+Not planned: a CI job running `reap` (a runner has no session transcripts, so it
+would measure nothing — the periodic loop is `reap install-hook`), an
+extrapolated annual dollar figure (see [docs/decisions.md](docs/decisions.md)),
+and git commit ranges (transcripts carry timestamps, which `--since` /
+`--until` already covers).
+
+<br>
+
+---
+
 ### Where it is used
 
 Included in [awesome-go](https://github.com/avelino/awesome-go#artificial-intelligence)

@@ -10,19 +10,36 @@ package cost
 // When a provider releases a new model, just add its pricing here
 // instead of changing core logic.
 var ModelPricing = map[string]float64{
-	// Claude — current (June 2026, verified from api docs)
-	"claude-opus-4-7":   5.0,
-	"claude-opus-4-6":   5.0,
-	"claude-opus-4-5":   5.0,
+	// Claude — verified against the Anthropic pricing documentation, 2026-08-25.
+	"claude-fable-5":  10.0,
+	"claude-mythos-5": 10.0,
+	"claude-opus-5":   5.0,
+	"claude-opus-4-8": 5.0,
+	"claude-opus-4-7": 5.0,
+	"claude-opus-4-6": 5.0,
+	"claude-opus-4-5": 5.0,
+	// Sonnet 5 lists at $3.00; an introductory $2.00 rate runs to 2026-08-31.
+	// The list price is the one that survives, so it is the one recorded here.
+	"claude-sonnet-5":   3.0,
 	"claude-sonnet-4-6": 3.0,
 	"claude-sonnet-4-5": 3.0,
 	"claude-haiku-4-5":  1.0,
 	"claude-3-5-sonnet": 3.0,
 
-	// OpenAI
+	// OpenAI — reached through Codex and opencode.
+	"gpt-5":       1.25,
+	"gpt-5-mini":  0.25,
 	"gpt-4o":      2.50,
 	"gpt-4o-mini": 0.15,
+	"o3":          2.0,
+	"o4-mini":     1.10,
 	"o3-mini":     1.10,
+
+	// Google Gemini — reached through gemini-cli. Base tier.
+	"gemini-2.5-pro":         1.25,
+	"gemini-2.5-flash":       0.30,
+	"gemini-3-pro-preview":   2.0,
+	"gemini-3-flash-preview": 0.50,
 }
 
 // DefaultModel is the pricing fallback when no --price or --model
@@ -49,8 +66,12 @@ var TokenRatios = map[string]int{
 	// English prose, slightly more than the ~3.7 default. OpenAI documents
 	// the rule of thumb as "1 token ~= 4 chars in English":
 	// https://platform.openai.com/tokenizer
+	"gpt-5":       40,
+	"gpt-5-mini":  40,
 	"gpt-4o":      40,
 	"gpt-4o-mini": 40,
+	"o3":          40,
+	"o4-mini":     40,
 	"o3-mini":     40,
 }
 

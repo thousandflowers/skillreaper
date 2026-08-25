@@ -1490,3 +1490,48 @@ func TestEmptyDirIsNotAFailedScanButUnreadableOneIs(t *testing.T) {
 		}
 	})
 }
+
+// Issue #63. An unknown --model used to resolve to the default price with no
+// output at all, so a typo and an unsupported model were indistinguishable
+// from a supported one. The warning goes to stderr, which keeps --json valid.
+func TestUnknownModelWarns(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantStderr bool
+		wantSource string
+	}{
+		{name: "unknown model", args: []string{"--model", "no-such-model", "--json"}, wantStderr: true, wantSource: "the default model"},
+		{name: "unknown model with explicit price", args: []string{"--model", "no-such-model", "--price", "7", "--json"}, wantStderr: true, wantSource: "--price"},
+		{name: "known model stays quiet", args: []string{"--model", "claude-sonnet-4-6", "--json"}, wantStderr: false},
+		{name: "no model stays quiet", args: []string{"--json"}, wantStderr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			args := append([]string{"--claude-dir", t.TempDir()}, tt.args...)
+			run(args, strings.NewReader(""), &out, &errOut)
+
+			got := errOut.String()
+			if tt.wantStderr {
+				if !strings.Contains(got, "unknown --model") {
+					t.Errorf("stderr = %q, want it to mention the unknown model", got)
+				}
+				if !strings.Contains(got, `"no-such-model"`) {
+					t.Errorf("stderr = %q, want it to name the requested model", got)
+				}
+				if !strings.Contains(got, tt.wantSource) {
+					t.Errorf("stderr = %q, want it to name %q as the price source", got, tt.wantSource)
+				}
+			} else if strings.Contains(got, "unknown --model") {
+				t.Errorf("stderr = %q, want no unknown-model warning", got)
+			}
+
+			// The warning must never reach stdout: --json has to stay parseable.
+			if strings.Contains(out.String(), "unknown --model") {
+				t.Error("the warning leaked into stdout, which breaks --json")
+			}
+		})
+	}
+}

@@ -202,7 +202,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		cmd, rest = positionals[0], positionals[1:]
 	}
 
-	if err := fillDefaults(&opts); err != nil {
+	if err := fillDefaults(&opts, stderr); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
@@ -303,7 +303,7 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
-func fillDefaults(opts *options) error {
+func fillDefaults(opts *options, stderr io.Writer) error {
 	opts.claudeDirExplicit = opts.claudeDir != ""
 	if opts.claudeDir == "" {
 		detected := platform.Detect()
@@ -319,6 +319,18 @@ func fillDefaults(opts *options) error {
 	if opts.model != "" {
 		if p, ok := cost.LookupPrice(opts.model); ok {
 			opts.price = p
+		} else {
+			// An unknown --model used to fall through in silence, so a typo and
+			// a model this build simply does not know produced identical,
+			// default-priced reports. Say which model was asked for and which
+			// price is standing in for it. Written to stderr rather than added
+			// to Report.Warnings because it is a problem with the invocation,
+			// not a caveat about the evidence — and stderr keeps --json clean.
+			source := fmt.Sprintf("the default model (%s)", cost.DefaultModel)
+			if opts.price > 0 {
+				source = "--price"
+			}
+			fmt.Fprintf(stderr, "warning: unknown --model %q; pricing from %s\n", opts.model, source)
 		}
 	}
 	if opts.price == 0 {

@@ -1,4 +1,4 @@
-# skillreaper — Design Spec
+# skillreaper - Design Spec
 
 **Date:** 2026-06-10
 **Status:** Approved (carte blanche from owner)
@@ -8,7 +8,7 @@
 
 > You installed 87 skills. Your agent used 4. Reap the rest.
 
-`skillreaper` (binary: `reap`) scans your AI-agent stack (Claude Code first), cross-references it with your **real session transcripts**, and tells you — with evidence — which skills, MCP servers, agents, and hooks you never use and what they cost you in context tokens every session. Then it prunes them safely (reversible quarantine, never delete).
+`skillreaper` (binary: `reap`) scans your AI-agent stack (Claude Code first), cross-references it with your **real session transcripts**, and tells you - with evidence - which skills, MCP servers, agents, and hooks you never use and what they cost you in context tokens every session. Then it prunes them safely (reversible quarantine, never delete).
 
 ## Why this can trend
 
@@ -35,7 +35,7 @@ Rejected alternatives: educational agent-from-scratch (saturated, 4.2k★ compet
 | Hooks | `settings.json` / `settings.local.json` `hooks` | event + command | none (inventory + flag only) |
 | Always-loaded prose | `~/.claude/CLAUDE.md`, `~/.claude/rules/**`, project `CLAUDE.md` | file + token weight | n/a (report weight only) |
 
-Transcripts: `~/.claude/projects/<encoded>/<uuid>.jsonl` — stream-parse lines, extract `tool_use` blocks (`name`, `input`), plus `<command-name>` tags in user messages for slash-command invocations. Window: `--days N` (default 30) filtered by file mtime + entry timestamps. Malformed lines: skip + count.
+Transcripts: `~/.claude/projects/<encoded>/<uuid>.jsonl` - stream-parse lines, extract `tool_use` blocks (`name`, `input`), plus `<command-name>` tags in user messages for slash-command invocations. Window: `--days N` (default 30) filtered by file mtime + entry timestamps. Malformed lines: skip + count.
 
 ## Cost model (documented, honest)
 
@@ -46,16 +46,16 @@ Transcripts: `~/.claude/projects/<encoded>/<uuid>.jsonl` — stream-parse lines,
 
 ## Verdicts
 
-- `REAP` — zero invocations in window AND window covers ≥ N sessions (default ≥ 10 sessions, else `REVIEW`).
-- `KEEP` — used in window.
-- `REVIEW` — insufficient evidence (few sessions, new install — installedAt newer than window).
+- `REAP` - zero invocations in window AND window covers ≥ N sessions (default ≥ 10 sessions, else `REVIEW`).
+- `KEEP` - used in window.
+- `REVIEW` - insufficient evidence (few sessions, new install - installedAt newer than window).
 
 ## Prune mechanics (safety first)
 
 - Default is **dry-run**: prints plan. `--yes` applies. Interactive numbered picker otherwise.
 - Personal skills/agents → move to `~/.claude/reaped/<category>/<name>` + append `~/.claude/reaped/manifest.json` (id, original path, timestamp).
 - MCP servers (user-scope `~/.claude.json`, project `.mcp.json`) → timestamped file backup, then remove entry.
-- Plugin skills: **report-only** (suggest `/plugin` disable) — never touch plugin cache.
+- Plugin skills: **report-only** (suggest `/plugin` disable) - never touch plugin cache.
 - `reap restore [id|--all]` reverses via manifest/backups. Never `rm`.
 
 ## CLI
@@ -92,7 +92,7 @@ All scanners take explicit root paths (no hidden `os.UserHomeDir` deep in logic)
 - Fixture tree: `testdata/claudehome/` (skills, plugins cache, settings, .claude.json) + `testdata/transcripts/*.jsonl` (golden samples incl. malformed lines, namespaced skills, mcp tools, Task agents).
 - Unit: each scanner, usage parser, cost model, verdict logic, prune/restore round-trip (on `t.TempDir()` copies).
 - Golden test for ANSI/JSON/MD reports.
-- CI: GitHub Actions — vet + test + coverage gate + build (macOS/Linux). Release: goreleaser on tag.
+- CI: GitHub Actions - vet + test + coverage gate + build (macOS/Linux). Release: goreleaser on tag.
 
 ## Launch kit (in repo, `docs/launch/`)
 

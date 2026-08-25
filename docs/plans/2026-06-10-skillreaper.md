@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship `skillreaper` — a zero-dependency Go CLI that finds and safely prunes unused skills/MCP servers/agents in a Claude Code setup, with evidence from real transcripts.
+**Goal:** Ship `skillreaper` - a zero-dependency Go CLI that finds and safely prunes unused skills/MCP servers/agents in a Claude Code setup, with evidence from real transcripts.
 
 **Architecture:** Pipeline: `scan` (inventory from config trees) + `usage` (stream-parse transcript JSONL) → `report` (join + verdicts + renderers) → `prune` (reversible quarantine + manifest). All roots injectable for fixture-based tests.
 
@@ -17,7 +17,7 @@
 - [ ] `go mod init github.com/thousandflowers/skillreaper`
 - [ ] Commit `chore: module skeleton, MIT license, CI`
 
-### Task 2: internal/cost — token + money estimation
+### Task 2: internal/cost - token + money estimation
 
 **Files:** Create `internal/cost/cost.go`, `internal/cost/cost_test.go`
 
@@ -43,7 +43,7 @@ func TestMoneyPerMonth(t *testing.T) {
 - [ ] Implement: `Tokens(chars int) int` = `ceil(chars/3.7)` via integer math `(chars*10+36)/37`; `MoneyPerMonth(tokPerSession, sessionsPerMonth int, pricePerMTok float64) float64`.
 - [ ] Run, pass, commit `feat: token/money cost model`
 
-### Task 3: internal/scan — types + frontmatter parser
+### Task 3: internal/scan - types + frontmatter parser
 
 **Files:** Create `internal/scan/types.go`, `internal/scan/frontmatter.go`, `internal/scan/frontmatter_test.go`
 
@@ -66,10 +66,10 @@ type Warning struct{ Path, Msg string }
 
 `Name` = invocation key (`"graphify"`, `"ecc:plan"`, mcp server name, hook `event#i`, prose path).
 
-- [ ] Frontmatter: `parseFrontmatter(b []byte) (name, desc string, bodyChars int)` — between first two `---` lines; extract `name:`/`description:` line values (trim quotes); bodyChars = len after closing `---`. Tests: normal, missing frontmatter (whole file = body), quoted values, no description.
+- [ ] Frontmatter: `parseFrontmatter(b []byte) (name, desc string, bodyChars int)` - between first two `---` lines; extract `name:`/`description:` line values (trim quotes); bodyChars = len after closing `---`. Tests: normal, missing frontmatter (whole file = body), quoted values, no description.
 - [ ] Commit `feat: scan types + frontmatter parser`
 
-### Task 4: scanner — personal + plugin skills
+### Task 4: scanner - personal + plugin skills
 
 **Files:** Create `internal/scan/skills.go`, `internal/scan/skills_test.go`; fixtures built in `t.TempDir()` (skills/myskill/SKILL.md, plugins/installed_plugins.json with absolute installPath, plugins/cache/.../skills/subskill/SKILL.md)
 
@@ -77,14 +77,14 @@ type Warning struct{ Path, Msg string }
 - [ ] installed_plugins.json shape (verified real): `{"version":2,"plugins":{"name@mkt":[{"installPath":"/abs/path","installedAt":"2026-05-15T22:41:04.874Z"}]}}`. Plugin skill key = `<pluginName>:<skillDir>`.
 - [ ] Commit `feat: skills scanner (personal + plugin)`
 
-### Task 5: scanner — agents
+### Task 5: scanner - agents
 
 **Files:** Create `internal/scan/agents.go`, `internal/scan/agents_test.go`
 
-- [ ] `ScanAgents(claudeDir)` — `agents/*.md` (Name = frontmatter name or file stem, Removable true) + each plugin's `agents/*.md` (Name = `plugin:stem`, Removable false). Extract shared `installedPlugins(claudeDir)` helper reused by Task 4.
+- [ ] `ScanAgents(claudeDir)` - `agents/*.md` (Name = frontmatter name or file stem, Removable true) + each plugin's `agents/*.md` (Name = `plugin:stem`, Removable false). Extract shared `installedPlugins(claudeDir)` helper reused by Task 4.
 - [ ] Commit `feat: agents scanner`
 
-### Task 6: scanner — MCP servers
+### Task 6: scanner - MCP servers
 
 **Files:** Create `internal/scan/mcp.go`, `internal/scan/mcp_test.go`
 
@@ -96,7 +96,7 @@ type Warning struct{ Path, Msg string }
 - [ ] Tests: fixture .claude.json with both scopes + plugin .mcp.json; corrupt file → Warning.
 - [ ] Commit `feat: mcp scanner`
 
-### Task 7: scanner — hooks + always-loaded prose
+### Task 7: scanner - hooks + always-loaded prose
 
 **Files:** Create `internal/scan/hooks.go`, `internal/scan/prose.go`, tests
 
@@ -104,7 +104,7 @@ type Warning struct{ Path, Msg string }
 - [ ] `ScanProse(claudeDir, cwd)`: `~/.claude/CLAUDE.md`, `~/.claude/rules/**/*.md`, `<cwd>/CLAUDE.md` → Item, DescChars = full file size (always injected).
 - [ ] Commit `feat: hooks + prose scanners`
 
-### Task 8: internal/usage — transcript parser
+### Task 8: internal/usage - transcript parser
 
 **Files:** Create `internal/usage/usage.go`, `internal/usage/usage_test.go`, fixture JSONL written by test
 
@@ -125,10 +125,10 @@ func Parse(projectsDir string, cutoff time.Time) (*Stats, error)
   - `name=="Task"||name=="Agent"` → input `{"subagent_type":string}` → CatAgent
   - `strings.HasPrefix(name,"mcp__")` → server = segment between `mcp__` and next `__` → CatMCP
   - user line with `<command-name>/x</command-name>` → CatSkill key `x` (strip `/`)
-- [ ] Test fixture: 2 jsonl files — skill use `{"skill":"ecc:plan"}`, Task subagent_type, `mcp__blender__get_scene_info`, command-name line, 1 malformed line; 1 old file excluded via `os.Chtimes`. Assert counts, Sessions=2, MalformedLines=1.
+- [ ] Test fixture: 2 jsonl files - skill use `{"skill":"ecc:plan"}`, Task subagent_type, `mcp__blender__get_scene_info`, command-name line, 1 malformed line; 1 old file excluded via `os.Chtimes`. Assert counts, Sessions=2, MalformedLines=1.
 - [ ] Commit `feat: transcript usage parser`
 
-### Task 9: internal/report — join, verdicts, renderers
+### Task 9: internal/report - join, verdicts, renderers
 
 **Files:** Create `internal/report/report.go`, `internal/report/verdict.go`, `internal/report/ansi.go`, `internal/report/markdown.go`, tests
 
@@ -144,11 +144,11 @@ func Verdict(uses, sessions, minSessions int, installedAt time.Time, cutoff time
 ```
 
 Tests: all 4 branches.
-- [ ] `Build(items []scan.Item, st *usage.Stats, opts Opts) *Report` — Row{Item, Uses, LastUsed, Verdict, Tokens}; usage match: exact key, else skills also match short form (suffix after `:`). Totals: DeadTokensPerSession (Σ DescChars of REAP skill/agent rows → cost.Tokens), DeadCount, SessionsPerMonth = Sessions×30/WindowDays, MoneyPerMonth via cost.
+- [ ] `Build(items []scan.Item, st *usage.Stats, opts Opts) *Report` - Row{Item, Uses, LastUsed, Verdict, Tokens}; usage match: exact key, else skills also match short form (suffix after `:`). Totals: DeadTokensPerSession (Σ DescChars of REAP skill/agent rows → cost.Tokens), DeadCount, SessionsPerMonth = Sessions×30/WindowDays, MoneyPerMonth via cost.
 - [ ] JSON renderer = `json.MarshalIndent`. Markdown: tables per category. ANSI: hand-rolled colors (respect `NO_COLOR` + non-TTY), aligned columns, shock header. Renderer tests assert key substrings.
 - [ ] Commit `feat: report builder + ansi/json/md renderers`
 
-### Task 10: internal/prune — quarantine, manifest, restore
+### Task 10: internal/prune - quarantine, manifest, restore
 
 **Files:** Create `internal/prune/prune.go`, `internal/prune/prune_test.go`
 
@@ -165,12 +165,12 @@ type Entry struct {
 }
 ```
 
-- [ ] `QuarantineDir(claudeDir, item)` — `os.Rename` → `<claudeDir>/reaped/<category>/<name>`; append manifest. `RemoveMCP(claudeDir, claudeJSONPath, scope, name)` — backup file to `<claudeDir>/reaped/backups/<base>.<unixts>`, surgical edit via `map[string]json.RawMessage`, store removed payload in manifest.
-- [ ] `Restore(claudeDir, id)` / `RestoreAll` — rename back; MCP re-insert payload; mark Restored.
+- [ ] `QuarantineDir(claudeDir, item)` - `os.Rename` → `<claudeDir>/reaped/<category>/<name>`; append manifest. `RemoveMCP(claudeDir, claudeJSONPath, scope, name)` - backup file to `<claudeDir>/reaped/backups/<base>.<unixts>`, surgical edit via `map[string]json.RawMessage`, store removed payload in manifest.
+- [ ] `Restore(claudeDir, id)` / `RestoreAll` - rename back; MCP re-insert payload; mark Restored.
 - [ ] Tests in `t.TempDir()`: quarantine→restore round-trip (content identical); MCP remove keeps unrelated keys semantically intact (re-parse equality), restore re-inserts.
 - [ ] Commit `feat: reversible prune + restore`
 
-### Task 11: cmd/reap — CLI wiring
+### Task 11: cmd/reap - CLI wiring
 
 **Files:** Create `cmd/reap/main.go`, `cmd/reap/main_test.go`
 

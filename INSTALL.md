@@ -1,6 +1,6 @@
 # Installing skillreaper
 
-## macOS — Homebrew (recommended)
+## macOS - Homebrew (recommended)
 
 ```bash
 brew install thousandflowers/tap/skillreaper

@@ -1,4 +1,4 @@
-# hero.tape — `reap --agent` against the hero fixture, for posts and threads.
+# hero.tape - `reap --agent` against the hero fixture, for posts and threads.
 #
 #   cd docs/tapes && vhs hero.tape
 #
@@ -13,7 +13,7 @@
 #
 # Geometry: the report's longest line is 71 columns, and every one of them has to
 # fit or the "To prune:" line wraps its closing paren onto a line of its own.
-# 800px wide caps the font at 16pt — 17 measured at 70 usable columns, one short.
+# 800px wide caps the font at 16pt - 17 measured at 70 usable columns, one short.
 # reap-prune.tape's 26pt would need ~1150px, so the size differs and the theme
 # and font do not.
 

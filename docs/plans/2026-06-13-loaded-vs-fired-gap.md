@@ -14,12 +14,12 @@
 
 ## File Structure
 
-- **Create** `internal/report/gap.go` — `Gap`, `GapCat` types; `computeGap()`; `renderGapLine()`, `RenderGap()`, `RenderGapMarkdown()`, `RenderGapJSON()`; gap helpers (`utilPct`, `utilBar`, `utilColor`, `gapLabel`).
-- **Create** `internal/report/gap_test.go` — gap computation + render tests.
-- **Modify** `internal/report/report.go` — add `Gap *Gap` field to `Report`; populate in `Build()`.
-- **Modify** `internal/report/render.go` — add shared `painter()` helper; call `renderGapLine()` from `RenderText()`.
-- **Modify** `cmd/reap/main.go` — `gap` case, `cmdGap()`, usage text.
-- **Modify** `cmd/reap/main_test.go` — `TestRunGap`.
+- **Create** `internal/report/gap.go` - `Gap`, `GapCat` types; `computeGap()`; `renderGapLine()`, `RenderGap()`, `RenderGapMarkdown()`, `RenderGapJSON()`; gap helpers (`utilPct`, `utilBar`, `utilColor`, `gapLabel`).
+- **Create** `internal/report/gap_test.go` - gap computation + render tests.
+- **Modify** `internal/report/report.go` - add `Gap *Gap` field to `Report`; populate in `Build()`.
+- **Modify** `internal/report/render.go` - add shared `painter()` helper; call `renderGapLine()` from `RenderText()`.
+- **Modify** `cmd/reap/main.go` - `gap` case, `cmdGap()`, usage text.
+- **Modify** `cmd/reap/main_test.go` - `TestRunGap`.
 
 Definitions used throughout:
 - **Loaded** = inventory item (one per `Row` in categories skill/agent/mcp).
@@ -95,12 +95,12 @@ func TestComputeGap(t *testing.T) {
 }
 ```
 
-Note: `bytes` and `strings` are imported now because later tasks in this same file use them. If your linter flags them as unused at this step, that is expected until Task 2 — proceed; they are used by the end of Task 2.
+Note: `bytes` and `strings` are imported now because later tasks in this same file use them. If your linter flags them as unused at this step, that is expected until Task 2 - proceed; they are used by the end of Task 2.
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/report/ -run TestComputeGap -v`
-Expected: compile error — `r.Gap undefined` / `GapCat undefined`.
+Expected: compile error - `r.Gap undefined` / `GapCat undefined`.
 
 - [ ] **Step 3: Create the gap model + computation**
 
@@ -232,7 +232,7 @@ func TestRenderTextHasGapLine(t *testing.T) {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/report/ -run TestRenderTextHasGapLine -v`
-Expected: FAIL — "missing utilization line".
+Expected: FAIL - "missing utilization line".
 
 - [ ] **Step 3: Add the shared painter helper**
 
@@ -432,7 +432,7 @@ func TestRenderGapNoSessions(t *testing.T) {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/report/ -run TestRenderGap -v`
-Expected: FAIL — `RenderGap` undefined.
+Expected: FAIL - `RenderGap` undefined.
 
 - [ ] **Step 3: Implement RenderGap**
 
@@ -539,7 +539,7 @@ func TestRenderGapJSON(t *testing.T) {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/report/ -run 'TestRenderGapMarkdown|TestRenderGapJSON' -v`
-Expected: FAIL — `RenderGapMarkdown` / `RenderGapJSON` undefined.
+Expected: FAIL - `RenderGapMarkdown` / `RenderGapJSON` undefined.
 
 - [ ] **Step 3: Add the json import**
 
@@ -669,7 +669,7 @@ func TestRunGapJSON(t *testing.T) {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `go test ./cmd/reap/ -run TestRunGap -v`
-Expected: FAIL — `gap` is an unknown command (exit code 2), output lacks "loaded vs fired".
+Expected: FAIL - `gap` is an unknown command (exit code 2), output lacks "loaded vs fired".
 
 - [ ] **Step 3: Add the gap line to usageText**
 
@@ -772,5 +772,5 @@ Functions/types defined once and reused with these exact names:
 
 ## Notes
 
-- `Gap` uses no JSON struct tags — consistent with the rest of the package (e.g. existing tests assert `"DeadCount"`), so fields serialize by their Go names (`Loaded`, `Fired`, …).
+- `Gap` uses no JSON struct tags - consistent with the rest of the package (e.g. existing tests assert `"DeadCount"`), so fields serialize by their Go names (`Loaded`, `Fired`, …).
 - README headline numbers ("187 read, 4 used") are illustrative; the gap view reports the real per-install figures.

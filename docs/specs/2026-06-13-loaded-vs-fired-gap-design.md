@@ -1,14 +1,14 @@
-# Design — Loaded vs Fired skills gap
+# Design - Loaded vs Fired skills gap
 
-**Issue:** #4 — Track and visualize the "Loaded vs Fired" skills gap
+**Issue:** #4 - Track and visualize the "Loaded vs Fired" skills gap
 **Date:** 2026-06-13
 **Status:** Approved (brainstorm)
 
 ## Problem
 
 `reap` already computes, per item, whether it was used (`Uses`) and a prune
-verdict. The brand headline — "your agent reads 187 skill descriptions, you
-use 4" — is exactly a *loaded vs fired* ratio, but the tool never surfaces it
+verdict. The brand headline - "your agent reads 187 skill descriptions, you
+use 4" - is exactly a *loaded vs fired* ratio, but the tool never surfaces it
 as a first-class, explicit metric. Issue #4 asks to **track** and **visualize**
 this gap.
 
@@ -26,10 +26,10 @@ model is designed to serialize cleanly so phase 2 needs no rework.
 
 ### Definitions
 
-- **Loaded** — an inventory item whose description/schema is injected into
+- **Loaded** - an inventory item whose description/schema is injected into
   context. The full skill/agent/MCP inventory.
-- **Fired** — an item invoked at least once in the window (`Uses > 0`).
-- **Gap / utilization** — `Fired / Loaded`. This is the *raw* utilization, the
+- **Fired** - an item invoked at least once in the window (`Uses > 0`).
+- **Gap / utilization** - `Fired / Loaded`. This is the *raw* utilization, the
   literal reading of the issue title and README headline. It is intentionally
   distinct from the existing red "shock box", which reports the *actionable*
   prunable weight (REAP verdict only). The two are complementary:
@@ -52,7 +52,7 @@ totals (consistent with existing `weightDisplay`).
 
 **Chosen: extend the `report` package.** The `Build()` function already joins
 inventory items with usage evidence into `Rows`. The gap is derived from those
-same rows — no new scanning, no duplicated join logic.
+same rows - no new scanning, no duplicated join logic.
 
 Rejected:
 - A separate `internal/gap` package → duplicates the join logic in
@@ -92,14 +92,14 @@ MCP tokens.
 
 New functions in `internal/report/render.go`:
 
-- `renderGapLine(w, g *Gap, color bool)` — compact one-liner appended to the
+- `renderGapLine(w, g *Gap, color bool)` - compact one-liner appended to the
   default `RenderText` report, after the shock box:
 
   ```
     ⟡ utilization 4%  —  9/229 items fired · ~300/9 200 tok touched (30d)
   ```
 
-- `RenderGap(w, r *Report, color bool)` — the full `reap gap` view. Bar
+- `RenderGap(w, r *Report, color bool)` - the full `reap gap` view. Bar
   represents utilization (`Fired/Loaded`); count and tokens side by side:
 
   ```

@@ -1,4 +1,4 @@
-# Measurement — 2026-08-23
+# Measurement - 2026-08-23
 
 Raw, unedited output. One run, one machine, one binary. Every figure the
 README and the portfolio quote for 'my own installation' comes from this file.
@@ -17,7 +17,7 @@ Commands, in order:
 $ reap -no-color -no-nudge
 ================================================================
 
-  ⟡ skillreaper — evidence-based pruning for your agent stack
+  ⟡ skillreaper - evidence-based pruning for your agent stack
 
   window:  last 30 days · 55 sessions
 
@@ -26,7 +26,7 @@ $ reap -no-color -no-nudge
   ╚════════════════════════════════════════════════════════════════════╝
   a floor, not a total: 10 unused items (MCP servers, hooks) carry weight that was never measured
 
-  ⟡ utilization 3%  —  13/382 items fired · ~331/20281 tok touched (30d)
+  ⟡ utilization 3%  -  13/382 items fired · ~331/20281 tok touched (30d)
 
   ── SKILLS (description injected every session) ────────────────────────────────────────────────────────────
       ▸ reap  289 items · ~15796 tok/session
@@ -476,8 +476,8 @@ NAME                                          TOK          SRC     PERM  USES  L
     /Users/eugeniozamengopontrelli/.openclaw: OpenClaw usage is not counted because it exposes no session transcripts at all, so nothing can be observed about its items; its items are shown as REVIEW, not REAP/MUTE.
     /Users/eugeniozamengopontrelli/.config/opencode: OpenCode usage is not counted because no SQLite session history was found; its items are shown as REVIEW, not REAP/MUTE.
 
-  ▸ reap prune  — 367 items · ~19755 tok/session reclaimed
-  ▸ reap mute  — skillreaper:reap, skillreaper:gap (~150 tok total)
+  ▸ reap prune  - 367 items · ~19755 tok/session reclaimed
+  ▸ reap mute  - skillreaper:reap, skillreaper:gap (~150 tok total)
 
   All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all
 
@@ -488,7 +488,7 @@ NAME                                          TOK          SRC     PERM  USES  L
 $ reap gap -no-color -no-nudge
 ================================================================
 
-  ⟡ loaded vs fired — last 30 days · 55 sessions
+  ⟡ loaded vs fired - last 30 days · 55 sessions
 
   CATEGORY   LOADED  FIRED   UTIL                TOKENS
   skills        300      9     3%   ▱▱▱▱▱▱▱▱▱▱   ~16322 →   331
@@ -499,7 +499,7 @@ $ reap gap -no-color -no-nudge
 
   ⟡ mute 2 heavy low-use skills · ~150 tok/session recoverable via `reap mute`
 
-  ⟡ payload quality — when an MCP tool fires, is the result signal or noise?
+  ⟡ payload quality - when an MCP tool fires, is the result signal or noise?
   high firing rate + low quality = context burned every call (not caught by mute)
 
   TOOL                                      CALLS QUALITY                       AVG

@@ -37,7 +37,11 @@ var writeStateFile = func(claudeDir string, b []byte) error {
 	return safepath.AtomicWriteFileWithin(claudeDir, statePath(claudeDir), b, 0o600)
 }
 
-func resolveMutableExisting(claudeDir, target string) (string, error) {
+// resolveMutableExisting confines target to the mutable roots of one platform
+// config directory. The parameter is a platform root, not necessarily the
+// Claude directory: passing claudeDir unconditionally is what made muting an
+// item from another platform impossible (#41).
+func resolveMutableExisting(rootDir, target string) (string, error) {
 	tr, err := filepath.EvalSymlinks(target)
 	if err != nil {
 		return "", err
@@ -49,13 +53,13 @@ func resolveMutableExisting(claudeDir, target string) (string, error) {
 	if !info.Mode().IsRegular() {
 		return "", fmt.Errorf("refusing to use non-regular file %s", target)
 	}
-	if rel, ok := resolvedRel(filepath.Join(claudeDir, "skills"), tr); ok && isPersonalSkillPath(rel) {
+	if rel, ok := resolvedRel(filepath.Join(rootDir, "skills"), tr); ok && isPersonalSkillPath(rel) {
 		return tr, nil
 	}
-	if rel, ok := resolvedRel(filepath.Join(claudeDir, "agents"), tr); ok && isPersonalAgentPath(rel) {
+	if rel, ok := resolvedRel(filepath.Join(rootDir, "agents"), tr); ok && isPersonalAgentPath(rel) {
 		return tr, nil
 	}
-	if rel, ok := resolvedRel(filepath.Join(claudeDir, "plugins"), tr); ok && isPluginSkillOrAgentPath(rel) {
+	if rel, ok := resolvedRel(filepath.Join(rootDir, "plugins"), tr); ok && isPluginSkillOrAgentPath(rel) {
 		return tr, nil
 	}
 	return "", fmt.Errorf("refusing to use path outside mutable skill, agent, or plugin roots: %s", target)
@@ -115,6 +119,11 @@ var ErrAlreadyMuted = errors.New("already muted")
 type Entry struct {
 	Path   string `json:"path"`   // original SKILL.md
 	Backup string `json:"backup"` // backup copy of the original file
+	// Root is the platform config directory Path was confined against when it
+	// was muted. Empty on entries written before multi-platform support, in
+	// which case the Claude directory is assumed — which is what those entries
+	// were in fact confined against.
+	Root string `json:"root,omitempty"`
 }
 
 // State maps a skill name to its mute Entry.
@@ -151,8 +160,19 @@ func saveState(claudeDir string, s *State) error {
 // Mute strips the description field from a skill's SKILL.md frontmatter,
 // backing up the original first. It errors if the skill is already muted or
 // has no description to strip.
-func Mute(claudeDir, name, skillPath string) error {
-	resolvedSkillPath, err := resolveMutableExisting(claudeDir, skillPath)
+// Mute strips a skill or agent description, keeping a backup.
+//
+// rootDir is the platform config directory the item was found under, and is
+// what skillPath is confined against. It is not always claudeDir: since #29
+// the report covers every detected platform, and an item under another
+// platform's root would otherwise be refused — a refusal the caller treats as
+// fatal, stopping a multi-platform run partway through. Backups and state
+// stay in claudeDir regardless, the way the prune manifest does.
+func Mute(claudeDir, rootDir, name, skillPath string) error {
+	if rootDir == "" {
+		rootDir = claudeDir
+	}
+	resolvedSkillPath, err := resolveMutableExisting(rootDir, skillPath)
 	if err != nil {
 		return err
 	}
@@ -186,7 +206,7 @@ func Mute(claudeDir, name, skillPath string) error {
 	if err := atomicfile.Write(resolvedSkillPath, stripped, perm); err != nil {
 		return err
 	}
-	s.Muted[name] = Entry{Path: resolvedSkillPath, Backup: backup}
+	s.Muted[name] = Entry{Path: resolvedSkillPath, Backup: backup, Root: rootDir}
 	if err := saveState(claudeDir, s); err != nil {
 		// The skill was stripped but the mute cannot be recorded; restore the
 		// original so it is not left silently degraded with no way to unmute,
@@ -255,7 +275,11 @@ func List(claudeDir string) ([]string, error) {
 }
 
 func restoreWithin(claudeDir string, e Entry) error {
-	path, err := resolveMutableExisting(claudeDir, e.Path)
+	root := e.Root
+	if root == "" {
+		root = claudeDir
+	}
+	path, err := resolveMutableExisting(root, e.Path)
 	if err != nil {
 		return err
 	}

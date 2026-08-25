@@ -1071,7 +1071,7 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 			fmt.Fprintf(stderr, "no skill or agent found: %s\n", args[0])
 			return 1
 		}
-		if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
+		if err := mute.Mute(opts.claudeDir, row.RootDir, row.Name, row.Path); err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			return 1
 		}
@@ -1107,7 +1107,7 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 	}
 	muted, totalTok := 0, 0
 	for _, row := range candidates {
-		if err := mute.Mute(opts.claudeDir, row.Name, row.Path); err != nil {
+		if err := mute.Mute(opts.claudeDir, row.RootDir, row.Name, row.Path); err != nil {
 			if errors.Is(err, mute.ErrAlreadyMuted) {
 				continue
 			}

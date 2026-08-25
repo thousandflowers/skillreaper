@@ -82,7 +82,7 @@ func TestMuteUnmuteRoundtrip(t *testing.T) {
 	claudeDir := filepath.Join(t.TempDir(), ".claude")
 	skillPath := writeSkill(t, claudeDir, "heavy")
 
-	if err := Mute(claudeDir, "heavy", skillPath); err != nil {
+	if err := Mute(claudeDir, claudeDir, "heavy", skillPath); err != nil {
 		t.Fatalf("Mute: %v", err)
 	}
 	b, _ := os.ReadFile(skillPath)
@@ -91,7 +91,7 @@ func TestMuteUnmuteRoundtrip(t *testing.T) {
 	}
 
 	// Idempotency guard: muting again must fail, not double-strip.
-	if err := Mute(claudeDir, "heavy", skillPath); err == nil {
+	if err := Mute(claudeDir, claudeDir, "heavy", skillPath); err == nil {
 		t.Error("muting an already-muted skill should error")
 	}
 
@@ -118,7 +118,7 @@ func TestMuteRefusesSymlinkOutsideClaudeDir(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 
-	if err := Mute(claudeDir, "heavy", link); err == nil {
+	if err := Mute(claudeDir, claudeDir, "heavy", link); err == nil {
 		t.Fatal("expected Mute to refuse a symlink target outside claudeDir")
 	}
 	b, err := os.ReadFile(outside)
@@ -138,7 +138,7 @@ func TestMuteRefusesSymlinkedMutedDirOutsideClaudeDir(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 
-	if err := Mute(claudeDir, "heavy", skillPath); err == nil {
+	if err := Mute(claudeDir, claudeDir, "heavy", skillPath); err == nil {
 		t.Fatal("expected Mute to refuse symlinked muted directory outside claudeDir")
 	}
 	b, err := os.ReadFile(skillPath)
@@ -167,7 +167,7 @@ func TestMuteRefusesSymlinkedStateFileOutsideClaudeDir(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 
-	if err := Mute(claudeDir, "heavy", skillPath); err == nil {
+	if err := Mute(claudeDir, claudeDir, "heavy", skillPath); err == nil {
 		t.Fatal("expected Mute to refuse symlinked state file outside claudeDir")
 	}
 	b, err := os.ReadFile(skillPath)
@@ -304,10 +304,10 @@ func TestUnmuteAll(t *testing.T) {
 	claudeDir := filepath.Join(t.TempDir(), ".claude")
 	a := writeSkill(t, claudeDir, "a")
 	b := writeSkill(t, claudeDir, "b")
-	if err := Mute(claudeDir, "a", a); err != nil {
+	if err := Mute(claudeDir, claudeDir, "a", a); err != nil {
 		t.Fatal(err)
 	}
-	if err := Mute(claudeDir, "b", b); err != nil {
+	if err := Mute(claudeDir, claudeDir, "b", b); err != nil {
 		t.Fatal(err)
 	}
 	n, err := UnmuteAll(claudeDir)
@@ -332,7 +332,7 @@ func TestMuteRollbackOnStateFailure(t *testing.T) {
 	writeStateFile = func(string, []byte) error { return errors.New("state write failed") }
 	defer func() { writeStateFile = oldWriteStateFile }()
 
-	if err := Mute(claudeDir, "heavy", skillPath); err == nil {
+	if err := Mute(claudeDir, claudeDir, "heavy", skillPath); err == nil {
 		t.Fatal("expected Mute to fail when state cannot be saved")
 	}
 	b, _ := os.ReadFile(skillPath)
@@ -349,10 +349,10 @@ func TestUnmuteAllPersistsPartialProgress(t *testing.T) {
 	claudeDir := filepath.Join(t.TempDir(), ".claude")
 	a := writeSkill(t, claudeDir, "a")
 	b := writeSkill(t, claudeDir, "b")
-	if err := Mute(claudeDir, "a", a); err != nil {
+	if err := Mute(claudeDir, claudeDir, "a", a); err != nil {
 		t.Fatal(err)
 	}
-	if err := Mute(claudeDir, "b", b); err != nil {
+	if err := Mute(claudeDir, claudeDir, "b", b); err != nil {
 		t.Fatal(err)
 	}
 	// Break "b"'s restore by removing its backup; "a" (sorted first) restores.
@@ -388,7 +388,7 @@ func TestListEmpty(t *testing.T) {
 func TestListAfterMute(t *testing.T) {
 	claudeDir := filepath.Join(t.TempDir(), ".claude")
 	skillPath := writeSkill(t, claudeDir, "test-skill")
-	if err := Mute(claudeDir, "test-skill", skillPath); err != nil {
+	if err := Mute(claudeDir, claudeDir, "test-skill", skillPath); err != nil {
 		t.Fatal(err)
 	}
 	list, err := List(claudeDir)
@@ -409,7 +409,7 @@ func TestUnmuteNotMuted(t *testing.T) {
 
 func TestMuteInvalidPath(t *testing.T) {
 	claudeDir := filepath.Join(t.TempDir(), ".claude")
-	if err := Mute(claudeDir, "ghost", "/nonexistent/SKILL.md"); err == nil {
+	if err := Mute(claudeDir, claudeDir, "ghost", "/nonexistent/SKILL.md"); err == nil {
 		t.Error("expected error for invalid path")
 	}
 }

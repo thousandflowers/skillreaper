@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -233,6 +234,30 @@ func (s *Stats) CorpusSpanDays() int {
 }
 
 func Parse(projectsDir string, cutoff time.Time, windowDays int) (*Stats, error) {
+	return ParseObserving(projectsDir, cutoff, windowDays, nil, nil)
+}
+
+// TranscriptID identifies one transcript for the purpose of remembering that
+// it has already been counted. Path alone is not enough: a session file grows
+// as the session continues, so the same path holds different evidence at
+// different times. Size and modification time distinguish those without
+// reading the file.
+func TranscriptID(path string, size, modUnix int64) string {
+	return fmt.Sprintf("%s@%d@%d", path, size, modUnix)
+}
+
+// ParseObserving is Parse with a per-transcript callback, so a caller keeping a
+// durable record can attribute what fired to the transcript it fired in.
+//
+// needs is asked first, before any work: a transcript already recorded is
+// parsed straight into the aggregate, skipping the per-file allocation
+// entirely. The aggregate needs every in-window file either way, so that
+// allocation is pure overhead once the record holds the file — which, after
+// the first run, is nearly all of them. Measured on a 356 MB corpus, doing it
+// unconditionally cost 17%.
+//
+// Both callbacks may be nil, which is the plain Parse path.
+func ParseObserving(projectsDir string, cutoff time.Time, windowDays int, needs func(id string) bool, observe func(id string, one *Stats)) (*Stats, error) {
 	st := NewStats(windowDays)
 	err := filepath.WalkDir(projectsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -259,10 +284,61 @@ func Parse(projectsDir string, cutoff time.Time, windowDays int) (*Stats, error)
 		}
 		st.FilesScanned++
 		st.Sessions++
-		parseFile(path, projectFor(projectsDir, path), st)
+		id := TranscriptID(path, info.Size(), info.ModTime().Unix())
+		if observe == nil || (needs != nil && !needs(id)) {
+			parseFile(path, projectFor(projectsDir, path), st)
+			return nil
+		}
+		// Parse into a per-file Stats so the observer sees this transcript
+		// alone, then fold it in. The aggregate is identical either way.
+		one := NewStats(windowDays)
+		parseFile(path, projectFor(projectsDir, path), one)
+		observe(id, one)
+		MergeInto(st, one)
 		return nil
 	})
 	return st, err
+}
+
+// MergeInto folds src into dst. Counts add, timestamps take the later, and
+// incomplete evidence is sticky: a partial read anywhere means the whole
+// result is partial.
+func MergeInto(dst, src *Stats) {
+	dst.MalformedLines += src.MalformedLines
+	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
+	for cat, uses := range src.Uses {
+		for key, n := range uses {
+			dst.Uses[cat][key] += n
+		}
+	}
+	for cat, lasts := range src.Last {
+		for key, ts := range lasts {
+			if ts.After(dst.Last[cat][key]) {
+				dst.Last[cat][key] = ts
+			}
+		}
+	}
+	for cat, errs := range src.Errors {
+		for key, n := range errs {
+			dst.Errors[cat][key] += n
+		}
+	}
+	for cat, lasts := range src.LastAttempt {
+		for key, ts := range lasts {
+			if ts.After(dst.LastAttempt[cat][key]) {
+				dst.LastAttempt[cat][key] = ts
+			}
+		}
+	}
+	for key, projects := range src.SkillProjects {
+		if dst.SkillProjects[key] == nil {
+			dst.SkillProjects[key] = map[string]int{}
+		}
+		for proj, n := range projects {
+			dst.SkillProjects[key][proj] += n
+		}
+	}
+	dst.DeadToolChars += src.DeadToolChars
 }
 
 // parseFile reads one transcript. Unreadable files or lines count as

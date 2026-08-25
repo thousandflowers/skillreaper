@@ -20,6 +20,7 @@ import (
 
 	"github.com/thousandflowers/skillreaper/internal/banner"
 	"github.com/thousandflowers/skillreaper/internal/cost"
+	"github.com/thousandflowers/skillreaper/internal/evidence"
 	"github.com/thousandflowers/skillreaper/internal/hook"
 	"github.com/thousandflowers/skillreaper/internal/mute"
 	"github.com/thousandflowers/skillreaper/internal/override"
@@ -514,6 +515,12 @@ func gather(opts options) (*report.Report, error) {
 	cutoff := time.Now().AddDate(0, 0, -opts.days)
 
 	var st *usage.Stats
+	// The durable evidence record, loaded before any parsing so transcripts
+	// already counted are not counted twice.
+	digestPath := evidence.Path(opts.claudeDir)
+	digest := evidence.Load(digestPath)
+	digestDirty := false
+
 	evidenceBlind := map[string]bool{}
 	// cleanupPeriodDays governs Claude Code's transcripts and nothing else, so
 	// the corpus it is compared against has to be Claude Code's alone. The
@@ -566,7 +573,16 @@ func gather(opts options) (*report.Report, error) {
 			}
 			var forCache *usage.Stats
 			for _, td := range p.TranscriptDirs {
-				parsed, err := usage.Parse(td, cutoff, opts.days)
+				// Fold each transcript into the durable digest as it is read.
+				// Transcripts older than the platform's retention period are
+				// deleted, so this is the only place evidence about anything
+				// used less often than that can ever accumulate.
+				needs := func(id string) bool { return !digest.HasSource(id) }
+				observe := func(id string, one *usage.Stats) {
+					digest.Add(id, observationFrom(one))
+					digestDirty = true
+				}
+				parsed, err := usage.ParseObserving(td, cutoff, opts.days, needs, observe)
 				if err != nil {
 					// A directory that failed to parse means the cache would
 					// describe less than the corpus does. Do not store it.
@@ -638,6 +654,11 @@ func gather(opts options) (*report.Report, error) {
 	if w, ok := retentionWarning(opts, claudeCorpus); ok {
 		warns = append(warns, w)
 	}
+	if digestDirty {
+		// A failure to persist is not worth interrupting a report for: the
+		// run is still correct, it simply did not extend the record.
+		_ = evidence.Save(digestPath, digest)
+	}
 
 	keepSet, _ := override.KeepSet(opts.claudeDir)
 	home, _ := os.UserHomeDir()
@@ -707,6 +728,46 @@ func retentionWarning(opts options, st *usage.Stats) (scan.Warning, bool) {
 		}, true
 	}
 	return scan.Warning{}, false
+}
+
+// observationFrom converts one transcript's parsed stats into the shape the
+// durable digest stores: counts by category and name, plus the latest
+// timestamp seen in that transcript.
+func observationFrom(one *usage.Stats) evidence.Observation {
+	o := evidence.Observation{
+		Uses:   map[string]map[string]int{},
+		Errors: map[string]map[string]int{},
+	}
+	for cat, byName := range one.Uses {
+		for name, n := range byName {
+			if n == 0 {
+				continue
+			}
+			if o.Uses[string(cat)] == nil {
+				o.Uses[string(cat)] = map[string]int{}
+			}
+			o.Uses[string(cat)][name] += n
+		}
+	}
+	for cat, byName := range one.Errors {
+		for name, n := range byName {
+			if n == 0 {
+				continue
+			}
+			if o.Errors[string(cat)] == nil {
+				o.Errors[string(cat)] = map[string]int{}
+			}
+			o.Errors[string(cat)][name] += n
+		}
+	}
+	for _, byName := range one.Last {
+		for _, ts := range byName {
+			if ts.After(o.At) {
+				o.At = ts
+			}
+		}
+	}
+	return o
 }
 
 func mergeStats(dst, src *usage.Stats) {

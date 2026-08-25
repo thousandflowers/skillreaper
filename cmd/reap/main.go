@@ -683,7 +683,12 @@ func mergeStats(dst, src *usage.Stats) {
 	dst.MalformedLines += src.MalformedLines
 	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
 	dst.SkippedByCutoff += src.SkippedByCutoff
-	dst.ObserveCorpus(src.OldestTranscript, src.NewestTranscript)
+	// The corpus bracket is deliberately NOT merged. It is only ever compared
+	// against a per-platform setting (cleanupPeriodDays is Claude Code's), and a
+	// merged span reads like one platform's while describing all of them — which
+	// is the bug this warning shipped with in its first draft: an 81-day corpus
+	// belonging to another agent, measured against Claude Code's 30-day horizon.
+	// Callers needing a span must take it from the per-platform Stats.
 	for cat, uses := range src.Uses {
 		for key, count := range uses {
 			dst.Uses[cat][key] += count

@@ -513,12 +513,21 @@ func gather(opts options) (*report.Report, error) {
 
 	var st *usage.Stats
 	evidenceBlind := map[string]bool{}
+	// cleanupPeriodDays governs Claude Code's transcripts and nothing else, so
+	// the corpus it is compared against has to be Claude Code's alone. The
+	// merged Stats spans every platform scanned, and other agents keep their
+	// own history under their own rules — comparing that against this setting
+	// reports a horizon that does not apply to it.
+	claudeCorpus := usage.NewStats(opts.days)
 	for _, p := range platforms {
 		pid := string(p.ID)
 		parsedAny := false
 		var sqliteErr error
 		mergeParsed := func(parsed *usage.Stats) {
 			parsedAny = true
+			if p.ID == platform.ClaudeCode {
+				claudeCorpus.ObserveCorpus(parsed.OldestTranscript, parsed.NewestTranscript)
+			}
 			if parsed.IncompleteEvidence && !evidenceBlind[pid] {
 				evidenceBlind[pid] = true
 				warns = append(warns, scan.Warning{
@@ -594,6 +603,9 @@ func gather(opts options) (*report.Report, error) {
 	if st == nil {
 		st = usage.NewStats(opts.days)
 	}
+	if w, ok := retentionWarning(opts, claudeCorpus); ok {
+		warns = append(warns, w)
+	}
 
 	keepSet, _ := override.KeepSet(opts.claudeDir)
 	home, _ := os.UserHomeDir()
@@ -616,11 +628,67 @@ func gather(opts options) (*report.Report, error) {
 }
 
 // mergeStats combines two usage stats into dst.
+// corpusReachesHorizon is how close the corpus span must come to the retention
+// window before the sweep is treated as actively trimming it. Below this, a
+// short corpus means the user started recently, and telling them evidence is
+// being destroyed would be a false alarm — the fastest way to teach someone to
+// ignore every warning the tool prints.
+const corpusReachesHorizon = 0.9
+
+// retentionWarning describes the transcript retention horizon when it changes
+// what a verdict can mean. Claude Code deletes transcripts older than
+// cleanupPeriodDays, so that setting — not --days — is the real ceiling on how
+// far back "never used" can reach, and nothing in the report said so.
+//
+// Two situations are worth saying out loud, and a third deliberately is not:
+// asking for a window longer than the retention (the window cannot be
+// satisfied), and a corpus that already reaches the horizon (the sweep is
+// deleting evidence now). A corpus far shorter than the horizon is just a
+// young installation and stays silent.
+func retentionWarning(opts options, st *usage.Stats) (scan.Warning, bool) {
+	if strings.TrimSpace(opts.claudeDir) == "" || st == nil {
+		return scan.Warning{}, false
+	}
+	retention, explicit := scan.RetentionDays(opts.claudeDir)
+	setting := fmt.Sprintf("cleanupPeriodDays is not set, so Claude Code's default of %d days applies", retention)
+	if explicit {
+		setting = fmt.Sprintf("cleanupPeriodDays is set to %d", retention)
+	}
+
+	switch {
+	case opts.days > retention:
+		return scan.Warning{
+			Path: opts.claudeDir,
+			Msg: fmt.Sprintf(
+				"the requested %d-day window cannot be filled: %s, and transcripts older than that are deleted, so %d days is the furthest back any verdict here can reach.",
+				opts.days, setting, retention),
+			Advisory: true,
+		}, true
+
+	case st.CorpusSpanDays() >= int(float64(retention)*corpusReachesHorizon):
+		return scan.Warning{
+			Path: opts.claudeDir,
+			Msg: fmt.Sprintf(
+				"the oldest transcript on disk is %d days old and %s, so the retention sweep is deleting evidence about as fast as it accumulates. Anything used less often than that is invisible here, not merely cold. Raise cleanupPeriodDays in settings.json to keep more history.",
+				st.CorpusSpanDays(), setting),
+			Advisory: true,
+		}, true
+	}
+	return scan.Warning{}, false
+}
+
 func mergeStats(dst, src *usage.Stats) {
 	dst.Sessions += src.Sessions
 	dst.FilesScanned += src.FilesScanned
 	dst.MalformedLines += src.MalformedLines
 	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
+	dst.SkippedByCutoff += src.SkippedByCutoff
+	// The corpus bracket is deliberately NOT merged. It is only ever compared
+	// against a per-platform setting (cleanupPeriodDays is Claude Code's), and a
+	// merged span reads like one platform's while describing all of them — which
+	// is the bug this warning shipped with in its first draft: an 81-day corpus
+	// belonging to another agent, measured against Claude Code's 30-day horizon.
+	// Callers needing a span must take it from the per-platform Stats.
 	for cat, uses := range src.Uses {
 		for key, count := range uses {
 			dst.Uses[cat][key] += count

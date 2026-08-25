@@ -681,6 +681,10 @@ func mergeStats(dst, src *usage.Stats) {
 	dst.Sessions += src.Sessions
 	dst.FilesScanned += src.FilesScanned
 	dst.MalformedLines += src.MalformedLines
+	dst.UnreadableFiles += src.UnreadableFiles
+	dst.TruncatedReads += src.TruncatedReads
+	dst.OversizedLines += src.OversizedLines
+	dst.UnparsableLines += src.UnparsableLines
 	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
 	dst.SkippedByCutoff += src.SkippedByCutoff
 	// The corpus bracket is deliberately NOT merged. It is only ever compared
@@ -962,7 +966,27 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	selected := candidates
+	// Serialise against other prunes on this directory. Quarantine is a
+	// read-modify-write of the manifest, so two runs finishing at once leave
+	// one set of moved files with no manifest entry — present in reaped/ and
+	// invisible to restore. Measured before this lock existed: 501 skills in,
+	// 148 restored after six concurrent runs.
+	lock, lockErr := prune.AcquireLock(opts.claudeDir)
+	if lockErr != nil {
+		if errors.Is(lockErr, prune.ErrLocked) {
+			fmt.Fprintln(stderr, "error: another prune is running against this directory; wait for it to finish")
+			return 1
+		}
+		fmt.Fprintf(stderr, "error: could not take the prune lock: %v\n", lockErr)
+		return 1
+	}
+	defer lock.Release()
+
 	var done []prune.Entry
+	// Items another process moved out from under this run. With the lock held
+	// this should be empty; it stays handled because a file can still be
+	// removed by hand between the report and the move.
+	var alreadyGone []string
 	for _, row := range selected {
 		var e prune.Entry
 		var err error
@@ -977,6 +1001,15 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 			e, err = prune.QuarantineItem(opts.claudeDir, row.Item)
 		}
 		if err != nil {
+			// An item that vanished between the report and the move is not a
+			// failure of this run: a concurrent prune, or a manual removal,
+			// got there first. Aborting here left the earlier items
+			// quarantined and the later ones untouched, on an error message
+			// that named a missing file rather than the race that caused it.
+			if errors.Is(err, prune.ErrAlreadyGone) {
+				alreadyGone = append(alreadyGone, row.Name)
+				continue
+			}
 			fmt.Fprintf(stderr, "error reaping %s: %v\n", row.Name, err)
 			return 1
 		}
@@ -991,9 +1024,16 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 	if opts.quiet {
 		return 0
 	}
+	if len(alreadyGone) > 0 {
+		fmt.Fprintf(stderr, "skipped %d item(s) another process had already moved (e.g. %s); a second prune may be running\n",
+			len(alreadyGone), alreadyGone[0])
+	}
 	fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore --all (or a single id)\n")
 	col := colorEnabled(opts, stdout)
-	report.RenderValueFeedback(stdout, "pruned", len(candidates), totalTok, r.SessionsPerMonth, opts.price, col)
+	// len(done), not len(candidates): with already-gone items skipped rather
+	// than aborting the run, the two can differ, and the saving claimed has to
+	// be the saving actually made.
+	report.RenderValueFeedback(stdout, "pruned", len(done), totalTok, r.SessionsPerMonth, opts.price, col)
 	tryShowShareHint(opts, stdout, col)
 	tryShowStarCta(opts, stdout, r, col)
 	return 0

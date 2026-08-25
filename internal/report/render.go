@@ -66,14 +66,20 @@ func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, sess
 	if tokensPerSession >= 1000 {
 		tokStr = fmt.Sprintf("%.1fk", float64(tokensPerSession)/1000)
 	}
+	// Monthly, not annualised. docs/decisions.md (2026-08-17) records why a
+	// dollar figure is not a measurement here — it is dead tokens times a
+	// price we do not control, and the same stack has been reported between
+	// $1.54 and $24 in two months. Multiplying by twelve multiplies that
+	// spread along with the number, and this line runs immediately after a
+	// destructive action, where it carries the most weight. Every other
+	// surface that shows money shows it per month; this one now agrees.
 	money := ""
 	if sessionsPerMonth > 0 && price > 0 {
 		mPerM := cost.MoneyPerMonth(tokensPerSession, sessionsPerMonth, price)
-		yr := mPerM * 12
-		if yr < 1.0 {
-			money = " (< $1/yr at your usage)"
+		if mPerM < 0.01 {
+			money = " (< $0.01/month at your usage)"
 		} else {
-			money = fmt.Sprintf(" (≈$%.0f/yr at your usage)", yr)
+			money = fmt.Sprintf(" (≈$%.2f/month at your usage)", mPerM)
 		}
 	}
 	fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ")+paint(cDim, fmt.Sprintf("%s %d items · saving ~%s tok/session%s", verb, items, tokStr, money)))
@@ -177,7 +183,7 @@ func RenderText(w io.Writer, r *Report, color bool) {
 	fmt.Fprintf(w, "  %s  %s",
 		paint(cDim, "window:"), paint(cBold, fmt.Sprintf("last %d days · %d sessions", r.WindowDays, r.Sessions)))
 	if r.MalformedLines > 0 {
-		fmt.Fprintf(w, "  %s", paint(cDim, fmt.Sprintf("(%d unreadable lines)", r.MalformedLines)))
+		fmt.Fprintf(w, "  %s", paint(cDim, fmt.Sprintf("(%s)", MalformedSummary(r))))
 	}
 	fmt.Fprintln(w)
 
@@ -546,4 +552,37 @@ func visibleLen(s string) int {
 		}
 	}
 	return n
+}
+
+// MalformedSummary describes what actually went wrong while reading
+// transcripts. "2 unreadable lines" is true of a corrupt file, a truncated
+// one, and a healthy file holding one oversized record, and a reader deciding
+// whether to trust the verdicts needs to tell those apart. Falls back to the
+// undifferentiated total when no kind was recorded, so older callers and
+// merged stats without a breakdown still read sensibly.
+func MalformedSummary(r *Report) string {
+	kinds := []struct {
+		n    int
+		noun string
+	}{
+		{r.UnreadableFiles, "unreadable file"},
+		{r.TruncatedReads, "truncated read"},
+		{r.OversizedLines, "oversized record"},
+		{r.UnparsableLines, "unparsable line"},
+	}
+	var parts []string
+	for _, k := range kinds {
+		if k.n == 0 {
+			continue
+		}
+		noun := k.noun
+		if k.n != 1 {
+			noun += "s"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", k.n, noun))
+	}
+	if len(parts) == 0 {
+		return fmt.Sprintf("%d unreadable lines", r.MalformedLines)
+	}
+	return strings.Join(parts, ", ")
 }

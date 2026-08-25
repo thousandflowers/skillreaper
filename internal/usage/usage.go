@@ -29,10 +29,19 @@ var commandNameRe = regexp.MustCompile(`<command-name>/?([^<\s]+)</command-name>
 
 // Stats aggregates invocation counts per category and invocation key.
 type Stats struct {
-	Sessions       int
-	FilesScanned   int
+	Sessions     int
+	FilesScanned int
+	// MalformedLines is the total across every failure kind below, kept as a
+	// single number because callers and the JSON output already depend on it.
 	MalformedLines int
-	WindowDays     int
+	// The breakdown. "2 unreadable lines" says nothing about whether a
+	// transcript is corrupt, truncated, or merely holds one oversized record,
+	// and those call for different responses from the reader.
+	UnreadableFiles int // the file could not be opened at all
+	TruncatedReads  int // a read failed part-way through a file
+	OversizedLines  int // a record exceeded the line limit and was dropped
+	UnparsableLines int // a line that should have been a record was not JSON
+	WindowDays      int
 	// IncompleteEvidence is set when a parser hit a bounded-read error after
 	// it may already have seen earlier records. Callers may still use positive
 	// evidence, but must not make absence-of-use REAP/MUTE decisions from it.
@@ -281,6 +290,7 @@ func parseFile(path, project string, st *Stats) {
 	f, err := os.Open(path)
 	if err != nil {
 		st.MalformedLines++
+		st.UnreadableFiles++
 		return
 	}
 	defer f.Close()
@@ -303,6 +313,7 @@ func parseFile(path, project string, st *Stats) {
 		if rerr != nil {
 			if rerr != io.EOF {
 				st.MalformedLines++
+				st.TruncatedReads++
 				st.IncompleteEvidence = true
 			}
 			break
@@ -310,6 +321,7 @@ func parseFile(path, project string, st *Stats) {
 		if tooLong {
 			// The record itself is lost, but the file keeps being read.
 			st.MalformedLines++
+			st.OversizedLines++
 			st.IncompleteEvidence = true
 			continue
 		}
@@ -321,6 +333,7 @@ func parseFile(path, project string, st *Stats) {
 		if err := json.Unmarshal(line, &e); err != nil {
 			if bytes.Contains(line, []byte(`"tool_use"`)) || bytes.Contains(line, []byte(`<command-name>`)) {
 				st.MalformedLines++
+				st.UnparsableLines++
 			}
 			continue
 		}

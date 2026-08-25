@@ -64,6 +64,10 @@ type Report struct {
 	WindowDays           int
 	Sessions             int
 	MalformedLines       int
+	UnreadableFiles      int
+	TruncatedReads       int
+	OversizedLines       int
+	UnparsableLines      int
 	Rows                 []Row
 	DeadCount            int
 	DeadTokensPerSession int
@@ -91,12 +95,16 @@ type Report struct {
 // and totals.
 func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) *Report {
 	r := &Report{
-		GeneratedAt:    time.Now(),
-		WindowDays:     st.WindowDays,
-		Sessions:       st.Sessions,
-		MalformedLines: st.MalformedLines,
-		DeadToolChars:  st.DeadToolChars,
-		Warnings:       warns,
+		GeneratedAt:     time.Now(),
+		WindowDays:      st.WindowDays,
+		Sessions:        st.Sessions,
+		MalformedLines:  st.MalformedLines,
+		UnreadableFiles: st.UnreadableFiles,
+		TruncatedReads:  st.TruncatedReads,
+		OversizedLines:  st.OversizedLines,
+		UnparsableLines: st.UnparsableLines,
+		DeadToolChars:   st.DeadToolChars,
+		Warnings:        warns,
 	}
 	if st.WindowDays > 0 {
 		// Round rather than truncate, and never floor an active user to 0:

@@ -17,6 +17,12 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
+// ErrAlreadyGone reports that an item selected for quarantine no longer exists
+// by the time the move is attempted. It is not a failure of this run: another
+// prune, or a manual removal, got there first. Callers should skip the item
+// rather than abort, since the remaining candidates are still valid.
+var ErrAlreadyGone = errors.New("item already moved by another process")
+
 const manifestVersion = 1
 const maxManifestFileSize = 10 << 20
 const maxConfigFileSize = 10 << 20
@@ -115,10 +121,27 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 	if root == "" {
 		root = claudeDir
 	}
-	if err := existingPathWithin(root, src); err != nil {
+	// Existence is probed before the containment check, not after. The item was
+	// on disk when the report was built and can be gone now — overwhelmingly
+	// because a second prune is running against the same directory, since
+	// there is no lock and both runs compute the same candidate list. The
+	// containment check resolves symlinks along the way, so on a vanished path
+	// it fails first, with "lstat …: no such file or directory": a message
+	// that describes the symptom and blames the wrong thing.
+	//
+	// This is a bare existence probe on a path already held, not a traversal
+	// decision, so it does not weaken the ordering that matters: containment is
+	// still proven before anything is written or moved.
+	if _, err := os.Lstat(src); err != nil {
+		if os.IsNotExist(err) {
+			return Entry{}, fmt.Errorf("%w: %s", ErrAlreadyGone, src)
+		}
 		return Entry{}, err
 	}
-	if _, err := os.Stat(src); err != nil {
+	if err := existingPathWithin(root, src); err != nil {
+		if os.IsNotExist(err) {
+			return Entry{}, fmt.Errorf("%w: %s", ErrAlreadyGone, src)
+		}
 		return Entry{}, err
 	}
 
@@ -135,6 +158,13 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		return Entry{}, err
 	}
 	if err := os.Rename(src, dest); err != nil {
+		// The rename is the atomic step, so this is where the race is finally
+		// decided: any existence probe before it can still be overtaken. A
+		// missing source here means another process completed the same move
+		// in the window between the check and the rename.
+		if os.IsNotExist(err) {
+			return Entry{}, fmt.Errorf("%w: %s", ErrAlreadyGone, src)
+		}
 		return Entry{}, err
 	}
 

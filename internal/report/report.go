@@ -28,6 +28,12 @@ type Opts struct {
 	// files). REAP/MUTE candidates from these platforms are held at REVIEW,
 	// because absence of evidence is not evidence of absence.
 	EvidenceBlind map[string]bool
+	// History answers "did this ever fire, in any session ever recorded",
+	// including ones whose transcripts have since been deleted. It is what
+	// separates a rarely-used item from an abandoned one, a distinction the
+	// window alone cannot make. Nil disables the check and restores the
+	// previous behaviour exactly.
+	History func(category, name string) (uses int, last time.Time, ok bool)
 	// ClaudeMDLines holds the non-comment lines of every detected CLAUDE.md.
 	// A skill whose name appears here is held at KEEP(claude-md-ref).
 	ClaudeMDLines []string
@@ -144,6 +150,12 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				WindowDays:  opts.WindowDays,
 				Cutoff:      opts.Cutoff,
 				ErrorCount:  row.ErrorCount,
+			}
+			if opts.History != nil {
+				if hUses, hLast, ok := opts.History(string(it.Category), it.Name); ok {
+					vo.HistoricalUses = hUses
+					vo.HistoricalLast = hLast
+				}
 			}
 			// Only skills carry a strippable description, so MUTE applies to them.
 			if it.Category == scan.CatSkill {

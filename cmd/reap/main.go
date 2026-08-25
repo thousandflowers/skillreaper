@@ -665,6 +665,16 @@ func gather(opts options) (*report.Report, error) {
 	claudeMD := scan.LoadClaudeMD(cwd, home)
 
 	return report.Build(items, st, warns, report.Opts{
+		// The durable record, consulted so an item that fired before the
+		// retention sweep is not mistaken for one that never fired at all.
+		History: func(category, name string) (int, time.Time, bool) {
+			r, ok := digest.Lookup(category, name)
+			if !ok || r.Uses == 0 {
+				return 0, time.Time{}, false
+			}
+			return r.Uses, r.Last, true
+		},
+
 		MinSessions:   opts.minSessions,
 		GraceDays:     opts.graceDays,
 		MinTokens:     opts.minTokens,

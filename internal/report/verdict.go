@@ -20,6 +20,10 @@ const (
 	ReasonGrace     = "grace"
 	ReasonNeedsData = "needs-data"
 	ReasonUnused    = "unused"
+	// ReasonRare marks an item with no firing inside the window but a firing
+	// on record from before it. Not the same as unused, and the difference is
+	// invisible without a durable record — see below.
+	ReasonRare = "rare"
 	// ReasonNoEvidence marks an item whose platform keeps transcripts we
 	// cannot parse yet (e.g. OpenCode's SQLite store): there is no usage
 	// signal, so it is held at REVIEW rather than REAP.
@@ -54,6 +58,19 @@ type VerdictOpts struct {
 	MuteThreshold float64
 	// MuteMinTokens is the minimum injected token weight for a MUTE candidate.
 	MuteMinTokens int
+
+	// HistoricalUses is how often this item fired across every session ever
+	// recorded, including those whose transcripts have since been deleted.
+	//
+	// Without it, an item with a cadence longer than the retention period is
+	// indistinguishable from one installed and forgotten: the transcript that
+	// would prove otherwise no longer exists by the time the next run looks.
+	// Zero means either genuinely never used or nothing recorded yet, and both
+	// leave the existing behaviour untouched.
+	HistoricalUses int
+	// HistoricalLast is when it last fired, from the same record. Reported to
+	// the reader; it does not affect the verdict.
+	HistoricalLast time.Time
 }
 
 // Verdict decides whether an item is safe to reap. Returns (verdict, reason).
@@ -66,7 +83,8 @@ type VerdictOpts struct {
 //  5. No sessions → REVIEW(needs-data)
 //  6. Proportional minSessions if installed mid-window
 //  7. Not enough sessions → REVIEW(needs-data)
-//  8. Unused with enough evidence → REAP(unused)
+//  8. Fired before the window, per the durable record → REVIEW(rare)
+//  9. Unused with enough evidence → REAP(unused)
 func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts) (string, string) {
 	// 1. Used — keep items that have been invoked, unless the item is heavy
 	//    and fires in too few sessions to justify the per-session weight.
@@ -129,6 +147,19 @@ func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts
 		return VerdictReview, ReasonNeedsData
 	}
 
-	// 8. Unused with sufficient evidence → safe to reap
+	// 8. Rare, not dead. The window says nothing fired; the durable record
+	//    says something did, before the retention sweep removed the proof.
+	//    An item used every six weeks looks identical to an abandoned one
+	//    through a thirty-day window, and pruning it is the mistake that
+	//    costs a user's trust permanently — they lose something they needed
+	//    and do not come back.
+	//
+	//    This can only move an item out of REAP, never into it, which is why
+	//    it is safe to apply the moment any record exists.
+	if opts.HistoricalUses > 0 {
+		return VerdictReview, ReasonRare
+	}
+
+	// 9. Unused with sufficient evidence → safe to reap
 	return VerdictReap, ReasonUnused
 }

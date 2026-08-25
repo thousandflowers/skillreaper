@@ -15,6 +15,7 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/report"
 	"github.com/thousandflowers/skillreaper/internal/scan"
+	"github.com/thousandflowers/skillreaper/internal/usage"
 )
 
 func TestStateCommandsRequireClaudeDir(t *testing.T) {
@@ -1607,5 +1608,109 @@ func TestOutOfRangeFlagsReportsAll(t *testing.T) {
 	msgs := outOfRangeFlags(opts)
 	if len(msgs) != 4 {
 		t.Fatalf("got %d messages, want 4: %q", len(msgs), msgs)
+	}
+}
+
+// Issue #61. Claude Code deletes transcripts older than cleanupPeriodDays, so
+// that setting — not --days — is the ceiling on how far back "never used" can
+// reach. Nothing in the report said so.
+func TestRetentionWarning(t *testing.T) {
+	corpus := func(spanDays int) *usage.Stats {
+		st := usage.NewStats(30)
+		now := time.Now()
+		if spanDays > 0 {
+			st.ObserveCorpus(now.AddDate(0, 0, -spanDays), now)
+		}
+		return st
+	}
+
+	tests := []struct {
+		name     string
+		settings string
+		days     int
+		corpus   *usage.Stats
+		wantWarn bool
+		wantText string
+	}{
+		{
+			// A window longer than the retention cannot be filled by anything
+			// on disk, however long the tool waits.
+			name:     "window longer than retention",
+			days:     60,
+			corpus:   corpus(20),
+			wantWarn: true,
+			wantText: "cannot be filled",
+		},
+		{
+			// The corpus reaching the horizon means the sweep is trimming it:
+			// files older than this existed and are gone.
+			name:     "corpus reaches the horizon",
+			days:     30,
+			corpus:   corpus(29),
+			wantWarn: true,
+			wantText: "deleting evidence",
+		},
+		{
+			// A corpus far shorter than the horizon is a young installation,
+			// not a trimmed one. Warning here would be a false alarm.
+			name:     "young installation stays silent",
+			days:     30,
+			corpus:   corpus(5),
+			wantWarn: false,
+		},
+		{
+			// With retention raised, neither a 30-day window nor a 29-day
+			// corpus is remarkable any more.
+			name:     "raised retention silences both cases",
+			settings: `{"cleanupPeriodDays": 365}`,
+			days:     30,
+			corpus:   corpus(29),
+			wantWarn: false,
+		},
+		{
+			name:     "no transcripts at all stays silent",
+			days:     30,
+			corpus:   corpus(0),
+			wantWarn: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tt.settings != "" {
+				if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(tt.settings), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			w, ok := retentionWarning(options{claudeDir: dir, days: tt.days}, tt.corpus)
+			if ok != tt.wantWarn {
+				t.Fatalf("warned = %v, want %v (msg: %q)", ok, tt.wantWarn, w.Msg)
+			}
+			if !ok {
+				return
+			}
+			if !w.Advisory {
+				t.Error("want Advisory: this is a caveat about the evidence, not a read failure")
+			}
+			if !strings.Contains(w.Msg, tt.wantText) {
+				t.Errorf("msg = %q, want it to contain %q", w.Msg, tt.wantText)
+			}
+			if !strings.Contains(w.Msg, "cleanupPeriodDays") {
+				t.Error("the warning must name the setting that controls the horizon")
+			}
+		})
+	}
+}
+
+// The warning describes Claude Code's retention, so it must be measured
+// against Claude Code's own transcripts. Other agents keep history under their
+// own rules, and merging their spans in reports a horizon that is not theirs.
+func TestRetentionWarningIgnoresOtherPlatforms(t *testing.T) {
+	st := usage.NewStats(30)
+	now := time.Now()
+	st.ObserveCorpus(now.AddDate(0, 0, -5), now) // Claude Code: 5 days
+	if _, ok := retentionWarning(options{claudeDir: t.TempDir(), days: 30}, st); ok {
+		t.Fatal("warned on a 5-day Claude Code corpus")
 	}
 }

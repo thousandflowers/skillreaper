@@ -37,8 +37,17 @@ type Stats struct {
 	// it may already have seen earlier records. Callers may still use positive
 	// evidence, but must not make absence-of-use REAP/MUTE decisions from it.
 	IncompleteEvidence bool
-	Uses               map[scan.Category]map[string]int
-	Last               map[scan.Category]map[string]time.Time
+
+	// OldestTranscript and NewestTranscript bracket every transcript seen on
+	// disk, including the ones the cutoff discards. SkippedByCutoff counts
+	// those. Recorded because the walk already stats every file: without them
+	// there is no way to tell a corpus the retention sweep has been trimming
+	// from one that is simply younger than the window.
+	OldestTranscript time.Time
+	NewestTranscript time.Time
+	SkippedByCutoff  int
+	Uses             map[scan.Category]map[string]int
+	Last             map[scan.Category]map[string]time.Time
 
 	// Errors counts invocations that resulted in an error, and LastAttempt
 	// records the most recent attempt (success or error). Together with Uses
@@ -191,6 +200,29 @@ type pendingSkill struct {
 // A mid-walk failure (e.g. a permission-denied subdirectory) does not abort
 // the scan: the affected subtree is skipped and Stats.IncompleteEvidence is
 // set so callers do not treat cold items as safe to reap or mute.
+// observeTranscript widens the corpus bracket to include ts. Called for every
+// transcript found, in or out of the window.
+func (s *Stats) observeTranscript(ts time.Time) {
+	if ts.IsZero() {
+		return
+	}
+	if s.OldestTranscript.IsZero() || ts.Before(s.OldestTranscript) {
+		s.OldestTranscript = ts
+	}
+	if ts.After(s.NewestTranscript) {
+		s.NewestTranscript = ts
+	}
+}
+
+// CorpusSpanDays is how many days separate the oldest and newest transcript on
+// disk. Zero when fewer than two were found.
+func (s *Stats) CorpusSpanDays() int {
+	if s.OldestTranscript.IsZero() || s.NewestTranscript.IsZero() {
+		return 0
+	}
+	return int(s.NewestTranscript.Sub(s.OldestTranscript).Hours() / 24)
+}
+
 func Parse(projectsDir string, cutoff time.Time, windowDays int) (*Stats, error) {
 	st := NewStats(windowDays)
 	err := filepath.WalkDir(projectsDir, func(path string, d fs.DirEntry, err error) error {
@@ -208,7 +240,12 @@ func Parse(projectsDir string, cutoff time.Time, windowDays int) (*Stats, error)
 			st.IncompleteEvidence = true
 			return nil
 		}
+		// Bracket the whole corpus before the window is applied: the file the
+		// cutoff is about to discard is the one that says how far back the
+		// evidence actually reaches.
+		st.observeTranscript(info.ModTime())
 		if info.ModTime().Before(cutoff) {
+			st.SkippedByCutoff++
 			return nil
 		}
 		st.FilesScanned++
@@ -468,4 +505,12 @@ func readDelim(br *bufio.Reader, delim byte, max int) (rec []byte, tooLong bool,
 		}
 		return trim(buf), false, nil
 	}
+}
+
+// ObserveCorpus widens this Stats' corpus bracket to cover another one's,
+// so merging per-platform results keeps the earliest and latest transcript
+// seen anywhere. Zero times are ignored.
+func (s *Stats) ObserveCorpus(oldest, newest time.Time) {
+	s.observeTranscript(oldest)
+	s.observeTranscript(newest)
 }

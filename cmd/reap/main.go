@@ -113,6 +113,7 @@ type options struct {
 	quiet          bool
 	noNudge        bool
 	noBanner       bool
+	noCache        bool
 	listKeep       bool
 	removeKeep     string
 	claudeDir      string
@@ -155,6 +156,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&opts.noColor, "no-color", false, "disable colors")
 	fs.BoolVar(&opts.noNudge, "no-nudge", false, "suppress the star-CTA prompt")
 	fs.BoolVar(&opts.noBanner, "no-banner", false, "suppress the wordmark shown above the default report and the usage text")
+	fs.BoolVar(&opts.noCache, "no-cache", false, "re-parse the transcript corpus instead of reusing a cached parse")
 	fs.BoolVar(&opts.yes, "yes", false, "prune: apply without confirmation")
 	fs.BoolVar(&opts.all, "all", false, "mute/restore/unmute: act on every eligible item")
 	fs.BoolVar(&opts.dryRun, "dry-run", false, "install-hook: print the change without writing")
@@ -544,12 +546,42 @@ func gather(opts options) (*report.Report, error) {
 		}
 		switch p.TranscriptType {
 		case "jsonl":
+			// Parsing the corpus is what costs: on an 800-transcript, 345 MB
+			// tree, walking and stat-ing takes 22 ms and reading every byte
+			// 0.33 s, while a full run takes about five seconds. Every
+			// subcommand paid that in full, so `reap why <one item>` re-read
+			// the whole corpus to answer a question about a single row.
+			//
+			// The fingerprint is built from stat alone and covers the file
+			// set, sizes, modification times and the window. Transcripts are
+			// append-only and a new session is a new file, so any change to
+			// the evidence changes it. Anything unexpected is a miss.
+			fp := ""
+			if !opts.noCache {
+				fp = usage.Fingerprint(p.TranscriptDirs, opts.days)
+				if cached, ok := usage.LoadCache(opts.claudeDir, fp); ok {
+					mergeParsed(cached)
+					break
+				}
+			}
+			var forCache *usage.Stats
 			for _, td := range p.TranscriptDirs {
 				parsed, err := usage.Parse(td, cutoff, opts.days)
 				if err != nil {
+					// A directory that failed to parse means the cache would
+					// describe less than the corpus does. Do not store it.
+					fp = ""
 					continue
 				}
+				if forCache == nil {
+					forCache = parsed
+				} else {
+					mergeStats(forCache, parsed)
+				}
 				mergeParsed(parsed)
+			}
+			if fp != "" && forCache != nil && p.ID == platform.ClaudeCode {
+				usage.SaveCache(opts.claudeDir, fp, forCache)
 			}
 		case "sqlite":
 			if p.TranscriptDB != "" {

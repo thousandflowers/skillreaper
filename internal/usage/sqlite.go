@@ -90,6 +90,7 @@ func ParseSQLite(path string, cutoff time.Time, windowDays int) (*Stats, error) 
 		st.Sessions = sessionCount
 		st.FilesScanned = 1
 		st.MalformedLines++
+		st.UnparsableLines++
 		st.IncompleteEvidence = true
 		if errors.Is(scanErr, errSQLiteOutputLimit) {
 			return st, fmt.Errorf("sqlite3 query output exceeded %d bytes for %s", sqliteOutputLimit, path)

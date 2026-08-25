@@ -61,3 +61,32 @@ func TestTruncateShortStringUnchanged(t *testing.T) {
 		}
 	}
 }
+
+// Audit M3. "2 unreadable lines" is true of a corrupt file, a truncated one,
+// and a healthy file holding one oversized record. A reader deciding whether
+// to trust the verdicts needs to tell those apart.
+func TestMalformedSummary(t *testing.T) {
+	tests := []struct {
+		name string
+		r    Report
+		want string
+	}{
+		{"single kind", Report{MalformedLines: 1, UnreadableFiles: 1}, "1 unreadable file"},
+		{"plural", Report{MalformedLines: 3, OversizedLines: 3}, "3 oversized records"},
+		{
+			"several kinds",
+			Report{MalformedLines: 4, UnreadableFiles: 1, TruncatedReads: 1, OversizedLines: 2},
+			"1 unreadable file, 1 truncated read, 2 oversized records",
+		},
+		// Merged stats from a source that never recorded a breakdown still
+		// have a total, and it must read sensibly rather than as an empty list.
+		{"no breakdown falls back to the total", Report{MalformedLines: 7}, "7 unreadable lines"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := MalformedSummary(&tt.r); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

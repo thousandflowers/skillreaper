@@ -7,6 +7,8 @@ on:
 
 jobs:
   test:
+    env:
+      COVERAGE_THRESHOLD: "70"
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -23,6 +25,20 @@ jobs:
       - name: Test
         run: go test -race ./... -coverprofile=coverage.out
       - name: Coverage
-        run: go tool cover -func=coverage.out | tail -1
+        run: |
+          go tool cover -func=coverage.out | tee coverage.txt
+          LC_ALL=C awk -v threshold="$COVERAGE_THRESHOLD" '
+            /^total:/ { coverage = $3; sub(/%$/, "", coverage) }
+            END {
+              if (coverage == "") {
+                print "total coverage was not reported" > "/dev/stderr"
+                exit 1
+              }
+              if (coverage + 0 < threshold + 0) {
+                printf "total coverage %s%% is below the %s%% threshold\n", coverage, threshold > "/dev/stderr"
+                exit 1
+              }
+            }
+          ' coverage.txt
       - name: Build
         run: go build ./...

@@ -10,9 +10,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -189,10 +191,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "reap", version())
 		return 0
 	}
-	// Rejected rather than clamped: a non-positive cap has no sensible reading.
-	// "Show everything" is --json, which returns every row and ignores --top.
-	if opts.top < 1 {
-		fmt.Fprintf(stderr, "error: --top must be at least 1 (use --json for every row)\n")
+	// Rejected rather than clamped: an out-of-range value has no sensible
+	// reading, and clamping would silently answer a different question than
+	// the one asked.
+	if msgs := outOfRangeFlags(opts); len(msgs) > 0 {
+		for _, m := range msgs {
+			fmt.Fprintf(stderr, "error: %s\n", m)
+		}
 		return 1
 	}
 
@@ -301,6 +306,69 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 		positionals = append(positionals, args[0])
 		args = args[1:]
 	}
+}
+
+// flagBound is one numeric flag's accepted range. Keeping the bounds in a table
+// rather than a chain of ifs is what stops the next numeric flag from shipping
+// unvalidated: --top used to be the only one checked, and every other flag was
+// passed straight through to the report.
+type flagBound struct {
+	name     string
+	val      float64
+	min, max float64
+	// why explains the bound when the number alone does not. Empty when
+	// "must be at least N" already says everything.
+	why string
+}
+
+// outOfRangeFlags returns one message per numeric flag whose value falls
+// outside its accepted range, in flag order. An empty result means every flag
+// is usable.
+func outOfRangeFlags(opts options) []string {
+	unbounded := math.Inf(1)
+	bounds := []flagBound{
+		// A window of zero or fewer days yields a complete, well-formed,
+		// entirely empty report — "0 items never used" is indistinguishable
+		// from a genuinely clean stack, which is the worst way to be wrong.
+		{name: "--days", val: float64(opts.days), min: 1, max: unbounded, why: "a window of zero days produces an empty report that reads like a clean one"},
+		{name: "--min-sessions", val: float64(opts.minSessions), min: 0, max: unbounded},
+		{name: "--grace-days", val: float64(opts.graceDays), min: 0, max: unbounded},
+		{name: "--min-tokens", val: float64(opts.minTokens), min: 0, max: unbounded},
+		{name: "--mute-min-tokens", val: float64(opts.muteMinTokens), min: 0, max: unbounded},
+		{name: "--route-min-skills", val: float64(opts.routeMinSkills), min: 0, max: unbounded},
+		{name: "--top", val: float64(opts.top), min: 1, max: unbounded, why: "use --json for every row"},
+		{name: "--price", val: opts.price, min: 0, max: unbounded, why: "a negative price renders as a negative monthly cost"},
+		// Both thresholds are documented as a fraction of sessions. Above 1.0
+		// the comparison is "fired in fewer than 100+% of sessions", which is
+		// true of everything, so every used item changes verdict.
+		{name: "--mute-threshold", val: opts.muteThreshold, min: 0, max: 1, why: "it is a fraction of sessions (0 disables)"},
+		{name: "--route-threshold", val: opts.routeThreshold, min: 0, max: 1, why: "it is a fraction of sessions"},
+	}
+
+	var msgs []string
+	for _, b := range bounds {
+		if b.val >= b.min && b.val <= b.max {
+			continue
+		}
+		var rng string
+		if math.IsInf(b.max, 1) {
+			rng = fmt.Sprintf("must be at least %s", trimFloat(b.min))
+		} else {
+			rng = fmt.Sprintf("must be between %s and %s", trimFloat(b.min), trimFloat(b.max))
+		}
+		msg := fmt.Sprintf("%s %s, got %s", b.name, rng, trimFloat(b.val))
+		if b.why != "" {
+			msg += " — " + b.why
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs
+}
+
+// trimFloat prints a bound without a trailing ".0", so an integer flag reads
+// as "1" rather than "1.0" while a fractional one keeps its decimals.
+func trimFloat(f float64) string {
+	return strconv.FormatFloat(f, 'g', -1, 64)
 }
 
 func fillDefaults(opts *options, stderr io.Writer) error {

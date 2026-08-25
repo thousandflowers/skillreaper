@@ -1535,3 +1535,77 @@ func TestUnknownModelWarns(t *testing.T) {
 		})
 	}
 }
+
+// Issue #31. Every numeric flag except --top was passed through unvalidated.
+// The dangerous pair is --days 0 and --days -5: both produced a complete,
+// well-formed, entirely empty report, so "0 items never used" was
+// indistinguishable from a genuinely clean stack.
+func TestNumericFlagBounds(t *testing.T) {
+	rejected := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "days zero", args: []string{"--days", "0"}, want: "--days must be at least 1"},
+		{name: "days negative", args: []string{"--days", "-5"}, want: "--days must be at least 1"},
+		{name: "price negative", args: []string{"--price", "-3"}, want: "--price must be at least 0"},
+		{name: "mute threshold above one", args: []string{"--mute-threshold", "5"}, want: "--mute-threshold must be between 0 and 1"},
+		{name: "route threshold above one", args: []string{"--route-threshold", "1.5"}, want: "--route-threshold must be between 0 and 1"},
+		{name: "min sessions negative", args: []string{"--min-sessions", "-1"}, want: "--min-sessions must be at least 0"},
+		{name: "grace days negative", args: []string{"--grace-days", "-1"}, want: "--grace-days must be at least 0"},
+		{name: "top zero", args: []string{"--top", "0"}, want: "--top must be at least 1"},
+	}
+
+	for _, tt := range rejected {
+		t.Run(tt.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			args := append([]string{"--claude-dir", t.TempDir(), "--json"}, tt.args...)
+			if code := run(args, strings.NewReader(""), &out, &errOut); code != 1 {
+				t.Errorf("exit = %d, want 1", code)
+			}
+			if !strings.Contains(errOut.String(), tt.want) {
+				t.Errorf("stderr = %q, want it to contain %q", errOut.String(), tt.want)
+			}
+			// A rejected invocation must not also emit a report: an empty
+			// report next to an error is exactly the ambiguity being fixed.
+			if out.Len() != 0 {
+				t.Errorf("stdout = %q, want nothing written", out.String())
+			}
+		})
+	}
+
+	// Boundary values are legal, and so are the defaults. --mute-threshold 0
+	// is documented as "disables", so zero must survive validation.
+	accepted := [][]string{
+		{},
+		{"--days", "1"},
+		{"--mute-threshold", "0"},
+		{"--mute-threshold", "1"},
+		{"--price", "0"},
+		{"--min-sessions", "0"},
+		{"--route-min-skills", "0"},
+	}
+	for _, args := range accepted {
+		name := "defaults"
+		if len(args) > 0 {
+			name = strings.Join(args, " ")
+		}
+		t.Run("accepted/"+name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			full := append([]string{"--claude-dir", t.TempDir(), "--json"}, args...)
+			if code := run(full, strings.NewReader(""), &out, &errOut); code != 0 {
+				t.Errorf("exit = %d, want 0; stderr = %q", code, errOut.String())
+			}
+		})
+	}
+}
+
+// outOfRangeFlags reports every bad flag, not just the first, so one run tells
+// the user everything that needs fixing.
+func TestOutOfRangeFlagsReportsAll(t *testing.T) {
+	opts := options{days: 0, top: 0, price: -1, muteThreshold: 9, minSessions: 0, graceDays: 0}
+	msgs := outOfRangeFlags(opts)
+	if len(msgs) != 4 {
+		t.Fatalf("got %d messages, want 4: %q", len(msgs), msgs)
+	}
+}

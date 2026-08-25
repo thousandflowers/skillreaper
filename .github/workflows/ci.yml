@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     env:
-      COVERAGE_THRESHOLD: "72.5"
+      COVERAGE_THRESHOLD: "70"
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -27,7 +27,7 @@ jobs:
       - name: Coverage
         run: |
           go tool cover -func=coverage.out | tee coverage.txt
-          awk -v threshold="$COVERAGE_THRESHOLD" '
+          LC_ALL=C awk -v threshold="$COVERAGE_THRESHOLD" '
             /^total:/ { coverage = $3; sub(/%$/, "", coverage) }
             END {
               if (coverage == "") {

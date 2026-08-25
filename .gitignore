@@ -1,6 +1,7 @@
 /reap
 dist/
 coverage.out
+coverage.txt
 
 # Tool and editor droppings.
 .DS_Store

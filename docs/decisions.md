@@ -5,14 +5,14 @@ contributor does not have to re-litigate them. Newest first. Each entry says
 what was decided and why; if the reasoning stops holding, change the code and
 add a new entry rather than editing an old one.
 
-## 2026-08-17 — `plugin.json` stays at 0.1.0 while the binary is at 0.5.0
+## 2026-08-17 - `plugin.json` stays at 0.1.0 while the binary is at 0.5.0
 
 The plugin's `version` is not bumped to match the release it ships alongside.
 
 The two numbers describe different artifacts. `0.5.0` is the binary; `0.1.0` is
 five files that shipped once, yesterday. Coupling them means bumping the plugin
 on every binary release including the ones where no skill changed, and the first
-time that is forgotten the number lies in the other direction — worse than being
+time that is forgotten the number lies in the other direction - worse than being
 honestly behind.
 
 The version is also **a path component of the install directory**: a remote
@@ -25,14 +25,14 @@ numbers on a page agree when they are not measuring the same thing.
 
 Bump it when the skills actually change.
 
-## 2026-08-17 — `--agent` prints no price; every other format still does
+## 2026-08-17 - `--agent` prints no price; every other format still does
 
 `RenderAgent` omits the `~$X.XX/month` segment. `--json`, `--md` and the
 interactive report keep it.
 
 A dollar figure is not a measurement. It is `dead tokens × sessions × a price per
 token that we do not control` and that moves whenever a provider updates its
-list — the same stack has been reported at $24, $1.54, $1.84, $1.96 and $2.32 in
+list - the same stack has been reported at $24, $1.54, $1.84, $1.96 and $2.32 in
 two months without its context growing meaningfully. Item counts, token counts
 and utilization are measured facts; the price is a multiplication by an arbitrary
 constant.
@@ -45,12 +45,12 @@ that can decide what to trust, and `--md` and the interactive report both carry
 the "figures are estimates" framing on screen. Pasted prose carries none of that,
 so a stale price there reads as a stated fact rather than an estimate.
 
-`MoneyPerMonth` stays on `Report` and is still computed — dropping it from one
+`MoneyPerMonth` stays on `Report` and is still computed - dropping it from one
 renderer is a presentation decision, not a reason to lose the number. The guard
 is `TestRenderAgentOmitsMoney`, which renders a fixture that *has* a non-zero
 `MoneyPerMonth` and fails if a `$` reaches either agent format.
 
-## 2026-08-17 — The gofmt cleanup waits for PR #22, not the other way round
+## 2026-08-17 - The gofmt cleanup waits for PR #22, not the other way round
 
 `internal/cost/cost_test.go` and `internal/platform/platform.go` drifted from
 gofmt under go1.26. The fix is trivial and is held back anyway, in this order:
@@ -58,7 +58,7 @@ gofmt under go1.26. The fix is trivial and is held back anyway, in this order:
 the `gofmt -l` check enters CI.**
 
 gofmt realigns the struct block in `TestTokens`, at `cost_test.go:29-38`. PR #22
-inserts `TestTokensFor` at `@@ -29,6 +29,32 @@` — the same lines. Landing the
+inserts `TestTokensFor` at `@@ -29,6 +29,32 @@` - the same lines. Landing the
 cleanup first would hand a first-time contributor a rebase conflict created
 entirely by our own formatting debt, immediately after telling them in review
 that the gofmt noise was not theirs to fix. Whose branch absorbs a conflict is a
@@ -68,7 +68,7 @@ debt.
 The CI check goes last for a duller reason: enabling it while the tree is still
 unformatted turns the next push red.
 
-## 2026-08-17 — `reap --agent` renders for agents; the skills stop rendering
+## 2026-08-17 - `reap --agent` renders for agents; the skills stop rendering
 
 **Supersedes "Plugin skills call `reap --json`, not `reap`" below.** That entry
 stays as written: the reasoning was sound and the outcome was still wrong, and a
@@ -80,7 +80,7 @@ The two `SKILL.md` files now say "run it, paste it verbatim" and carry no
 rendering rules at all.
 
 What changed our mind: a prose render spec grows a rule for every edge case
-somebody hits — column widths, truncation, zero denominators — and every line of
+somebody hits - column widths, truncation, zero denominators - and every line of
 it is context loaded in every session, which is the dead weight this tool exists
 to measure. A skill that must gain weight to stay deterministic has lost its own
 argument. The delegated rendering also disagreed with the binary on the numbers,
@@ -91,17 +91,17 @@ was reported as 1% by `reap gap` and 2% by the skill. In the binary that is one
 The verbatim rule has now been broken twice, and only the first break was a
 model rendering a number: the second was an agent retyping an output block into a
 message instead of reading it from a file, adding two words (`you can`) that are
-in no version of the source — inside the session that was verifying this format
+in no version of the source - inside the session that was verifying this format
 prevents exactly that. The cause is not the actor, it is copying by hand instead
 of generating. Every check that held today went through a file and `diff`.
 
 New functions rather than a flag threaded through the render path. `RenderText`
-already takes a `color bool`, and `color=false` does **not** produce this format
-— the box drawing, the `▰▱` bars, the 60-dash rules and the 44-char name clip
+already takes a `color bool`, and `color=false` does **not** produce this format -
+the box drawing, the `▰▱` bars, the 60-dash rules and the 44-char name clip
 all survive it. A second bool would have to reach six functions, and the two
 outputs would then share branches that can drift apart in silence.
 
-## 2026-08-17 — `--agent` carries a signature; `--json` and `--md` still do not
+## 2026-08-17 - `--agent` carries a signature; `--json` and `--md` still do not
 
 `RenderAgent` writes its attribution line unconditionally: no colour flag, no
 TTY check, no cooldown, and it never touches `NudgeState` or `RenderFooter`.
@@ -114,7 +114,7 @@ to a person, so the attribution belongs in the payload. Putting it in the
 exactly one formatting instruction in the prompt, and that is the crack the whole
 render spec grew back through last time.
 
-## 2026-08-17 — `TokenRatios` is a config table, not control flow
+## 2026-08-17 - `TokenRatios` is a config table, not control flow
 
 Per-model character-per-token ratios live in an exported `TokenRatios` map in
 `internal/cost`, parallel to the existing `ModelPricing` map. Models absent from
@@ -124,19 +124,19 @@ Adding a model means adding a row, never touching `tokensWithRatio` or any
 branch. That is the same extension point `ModelPricing` already established, so
 the two maps stay learnable as one idea.
 
-## 2026-08-17 — The footer signature is not a nudge
+## 2026-08-17 - The footer signature is not a nudge
 
 `RenderFooter` prints a permanent attribution line: no cooldown, no token
 threshold, no opt-out, and it never touches `NudgeState`. The star-CTA remains
 separate and stays throttled.
 
 It lives in `cmdReport`'s default branch, which is what keeps it out of
-`--json`, `--md` and `--quiet` without a hand-written gate — machine-readable
+`--json`, `--md` and `--quiet` without a hand-written gate - machine-readable
 output must stay parseable. The colour flag decides only how the line is
 painted, never whether it is printed, so redirecting to a file still carries
 attribution.
 
-## 2026-08-17 — Plugin commands are namespaced `/skillreaper:reap`
+## 2026-08-17 - Plugin commands are namespaced `/skillreaper:reap`
 
 The Claude Code plugin exposes `/skillreaper:reap` and `/skillreaper:gap`. The
 namespace is not abbreviated.
@@ -144,7 +144,7 @@ namespace is not abbreviated.
 The verbosity is deliberate: the tool's name is repeated at every invocation,
 and a short alias would collide with unrelated commands in a user's install.
 
-## 2026-08-17 — The plugin does not bundle the binary
+## 2026-08-17 - The plugin does not bundle the binary
 
 The plugin assumes `reap` is on `PATH` and prints a runnable install block when
 it is not, leading with `npx skillreaper` because that needs no install at all.
@@ -152,11 +152,11 @@ it is not, leading with `npx skillreaper` because that needs no install at all.
 `reap` already ships through Homebrew, npm/npx and `go install`. Bundling it
 would mean committing six GOOS/GOARCH builds; downloading it from the plugin
 would duplicate the checksum-verified fetch `npm/lib/release.js` already
-performs. The skills resolve availability with `command -v reap` only — never an
+performs. The skills resolve availability with `command -v reap` only - never an
 absolute path, never a filesystem search, because a copy found off `PATH` may be
 an older build and silently using it hides a broken install.
 
-## 2026-08-17 — Plugin skills call `reap --json`, not `reap`
+## 2026-08-17 - Plugin skills call `reap --json`, not `reap`
 
 Both skills run the JSON mode and render the result themselves, following an
 explicit render spec written into each `SKILL.md`.
@@ -164,11 +164,11 @@ explicit render spec written into each `SKILL.md`.
 The human report is a ~30-line ANSI table. Injecting it into an agent's context
 only to have the model repeat it back is precisely the dead weight this tool
 exists to find. **Known cost:** rendering delegated to a model is not
-deterministic — the same spec has produced different column widths across runs.
+deterministic - the same spec has produced different column widths across runs.
 The render specs pin column order, row limits, rounding and truncation to narrow
 that, and the trade-off is revisited if the drift proves not to be containable.
 
-## 2026-08-17 — The plugin ships no `hooks/hooks.json`
+## 2026-08-17 - The plugin ships no `hooks/hooks.json`
 
 The plugin deliberately contains no hooks.
 

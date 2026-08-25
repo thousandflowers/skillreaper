@@ -77,7 +77,7 @@ func TestBlocksUseTheDocumentedDerivations(t *testing.T) {
 		all += b.body + "\n"
 	}
 	for _, want := range []string{
-		"380 items loaded, 11 ever fired — 2% utilization", // Gap fields
+		"380 items loaded, 11 ever fired - 2% utilization", // Gap fields
 		"12 kept · 11 actually fire",                       // loaded - dead
 		"~790 000 tok/month",                               // dead tok x sessions/month
 		"19 760 × 40 × $3.00 ÷ 1e6",                        // price recovered from the money field

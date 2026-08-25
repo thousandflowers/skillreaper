@@ -2,9 +2,9 @@
 
 Small, focused project. PRs welcome for:
 
-- **New platform support** — add a struct in `internal/platform/`
-- **Model pricing updates** — edit `internal/cost/cost.go`
-- **Bug fixes** — open an issue first
+- **New platform support** - add a struct in `internal/platform/`
+- **Model pricing updates** - edit `internal/cost/cost.go`
+- **Bug fixes** - open an issue first
 
 ## Guidelines
 

@@ -32,7 +32,7 @@ jobs:
           if [ "$MAJ" -gt 11 ] || { [ "$MAJ" -eq 11 ] && { [ "$MIN" -gt 5 ] || { [ "$MIN" -eq 5 ] && [ "$PAT" -ge 1 ]; }; }; }; then
             echo "npm version OK for trusted publishing"
           else
-            echo "npm $NPM_V is below 11.5.1 — this alone explains the 404"
+            echo "npm $NPM_V is below 11.5.1 - this alone explains the 404"
           fi
 
       - name: Is an OIDC token actually available to this job?

@@ -1,6 +1,6 @@
 # Security Policy
 
-skillreaper is 100% local — it reads config files and session transcripts
+skillreaper is 100% local - it reads config files and session transcripts
 on disk, computes verdicts, and prints results. The binary has no
 dependencies and makes no outbound network connections.
 

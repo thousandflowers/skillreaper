@@ -4,7 +4,7 @@
 // It exists because those numbers cannot come from the sample stack: they are
 // the whole point of the claim ("measured on mine"), and no contributor can
 // reproduce them. Everything here derives from a single decoded report, so the
-// page can never again carry two figures from two different runs — which is
+// page can never again carry two figures from two different runs - which is
 // exactly how it drifted before.
 //
 // The blocks it owns are marked readme-mine-*. It never touches the readme-*
@@ -96,7 +96,7 @@ func blocks(r *report.Report) []block {
 
 	return []block{
 		{"mine-headline", fmt.Sprintf(
-			`On my own installation, measured %s: **%d items loaded, %d ever fired — %s utilization.**
+			`On my own installation, measured %s: **%d items loaded, %d ever fired - %s utilization.**
 That's ~%s dead tokens re-sent in every single session, ~%dk a month of
 pure token waste, paid for on every request before you type anything.`,
 			measured, loaded, fired, pct(fired, loaded), commas(tok), roundTo(monthly, 1000)/1000)},
@@ -106,16 +106,16 @@ pure token waste, paid for on every request before you type anything.`,
 - %s never used (%s)
 - %s tok/session dead
 - ~%s tok/month burned on irrelevant instructions
-- ~$%.2f/month, ~$%.0f/year — the same waste priced instead of counted
+- ~$%.2f/month, ~$%.0f/year - the same waste priced instead of counted
 
 <p align="center"><sub>The money line is one measurement of one stack, n=1, and the
-weakest number here: <code>%s × %d × $%.2f ÷ 1e6</code> — input tokens only, at
+weakest number here: <code>%s × %d × $%.2f ÷ 1e6</code> - input tokens only, at
 <code>claude-sonnet-4-6</code>'s $%.2f/MTok default, with tokens estimated as
 <code>ceil(chars / 3.7)</code> and the monthly session count extrapolated from a
 %d-day window. Change the model, the price, or how much you work and it moves;
 the item and token counts do not. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
 
-<p align="center"><em>Measured on my own setup — %d sessions over %d days, %s. Run <code>reap</code> to see yours.</em></p>`,
+<p align="center"><em>Measured on my own setup - %d sessions over %d days, %s. Run <code>reap</code> to see yours.</em></p>`,
 			spaced(loaded), spaced(dead), pctSpaced(dead, loaded), spaced(tok), spaced(roundTo(monthly, 1000)),
 			r.MoneyPerMonth, r.MoneyPerMonth*12,
 			spaced(tok), r.SessionsPerMonth, price, price,
@@ -143,7 +143,7 @@ func replace(doc, marker, body string) (string, error) {
 	i := strings.Index(doc, start)
 	j := strings.Index(doc, end)
 	if i < 0 || j < 0 || j < i {
-		return "", fmt.Errorf("README has no readme-%s marker pair — nothing to replace", marker)
+		return "", fmt.Errorf("README has no readme-%s marker pair - nothing to replace", marker)
 	}
 	if strings.TrimSpace(body) == "" {
 		return "", fmt.Errorf("refusing to write an empty readme-%s block", marker)

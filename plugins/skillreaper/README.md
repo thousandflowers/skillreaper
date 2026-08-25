@@ -2,8 +2,8 @@
 
 Two skills over the `reap` CLI:
 
-- `/skillreaper:reap` — what is loaded and never used, and what it costs
-- `/skillreaper:gap` — how much of each category is ever actually touched
+- `/skillreaper:reap` - what is loaded and never used, and what it costs
+- `/skillreaper:gap` - how much of each category is ever actually touched
 
 ```
 /plugin marketplace add thousandflowers/skillreaper
@@ -16,7 +16,7 @@ Two skills over the `reap` CLI:
 Homebrew, npm/npx and `go install`. Bundling it would mean committing six
 GOOS/GOARCH builds; downloading it here would duplicate the checksum-verified
 fetch that `npm/lib/release.js` already performs. The skills assume `reap` is on
-`PATH` and print a runnable install block when it is not — `npx skillreaper`
+`PATH` and print a runnable install block when it is not - `npx skillreaper`
 first, since that needs no install at all.
 
 **Ships no hooks.** `reap install-hook` writes a `SessionStart` nudge into the
@@ -26,7 +26,7 @@ independent copy: anyone who already ran `install-hook` would be nudged twice,
 and `reap uninstall-hook` can only remove the `settings.json` copy, never the
 plugin's.
 
-> **TODO** — if hooks are ever wanted in this plugin, the plugin must *detect*
+> **TODO** - if hooks are ever wanted in this plugin, the plugin must *detect*
 > the `skillreaper-weekly-nudge` marker and supersede the manual hook, rather
 > than coexist with it.
 

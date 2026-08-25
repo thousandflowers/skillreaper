@@ -1,8 +1,8 @@
 ---
-description: Report how much of the context this agent loads is never used — unused skills, MCP servers, subagents, hooks and always-loaded prose — measured from real session transcripts. Use when asked why the context window is full, what is wasting tokens, or what is safe to remove.
+description: Report how much of the context this agent loads is never used - unused skills, MCP servers, subagents, hooks and always-loaded prose - measured from real session transcripts. Use when asked why the context window is full, what is wasting tokens, or what is safe to remove.
 ---
 
-# skillreaper — context utilization report
+# skillreaper - context utilization report
 
 Run `reap --agent`, then paste its output verbatim.
 
@@ -18,7 +18,7 @@ For the full inventory rather than the top rows, use `reap --json`.
 
 ## If reap is not installed
 
-Decide with `command -v reap` and nothing else — never an absolute path, never a
+Decide with `command -v reap` and nothing else - never an absolute path, never a
 filesystem search: a copy found off `PATH` may be an older build, and silently
 using it hides a broken install.
 
@@ -44,7 +44,7 @@ If that fails, print exactly this and nothing else:
 
 `--agent` needs reap ≥ 0.5.0. If it exits with
 `flag provided but not defined: -agent`, say the installed build is too old and
-give `brew upgrade skillreaper` (npm: `npm install -g skillreaper@latest`) — an
+give `brew upgrade skillreaper` (npm: `npm install -g skillreaper@latest`) - an
 upgrade, never the install block above, which they have already done.
 
 ## Pruning

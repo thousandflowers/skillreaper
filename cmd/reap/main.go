@@ -492,7 +492,7 @@ func gather(opts options) (*report.Report, error) {
 
 		collect(scan.ScanSkills(dir, pid))
 		collect(scan.ScanAgents(dir, pid))
-		collect(scan.ScanMCP(p.ConfigFileAbs, dir, pid))
+		collect(scan.ScanMCP(p.ConfigFileAbs, dir, pid, p.ConfigFormat))
 		collect(scan.ScanHooks(dir, pid))
 		collect(scan.ScanProse(dir, cwd, pid))
 

@@ -23,10 +23,15 @@ const (
 
 // Info describes one supported platform and its install paths.
 type Info struct {
-	ID             ID
-	Name           string // display name
-	ConfigDir      string // home config directory (~/.claude, ~/.config/opencode)
-	ConfigFile     string // main config file name
+	ID         ID
+	Name       string // display name
+	ConfigDir  string // home config directory (~/.claude, ~/.config/opencode)
+	ConfigFile string // main config file name
+	// ConfigFormat is how ConfigFile is encoded. Empty means "json", which is
+	// what every platform used before Codex (TOML) and OpenCode (JSONC) were
+	// added — both of which were being handed to encoding/json and failing by
+	// construction, with no parser for what they actually are.
+	ConfigFormat   string // "" or "json" | "jsonc" | "toml"
 	HasSkills      bool
 	HasAgents      bool
 	HasMCP         bool
@@ -72,6 +77,7 @@ func All() []Info {
 			Name:           "OpenCode",
 			ConfigDir:      "~/.config/opencode",
 			ConfigFile:     "~/.config/opencode/opencode.jsonc",
+			ConfigFormat:   "jsonc",
 			HasSkills:      true,
 			HasAgents:      true,
 			HasMCP:         true,
@@ -98,6 +104,7 @@ func All() []Info {
 			Name:           "Codex CLI",
 			ConfigDir:      "~/.codex",
 			ConfigFile:     "~/.codex/config.toml",
+			ConfigFormat:   "toml",
 			HasSkills:      true,
 			HasAgents:      true,
 			HasMCP:         true,

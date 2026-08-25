@@ -18,12 +18,23 @@ type mcpServerConfig struct {
 // ScanMCP inventories MCP servers from the platform config file (user
 // scope and per-project scope) and from installed plugins' .mcp.json
 // files. configPath may point at a missing file (fresh install).
-func ScanMCP(configPath, configDir, platformID string) ([]Item, []Warning) {
+func ScanMCP(configPath, configDir, platformID, configFormat string) ([]Item, []Warning) {
 	var items []Item
 	var warns []Warning
 
 	b, err := readCapped(configPath)
 	if err == nil {
+		// The platform table names the encoding. Before it did, every config
+		// was handed to encoding/json — so a TOML file failed on the first
+		// character of its first key and a JSONC file on the "//" of a URL,
+		// both reported as "unreadable JSON" as though the user's file were
+		// broken. Neither platform's servers were ever inventoried.
+		switch configFormat {
+		case "jsonc":
+			b = StripJSONC(b)
+		case "toml":
+			return appendTOMLMCP(items, warns, b, configPath, platformID), warns
+		}
 		var top map[string]json.RawMessage
 		if jerr := json.Unmarshal(b, &top); jerr != nil {
 			warns = append(warns, Warning{Path: configPath, Msg: "unreadable JSON: " + jerr.Error()})
@@ -116,6 +127,28 @@ func appendMCPServers(items []Item, raw json.RawMessage, source, path, platformI
 			Path:        path,
 			Description: display,
 			Removable:   true,
+		})
+	}
+	return items
+}
+
+// appendTOMLMCP inventories MCP servers declared as [mcp_servers.<name>]
+// tables, which is how Codex writes them. A config with no such table is the
+// normal case and yields nothing, not a warning.
+func appendTOMLMCP(items []Item, warns []Warning, b []byte, configPath, platformID string) []Item {
+	for name, keys := range TOMLSubTables(b, "mcp_servers") {
+		desc := keys["command"]
+		if desc == "" {
+			desc = keys["url"]
+		}
+		items = append(items, Item{
+			Category:    CatMCP,
+			Name:        name,
+			Platform:    platformID,
+			Source:      "user-config",
+			Path:        configPath,
+			Description: desc,
+			Removable:   false,
 		})
 	}
 	return items

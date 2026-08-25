@@ -108,7 +108,13 @@ func TestLookupPriceKnownModels(t *testing.T) {
 		id        string
 		wantPrice float64
 	}{
+		{"fable 5", "claude-fable-5", 10.0},
+		{"opus 5", "claude-opus-5", 5.0},
+		{"opus 4.8", "claude-opus-4-8", 5.0},
 		{"opus 4.7", "claude-opus-4-7", 5.0},
+		{"sonnet 5", "claude-sonnet-5", 3.0},
+		{"gpt-5", "gpt-5", 1.25},
+		{"gemini 2.5 pro", "gemini-2.5-pro", 1.25},
 		{"opus 4.6", "claude-opus-4-6", 5.0},
 		{"sonnet 4.6", "claude-sonnet-4-6", 3.0},
 		{"haiku 4.5", "claude-haiku-4-5", 1.0},

@@ -792,6 +792,9 @@ func mergeStats(dst, src *usage.Stats) {
 	dst.UnparsableLines += src.UnparsableLines
 	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
 	dst.SkippedByCutoff += src.SkippedByCutoff
+	// Unlike the corpus bracket below, the measured totals do merge: they are
+	// sums over messages, and a message belongs to exactly one transcript.
+	dst.Measured.Merge(src.Measured)
 	// The corpus bracket is deliberately NOT merged. It is only ever compared
 	// against a per-platform setting (cleanupPeriodDays is Claude Code's), and a
 	// merged span reads like one platform's while describing all of them — which

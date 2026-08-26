@@ -66,9 +66,16 @@ type Row struct {
 
 // Report is the full result of a scan.
 type Report struct {
-	GeneratedAt          time.Time
-	WindowDays           int
-	Sessions             int
+	GeneratedAt time.Time
+	WindowDays  int
+	Sessions    int
+	// Measured is the provider's own token accounting for the window, read
+	// from the transcripts rather than estimated from character counts. It
+	// covers whole requests, so it can never be attributed to one item — it is
+	// the ground truth the per-item estimate is checked against, and the only
+	// view of how resident context actually bills. Zero when the transcripts
+	// carry no usage block.
+	Measured             usage.Measured
 	MalformedLines       int
 	UnreadableFiles      int
 	TruncatedReads       int
@@ -104,6 +111,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		GeneratedAt:     time.Now(),
 		WindowDays:      st.WindowDays,
 		Sessions:        st.Sessions,
+		Measured:        st.Measured,
 		MalformedLines:  st.MalformedLines,
 		UnreadableFiles: st.UnreadableFiles,
 		TruncatedReads:  st.TruncatedReads,

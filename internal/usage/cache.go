@@ -15,7 +15,7 @@ import (
 // cacheFormat is bumped whenever the serialised shape of Stats changes.
 // A mismatch is a miss, never a partial read: an old cache decoded into a new
 // struct would silently drop whatever field was added.
-const cacheFormat = 1
+const cacheFormat = 2
 
 // Fingerprint identifies a corpus and the window applied to it, cheaply enough
 // to be worth checking before parsing.

@@ -201,13 +201,22 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		paint(cBRed, shockLine),
 		paint(cBold+cBRed, shockMid),
 		paint(cBRed, shockBot))
+	// The box above is an estimate, per session and per item. This is neither:
+	// it is what the provider actually billed over the window, and the only
+	// place the cache split can be seen. Resident context is paid once as a
+	// cache creation and again on every later turn as a cache read, which is
+	// why the read total dwarfs the fresh input — that re-reading is the
+	// mechanism this tool has always asserted and never measured.
+	if r.Measured.Messages > 0 && r.Measured.CacheRead > 0 {
+		fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf(
+			"measured over the window: %s tokens re-read from cache across %d messages, against %s of fresh input",
+			humanBig(r.Measured.CacheRead), r.Measured.Messages, humanBig(r.Measured.Input))))
+	}
+
 	// Without this line the box reads as the whole bill. It is not: the dead
 	// items whose weight could never be measured contribute 0 to it.
 	if r.DeadUnknownWeight > 0 {
-		noun := "items"
-		if r.DeadUnknownWeight == 1 {
-			noun = "item"
-		}
+		noun := plural(r.DeadUnknownWeight, "item")
 		fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf(
 			"a floor, not a total: %d unused %s (MCP servers, hooks) carry weight that was never measured",
 			r.DeadUnknownWeight, noun)))
@@ -596,4 +605,19 @@ func plural(n int, word string) string {
 		return word
 	}
 	return word + "s"
+}
+
+// humanBig formats a large count compactly: 3738237538 -> "3.7B". The measured
+// totals run into the billions over a month of transcripts, and humanChars
+// only scales to "k", which would print 3738237.5k.
+func humanBig(n int64) string {
+	switch {
+	case n >= 1_000_000_000:
+		return fmt.Sprintf("%.1fB", float64(n)/1e9)
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	case n >= 1_000:
+		return fmt.Sprintf("%.1fk", float64(n)/1e3)
+	}
+	return fmt.Sprintf("%d", n)
 }

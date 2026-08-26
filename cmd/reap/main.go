@@ -117,6 +117,7 @@ type options struct {
 	noCache        bool
 	listKeep       bool
 	removeKeep     string
+	source         string
 	claudeDir      string
 	claudeJSON     string
 	claudeVersion  string
@@ -145,6 +146,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.IntVar(&opts.minTokens, "min-tokens", 3, "items below this token weight → KEEP(tiny)")
 	fs.Float64Var(&opts.muteThreshold, "mute-threshold", 0.20, "MUTE used skills fired in fewer than this fraction of sessions (0 disables)")
 	fs.IntVar(&opts.muteMinTokens, "mute-min-tokens", 50, "only MUTE skills heavier than this token weight")
+	fs.StringVar(&opts.source, "source", "", "prune: quarantine only items from this source (see the by-source summary)")
 	fs.Float64Var(&opts.routeThreshold, "route-threshold", 0.10, "route: skills fired in fewer than this fraction of sessions get routed behind a leaf router")
 	fs.IntVar(&opts.routeMinSkills, "route-min-skills", 0, "route: skip the plan unless at least this many skills survive a prune (0 = always show)")
 	fs.IntVar(&opts.top, "top", report.AgentMaxRows, "--agent: cap the dead-item table at this many rows")
@@ -1003,15 +1005,34 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	var candidates []report.Row
 	var skipped int
+	var dead []report.Row
 	for _, row := range r.Rows {
 		if row.Verdict != report.VerdictReap {
 			continue
 		}
+		// dead is every unused item, removable or not; candidates is what this
+		// run will act on. The by-source summary is built from dead on purpose:
+		// most of the weight is usually plugin items that reap cannot remove,
+		// and a summary of only the removable ones would show three small
+		// sources while the plugin holding 90% of the tokens went unmentioned.
+		dead = append(dead, row)
 		if !row.Removable {
 			skipped++
 			continue
 		}
+		if opts.source != "" && row.Source != opts.source {
+			continue
+		}
 		candidates = append(candidates, row)
+	}
+
+	if opts.source != "" && len(candidates) == 0 && len(dead) > 0 {
+		fmt.Fprintf(stderr, "error: no removable unused items from source %q\n", opts.source)
+		fmt.Fprintln(stderr, "sources with unused items:")
+		for _, t := range report.SourceTotals(dead) {
+			fmt.Fprintf(stderr, "  %s — %d of %d removable\n", t.Source, t.Removable, t.Items)
+		}
+		return 1
 	}
 
 	// --json and --quiet are non-interactive by definition: a confirmation
@@ -1041,6 +1062,14 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	if !machine {
 		fmt.Fprintf(stdout, "\n🧹  %d items unused · reclaim ~%s tok/session\n\n", len(candidates), humanTok(totalTok))
+		// A list of N dead items reads as N decisions. Grouped by where they
+		// came from it usually is not: one plugin tends to account for most of
+		// the weight, so the real choice is between a handful of sources.
+		// Printed only when there is more than one, and only when the run is
+		// not already scoped to a single source.
+		if opts.source == "" {
+			report.RenderSourceTotals(stdout, report.SourceTotals(dead), len(dead), humanTok)
+		}
 		for _, row := range candidates {
 			weight := fmt.Sprintf("~%d tok", row.Tokens)
 			if row.Category == scan.CatMCP || row.Category == scan.CatHook {
@@ -1062,6 +1091,13 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 0
 		}
 		prompt := fmt.Sprintf("\nPrune all %d items? This quarantines them (reversible). [Y/n] ", len(candidates))
+		if opts.source != "" {
+			// Naming the source in the prompt matters more than usual: the
+			// number is smaller than the one the report showed, and without
+			// the reason for that a smaller number reads like a miscount.
+			prompt = fmt.Sprintf("\nPrune %d items from %s? This quarantines them (reversible). [Y/n] ",
+				len(candidates), opts.source)
+		}
 		if !confirm(stdin, stdout, prompt) {
 			fmt.Fprintln(stdout, "aborted")
 			return 0

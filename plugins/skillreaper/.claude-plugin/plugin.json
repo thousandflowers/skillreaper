@@ -2,7 +2,7 @@
   "name": "skillreaper",
   "displayName": "skillreaper",
   "description": "Measures what share of your agent's loaded context is ever actually invoked - skills, MCP servers, subagents, hooks, always-loaded prose - using evidence from your own session transcripts. Then prunes the dead weight, reversibly.",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "author": {
     "name": "thousandflowers",
     "url": "https://github.com/thousandflowers"

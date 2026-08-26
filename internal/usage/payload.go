@@ -2,6 +2,7 @@ package usage
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -38,7 +39,7 @@ const payloadRuleMinRun = 40
 
 var (
 	// A contiguous base64 run: payloadNoiseMinRun+ base64 chars with optional padding.
-	reBase64 = regexp.MustCompile(`[A-Za-z0-9+/]{80,}={0,2}`)
+	reBase64 = regexp.MustCompile(fmt.Sprintf(`[A-Za-z0-9+/]{%d,}={0,2}`, payloadNoiseMinRun))
 	// A data: URI carrying inline base64 (images, fonts, etc.).
 	reDataURI = regexp.MustCompile(`data:[^,\s]+;base64,[A-Za-z0-9+/=]+`)
 	// An HTML/XML tag. Bounded length so a stray "<" in prose is not greedily
@@ -50,9 +51,11 @@ var (
 	reANSI = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]")
 	// A long run of one repeated separator character: rule lines and table
 	// borders. Built from payloadRuleMinRun so the threshold has one home.
-	reSeparatorRun = regexp.MustCompile(`(?:-{40,}|={40,}|_{40,}|\*{40,}|#{40,}|~{40,}|─{40,}|═{40,})`)
+	reSeparatorRun = regexp.MustCompile(fmt.Sprintf(
+		`(?:-{%[1]d,}|={%[1]d,}|_{%[1]d,}|\*{%[1]d,}|#{%[1]d,}|~{%[1]d,}|─{%[1]d,}|═{%[1]d,})`,
+		payloadRuleMinRun))
 	// A long run of blank padding — alignment filler in fixed-width output.
-	rePadding = regexp.MustCompile(`[ \t]{40,}`)
+	rePadding = regexp.MustCompile(fmt.Sprintf(`[ \t]{%d,}`, payloadRuleMinRun))
 	// An explicit truncation marker. Few bytes, but the shape is what matters:
 	// the tool returned a payload it had already cut, so what arrived is chrome
 	// wrapped around an answer the caller did not fully get.

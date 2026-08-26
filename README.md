@@ -1,3 +1,4 @@
+<!-- readme-numbers:start -->
 ```
 S           K           I          L          L
 ######  #######   ###   ######  ####### ###### 
@@ -24,6 +25,8 @@ TOKENS  CATEGORY  NAME                 VERDICT  REASON
 (361 more never-used items not shown — use --json for all)
 
 To prune: reap prune   (interactive, reversible via reap restore --all)
+
+1 warnings — some evidence was incomplete; those items were held back from a REAP verdict.
 
 measured by skillreaper · github.com/thousandflowers/skillreaper
 ```

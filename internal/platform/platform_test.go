@@ -3,6 +3,7 @@ package platform
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -210,5 +211,23 @@ func TestDirExistsOnFile(t *testing.T) {
 	}
 	if dirExists(f) {
 		t.Error("dirExists should return false for a file")
+	}
+}
+
+// The README's platform table is the page's own answer to "what does this
+// support", and it has fallen behind All() twice: the banner once advertised
+// six of seven, and the prose above the table still said six after the seventh
+// landed. The banner is derived from All() and cannot drift any more; the page
+// is hand written, so it needs asserting instead.
+func TestEveryPlatformAppearsInTheREADME(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme := string(b)
+	for _, p := range All() {
+		if !strings.Contains(readme, p.Name) {
+			t.Errorf("platform %q is supported but never named in README.md", p.Name)
+		}
 	}
 }

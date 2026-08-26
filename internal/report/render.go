@@ -234,7 +234,7 @@ func RenderText(w io.Writer, r *Report, color bool) {
 	}
 
 	if len(r.Warnings) > 0 {
-		fmt.Fprintf(w, "\n  %s\n", paint(cYell, fmt.Sprintf("── %d warnings ──", len(r.Warnings))))
+		fmt.Fprintf(w, "\n  %s\n", paint(cYell, fmt.Sprintf("── %d %s ──", len(r.Warnings), plural(len(r.Warnings), "warning"))))
 		for _, warn := range r.Warnings {
 			fmt.Fprintf(w, "    %s\n", paint(cDim, warn.Path+": "+warn.Msg))
 		}
@@ -585,4 +585,15 @@ func MalformedSummary(r *Report) string {
 		return fmt.Sprintf("%d unreadable lines", r.MalformedLines)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// plural appends an "s" unless n is exactly one. Only regular plurals are
+// needed here, and a count of one is not a rare edge: a single held-back item
+// produces exactly one warning, which is the moment the tool is asking to be
+// trusted about evidence.
+func plural(n int, word string) string {
+	if n == 1 {
+		return word
+	}
+	return word + "s"
 }

@@ -36,6 +36,26 @@ jobs:
           }
           echo "GH_PAT can push to the tap"
 
+      # The Claude Code plugin is installed straight from this repository, not
+      # from a release artifact, so the version its users see is whatever is
+      # committed here — bumping it on the runner the way npm does would change
+      # nothing. It sat at 0.1.0 through five releases because nothing compared
+      # the two, and a wrong version in a manifest is only found by whoever
+      # trusted it.
+      - uses: actions/checkout@v6
+      - name: Assert the plugin manifest matches the tag
+        run: |
+          set -euo pipefail
+          manifest=plugins/skillreaper/.claude-plugin/plugin.json
+          want="${GITHUB_REF_NAME#v}"
+          got=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest")
+          [ "$got" = "$want" ] || {
+            echo "$manifest says \"version\": \"$got\", tag is $GITHUB_REF_NAME" >&2
+            echo "bump it to $want and re-tag" >&2
+            exit 1
+          }
+          echo "plugin manifest is at $got"
+
   goreleaser:
     runs-on: ubuntu-latest
     needs: preflight

@@ -56,8 +56,16 @@ type Stats struct {
 	OldestTranscript time.Time
 	NewestTranscript time.Time
 	SkippedByCutoff  int
-	Uses             map[scan.Category]map[string]int
-	Last             map[scan.Category]map[string]time.Time
+
+	// Measured is the provider's own token accounting, summed over every
+	// assistant message in the window. It measures whole requests and can
+	// never attribute tokens to one skill, so it does not replace the
+	// per-item estimate — it is the ground truth the estimate can be checked
+	// against, and the only way to see how loaded-but-unused context actually
+	// bills. Zero when the transcripts carry no usage block.
+	Measured Measured
+	Uses     map[scan.Category]map[string]int
+	Last     map[scan.Category]map[string]time.Time
 
 	// Errors counts invocations that resulted in an error, and LastAttempt
 	// records the most recent attempt (success or error). Together with Uses
@@ -170,6 +178,7 @@ type entry struct {
 	Timestamp string `json:"timestamp"`
 	Message   struct {
 		Content json.RawMessage `json:"content"`
+		Usage   *usageBlock     `json:"usage"`
 	} `json:"message"`
 	Init *initPayload `json:"init,omitempty"`
 }
@@ -177,6 +186,51 @@ type entry struct {
 type initPayload struct {
 	Model string     `json:"model"`
 	Tools []toolDecl `json:"tools"`
+}
+
+// Measured is the provider's token accounting, summed across the window.
+//
+// CacheRead is the number that matters most here and the least intuitive: a
+// prompt is billed in full once as CacheCreation, then re-read on every
+// subsequent turn as CacheRead. Context that loads and never fires is paid for
+// on each of those turns, which is why a small resident prompt shows up as a
+// large read total.
+type Measured struct {
+	Messages      int64 `json:"messages"`
+	Input         int64 `json:"input_tokens"`
+	Output        int64 `json:"output_tokens"`
+	CacheCreation int64 `json:"cache_creation_tokens"`
+	CacheRead     int64 `json:"cache_read_tokens"`
+}
+
+// Add folds one message's accounting in.
+func (m *Measured) Add(u usageBlock) {
+	m.Messages++
+	m.Input += u.InputTokens
+	m.Output += u.OutputTokens
+	m.CacheCreation += u.CacheCreationTokens
+	m.CacheRead += u.CacheReadTokens
+}
+
+// Merge folds another window's totals in, for the per-file merge.
+func (m *Measured) Merge(o Measured) {
+	m.Messages += o.Messages
+	m.Input += o.Input
+	m.Output += o.Output
+	m.CacheCreation += o.CacheCreation
+	m.CacheRead += o.CacheRead
+}
+
+// usageBlock is the token accounting the provider attaches to every assistant
+// message. It is the measured counterpart to cost.Tokens, which estimates from
+// character counts, and it is the only place the cache split can be read: dead
+// context is billed once as cache_creation when a session starts and again as
+// cache_read on every later turn, which is the mechanism this tool asserts.
+type usageBlock struct {
+	InputTokens         int64 `json:"input_tokens"`
+	OutputTokens        int64 `json:"output_tokens"`
+	CacheCreationTokens int64 `json:"cache_creation_input_tokens"`
+	CacheReadTokens     int64 `json:"cache_read_input_tokens"`
 }
 
 type toolDecl struct {
@@ -306,6 +360,7 @@ func ParseObserving(projectsDir string, cutoff time.Time, windowDays int, needs 
 func MergeInto(dst, src *Stats) {
 	dst.MalformedLines += src.MalformedLines
 	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
+	dst.Measured.Merge(src.Measured)
 	for cat, uses := range src.Uses {
 		for key, n := range uses {
 			dst.Uses[cat][key] += n
@@ -414,6 +469,14 @@ func parseFile(path, project string, st *Stats) {
 			continue
 		}
 		ts, _ := time.Parse(time.RFC3339, e.Timestamp)
+
+		// Counted before any type or content check: the accounting is attached
+		// to the message regardless of what the message did, and skipping the
+		// ones that fired no tool would undercount exactly the turns where
+		// resident context was re-read for nothing.
+		if e.Message.Usage != nil {
+			st.Measured.Add(*e.Message.Usage)
+		}
 
 		if !parsedInit && e.Type == "init" && e.Init != nil {
 			parsedInit = true

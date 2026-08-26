@@ -90,3 +90,14 @@ func TestMalformedSummary(t *testing.T) {
 		})
 	}
 }
+
+func TestHumanBigScalesPastThousands(t *testing.T) {
+	for _, c := range []struct {
+		n    int64
+		want string
+	}{{999, "999"}, {1500, "1.5k"}, {2_500_000, "2.5M"}, {3_738_237_538, "3.7B"}} {
+		if got := humanBig(c.n); got != c.want {
+			t.Errorf("humanBig(%d) = %q, want %q", c.n, got, c.want)
+		}
+	}
+}

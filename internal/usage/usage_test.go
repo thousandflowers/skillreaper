@@ -374,3 +374,52 @@ func TestParseResumesAfterAnOverlongLine(t *testing.T) {
 		t.Error("the overlong line should still mark the evidence incomplete")
 	}
 }
+
+// The provider's own accounting rides along on assistant messages. It is the
+// only measured counterpart to the character-ratio estimate, and the only view
+// of the cache split: resident context is billed once as a cache creation and
+// again on every later turn as a cache read.
+func TestParseSumsMeasuredUsage(t *testing.T) {
+	dir := t.TempDir()
+	writeTranscript(t, filepath.Join(dir, "proj-a", "s1.jsonl"),
+		`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[],"usage":{"input_tokens":2,"output_tokens":100,"cache_creation_input_tokens":613,"cache_read_input_tokens":159929}}}`,
+		// A message that fired nothing still costs a cache read, and skipping
+		// it would undercount exactly the turns this is meant to expose.
+		`{"type":"assistant","timestamp":"2026-06-01T10:01:00Z","message":{"content":[],"usage":{"input_tokens":3,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":160000}}}`,
+		// No usage block at all: older transcripts and other harnesses.
+		`{"type":"assistant","timestamp":"2026-06-01T10:02:00Z","message":{"content":[]}}`,
+	)
+	writeTranscript(t, filepath.Join(dir, "proj-b", "s2.jsonl"),
+		`{"type":"assistant","timestamp":"2026-06-02T11:00:00Z","message":{"content":[],"usage":{"input_tokens":10,"output_tokens":7,"cache_creation_input_tokens":1,"cache_read_input_tokens":5}}}`,
+	)
+
+	st, err := Parse(dir, time.Time{}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := st.Measured
+	want := Measured{Messages: 3, Input: 15, Output: 157, CacheCreation: 614, CacheRead: 319934}
+	if got != want {
+		t.Errorf("measured totals across files:\n got %+v\nwant %+v", got, want)
+	}
+}
+
+func TestMeasuredMergeAdds(t *testing.T) {
+	a := Measured{Messages: 1, Input: 2, Output: 3, CacheCreation: 4, CacheRead: 5}
+	b := Measured{Messages: 10, Input: 20, Output: 30, CacheCreation: 40, CacheRead: 50}
+	a.Merge(b)
+	if want := (Measured{11, 22, 33, 44, 55}); a != want {
+		t.Errorf("got %+v, want %+v", a, want)
+	}
+}
+
+// The per-file cache path merges through MergeInto rather than Merge, and a
+// miss there would silently zero the totals on every warm run.
+func TestMergeIntoCarriesMeasured(t *testing.T) {
+	dst, src := NewStats(30), NewStats(30)
+	src.Measured = Measured{Messages: 2, Input: 5, CacheRead: 900}
+	MergeInto(dst, src)
+	if dst.Measured.CacheRead != 900 || dst.Measured.Messages != 2 {
+		t.Errorf("MergeInto dropped the measured totals: %+v", dst.Measured)
+	}
+}

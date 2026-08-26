@@ -93,8 +93,8 @@ single message.
 I needed to know which ones were actually firing and which were just dead
 weight. Nothing existing told me that from transcript evidence. So I built it.
 
-It now supports six platforms and ships on Homebrew, npm, and as a static
-binary for every major OS.
+It now supports every platform in the table below, and ships on Homebrew, npm,
+and as a static binary for every major OS.
 
 <br>
 

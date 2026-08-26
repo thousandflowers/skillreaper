@@ -62,10 +62,30 @@ func TestParseFrontmatterOnlyFrontmatter(t *testing.T) {
 	}
 }
 
-func _TestParseFrontmatterMultiLineDescription(t *testing.T) {
+func TestParseFrontmatterMultiLineDescription(t *testing.T) {
 	src := []byte("---\nname: multiline\ndescription: \"line1\\nline2\\nline3\"\n---\nbody")
 	name, desc, _ := parseFrontmatter(src)
 	if name != "multiline" || desc != "line1\nline2\nline3" {
 		t.Errorf("got %q / %q", name, desc)
+	}
+}
+
+// A single-quoted YAML scalar carries no escapes: the backslash-n is two
+// literal characters and has to survive as such.
+func TestParseFrontmatterSingleQuotedKeepsBackslash(t *testing.T) {
+	src := []byte("---\nname: single\ndescription: 'line1\\nline2'\n---\nbody")
+	_, desc, _ := parseFrontmatter(src)
+	if desc != `line1\nline2` {
+		t.Errorf("desc = %q, want the backslash kept", desc)
+	}
+}
+
+// An escape the unquoter does not recognise must not lose the value: a
+// Windows path in a double-quoted description is the realistic case.
+func TestParseFrontmatterUnknownEscapeFallsBack(t *testing.T) {
+	src := []byte("---\nname: winpath\ndescription: \"C:\\Users\\me\"\n---\nbody")
+	_, desc, _ := parseFrontmatter(src)
+	if desc != `C:\Users\me` {
+		t.Errorf("desc = %q, want the raw text back", desc)
 	}
 }

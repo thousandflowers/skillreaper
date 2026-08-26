@@ -17,9 +17,17 @@ func TestNoiseChars(t *testing.T) {
 		t.Errorf("base64 blob: want %d noise, got %d", len(blob), got)
 	}
 
-	short := strings.Repeat("A", 40) // below payloadNoiseMinRun
+	// One short of the threshold is an ordinary token — a hash, an ID — not a
+	// blob. Built from the constant, so moving the constant without moving the
+	// pattern fails here instead of silently changing what counts as noise.
+	short := strings.Repeat("A", payloadNoiseMinRun-1)
 	if got := noiseChars(short); got != 0 {
-		t.Errorf("short token: want 0 noise, got %d", got)
+		t.Errorf("a %d-char token is not a blob: want 0 noise, got %d", len(short), got)
+	}
+
+	atThreshold := strings.Repeat("A", payloadNoiseMinRun)
+	if got := noiseChars(atThreshold); got != len(atThreshold) {
+		t.Errorf("a %d-char run is a blob: want %d noise, got %d", len(atThreshold), len(atThreshold), got)
 	}
 
 	html := "<div class=\"nav\"><span>x</span></div>"

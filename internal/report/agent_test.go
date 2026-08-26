@@ -44,6 +44,36 @@ func agentFixture() *Report {
 	}
 }
 
+// One held-back item produces exactly one warning, and the count is
+// interpolated into the word, so the singular has to be reached.
+func TestAgentWarningCountIsSingularForOne(t *testing.T) {
+	r := agentFixture()
+	r.Warnings = []scan.Warning{{Path: "/x/.claude", Msg: "unreadable", Advisory: true}}
+	out := renderAgentString(r)
+	if !strings.Contains(out, "1 warning —") {
+		t.Errorf("want \"1 warning —\", got:\n%s", out)
+	}
+	if strings.Contains(out, "1 warnings") {
+		t.Error("still says \"1 warnings\"")
+	}
+
+	r.Warnings = append(r.Warnings, scan.Warning{Path: "/y/.claude", Msg: "unreadable", Advisory: true})
+	if out := renderAgentString(r); !strings.Contains(out, "2 warnings —") {
+		t.Errorf("want \"2 warnings —\", got:\n%s", out)
+	}
+}
+
+func TestPlural(t *testing.T) {
+	for _, c := range []struct {
+		n    int
+		want string
+	}{{0, "warnings"}, {1, "warning"}, {2, "warnings"}} {
+		if got := plural(c.n, "warning"); got != c.want {
+			t.Errorf("plural(%d) = %q, want %q", c.n, got, c.want)
+		}
+	}
+}
+
 func renderAgentString(r *Report) string {
 	var b bytes.Buffer
 	RenderAgent(&b, r, AgentMaxRows)

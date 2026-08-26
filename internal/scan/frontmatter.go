@@ -3,6 +3,7 @@ package scan
 import (
 	"bufio"
 	"bytes"
+	"strconv"
 	"strings"
 )
 
@@ -96,12 +97,24 @@ func toolSurface(b []byte, keys ...string) int {
 }
 
 // yamlValue returns the value of a single-line "key: value" YAML pair,
-// with surrounding quotes removed.
+// with surrounding quotes removed and, for a double-quoted scalar, its
+// backslash escapes resolved.
+//
+// Only the double-quoted form carries escapes in YAML; a single-quoted scalar
+// is literal, so a "\n" there is two characters and stays two characters.
+// strconv.Unquote covers the escapes that turn up in real frontmatter (\n, \t,
+// \", \\) and refuses anything it does not know — a Windows path being the
+// realistic case — in which case the raw text is a better answer than an error.
 func yamlValue(line, key string) (string, bool) {
 	if !strings.HasPrefix(line, key+":") {
 		return "", false
 	}
 	v := strings.TrimSpace(strings.TrimPrefix(line, key+":"))
+	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
+		if unquoted, err := strconv.Unquote(v); err == nil {
+			return unquoted, true
+		}
+	}
 	v = strings.Trim(v, `"'`)
 	return v, true
 }

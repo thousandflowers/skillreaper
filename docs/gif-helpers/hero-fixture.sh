@@ -11,6 +11,17 @@
 #        -no-nudge --agent
 set -euo pipefail
 
+# Dates go back N days, and the two date(1) implementations disagree about how
+# to say that: BSD wants -v-3d, GNU wants -d "3 days ago". The script was
+# written on macOS and used the BSD spelling only, so every Linux contributor -
+# and the CI job that rebuilds the captures - failed here before reap was even
+# built, with "date: invalid option -- 'v'".
+if date -v-1d +%Y >/dev/null 2>&1; then
+	days_ago() { date -v-"$1"d "${@:2}"; }          # BSD
+else
+	days_ago() { date -d "$1 days ago" "${@:2}"; }  # GNU
+fi
+
 ROOT="${1:-/tmp/hero-claude}"
 rm -rf "$ROOT"
 mkdir -p "$ROOT/skills" "$ROOT/agents" "$ROOT/projects/acme-platform"
@@ -23,7 +34,7 @@ ROLES=(builder checker inspector migrator planner reviewer)
 SERVERS=(billing calendar chat crm email filestore maps metrics search tickets
 	warehouse wiki)
 
-OLD="$(date -v-60d +%Y%m%d%H%M)"
+OLD="$(days_ago 60 +%Y%m%d%H%M)"
 
 # A description in the size range real skills land in. Which of the six trailing
 # clauses appear is read off the bits of the index, so the token column gets the
@@ -105,7 +116,7 @@ for i in $(seq 1 34); do
 	# 1..29: day 30 would sit on the window edge and drop out of the count
 	day=$(( (i * 28 / 34) + 1 ))
 	T="$ROOT/projects/acme-platform/session-$i.jsonl"
-	ts="$(date -u -v-${day}d +%Y-%m-%dT%H:%M:%SZ)"
+	ts="$(days_ago "$day" -u +%Y-%m-%dT%H:%M:%SZ)"
 	: > "$T"
 	for f in "${!fired[@]}"; do
 		# skill 0 fires most often, skill 5 barely: i % (f+2) spreads the rates
@@ -119,7 +130,7 @@ for i in $(seq 1 34); do
 			"$ts" "${SERVERS[0]}" >> "$T"
 	fi
 	printf '{"type":"user","timestamp":"%s","message":{"role":"user","content":"routine work"}}\n' "$ts" >> "$T"
-	touch -t "$(date -v-${day}d +%Y%m%d%H%M)" "$T"
+	touch -t "$(days_ago "$day" +%Y%m%d%H%M)" "$T"
 done
 
 printf 'built %s: %d skills, %d agents, %d mcp servers, 34 sessions\n' \

@@ -8,8 +8,8 @@ gap         after  80    nocolor    12 lines  widest   80
 gap         before 120   nocolor    11 lines  widest   78
 gap         before 80    color      11 lines  widest   78
 gap         before 80    nocolor    11 lines  widest   78
-report      after  120   color      78 lines  widest  100
-report      after  120   nocolor    78 lines  widest  100
+report      after  120   color      77 lines  widest  100
+report      after  120   nocolor    77 lines  widest  100
 report      after  80    color      80 lines  widest   80
 report      after  80    nocolor    80 lines  widest   80
 report      after  pipe  nocolor    80 lines  widest   80

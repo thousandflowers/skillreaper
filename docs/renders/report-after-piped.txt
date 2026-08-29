@@ -63,12 +63,12 @@
     … 62 more · ~1,183 tok/session · full list: reap --md
 
   ── 1 warning ─────────────────────────────────────────────────────────────────
-    /tmp/skillreaper-fixture:
-      the oldest transcript on disk is 28 days old and cleanupPeriodDays is not
-      set, so Claude Code's default of 30 days applies, so the retention sweep
-      is deleting evidence about as fast as it accumulates. Anything used less
-      often than that is invisible here, not merely cold. Raise
-      cleanupPeriodDays in settings.json to keep more history.
+    /tmp/skillreaper-fixture: the oldest transcript on disk is 28 days old and
+      cleanupPeriodDays is not set, so Claude Code's default of 30 days applies,
+      so the retention sweep is deleting evidence about as fast as it
+      accumulates. Anything used less often than that is invisible here, not
+      merely cold. Raise cleanupPeriodDays in settings.json to keep more
+      history.
 
   ── DO ────────────────────────────────────────────────────────────────────────
     reap prune   371 items · ~22,720 tok/session reclaimed

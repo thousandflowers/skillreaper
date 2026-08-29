@@ -32,18 +32,18 @@ git -C "$root" worktree add --detach "$work/before" "$before_ref" >/dev/null
 (cd "$work/before" && go build -o "$work/reap-before" ./cmd/reap)
 (cd "$root" && go build -o "$work/reap-after" ./cmd/reap)
 
-fixture="$work/hero-claude"
+# A fixed path, not a temp one: one warning quotes the fixture directory, and
+# reap wraps that warning to the terminal width before anything downstream could
+# normalise the string. A temp path is a different length on every machine -
+# /var/folders/... on macOS, /tmp/tmp.XXXX on Linux - so the same binary wrapped
+# the same warning at different points and the captures could never match across
+# platforms. CI found exactly that. The path is part of the control now.
+fixture=/tmp/skillreaper-fixture
 "$root/docs/gif-helpers/hero-fixture.sh" "$fixture" >/dev/null
 
 pty() {                                   # run "$@" with a pty on stdout
   python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))' "$@"
 }
-
-# The fixture lives in a temp directory whose name changes every run, and one
-# warning quotes that path, so unnormalised captures could never match twice -
-# not across runs and certainly not across machines. The path is the only
-# machine-specific string in the output and it is replaced by a fixed stand-in.
-FIXTURE_LABEL=/tmp/skillreaper-fixture
 
 # Fold the width-labelled captures at their stated width. A terminal hard-wraps
 # a long line at the right edge and puts no newline in the bytes, so a capture
@@ -85,7 +85,7 @@ run() {                                   # run <binary> <width|pipe> <color|noc
     COLUMNS="$width" pty "$bin" "${args[@]}" | tr -d '\r'
   else
     COLUMNS="$width" "$bin" "${args[@]}"
-  fi | sed "s|$fixture|$FIXTURE_LABEL|g"
+  fi
 }
 
 # capture <side> <view> <width|pipe> <color|nocolor> <outfile> [subcommand...]

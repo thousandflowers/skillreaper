@@ -1,0 +1,11 @@
+
+  ── skills by project · last 30 days · 34 sessions ────────────────────────────
+
+  SKILL            PROJECT        FIRINGS  NOTE
+  audit-backlog    acme-platform       17  repo-local
+  audit-catalog    acme-platform       11  repo-local
+  audit-changelog  acme-platform        8  repo-local
+  audit-contract   acme-platform        6  repo-local
+  audit-dataset    acme-platform        5  repo-local
+  audit-invoice    acme-platform        4  repo-local
+

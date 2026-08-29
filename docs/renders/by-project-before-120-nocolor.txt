@@ -1,0 +1,16 @@
+
+  ⟡ skills by project — last 30 days · 34 sessions
+
+  audit-backlog  1 project(s)  ⚑ repo-local
+      acme-platform                                      17×
+  audit-catalog  1 project(s)  ⚑ repo-local
+      acme-platform                                      11×
+  audit-changelog  1 project(s)  ⚑ repo-local
+      acme-platform                                      8×
+  audit-contract  1 project(s)  ⚑ repo-local
+      acme-platform                                      6×
+  audit-dataset  1 project(s)  ⚑ repo-local
+      acme-platform                                      5×
+  audit-invoice  1 project(s)  ⚑ repo-local
+      acme-platform                                      4×
+

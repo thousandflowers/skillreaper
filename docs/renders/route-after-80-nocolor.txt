@@ -1,0 +1,24 @@
+
+  ── reap route · usage-informed lazy-load plan ────────────────────────────────
+  Proposed, never applied. 6 skills survive a prune · 34 sessions · expose
+  threshold 10%.
+
+  !  6 skills is below ~150 — native skill loading is usually enough here.
+     Routing trades a little selection accuracy for token savings. Prune first;
+     route only if context is tight.
+
+  EXPOSED  stay top-level · ~278 tok resident
+     NAME             USES  RATE  REASON
+     audit-backlog      17   50%  frequent
+     audit-catalog      11   32%  frequent
+     audit-changelog     8   24%  frequent
+     audit-contract      6   18%  frequent
+     audit-dataset       5   15%  frequent
+     audit-invoice       4   12%  frequent
+
+  ROUTED  loaded on demand · ~0 tok deferred
+     (none — every surviving skill fires often enough to stay exposed)
+
+  Net: ~0 tok/session moved out of resident context.
+  A plan only — nothing is applied. Pair with reap mute to strip the
+  descriptions of routed skills as well.

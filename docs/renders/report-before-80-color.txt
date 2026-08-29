@@ -1,0 +1,429 @@
+
+  [1m⟡ skillreaper — evidence-based pruning for your agent stack[0m
+
+  [2mwindow:[0m  [1mlast 30 days · 34 sessions[0m
+
+[1;31m  ╔════════════════════════════════════════════════════════════════════╗[0m
+[1m[1;31m  ║  371 items never used · ~22720 dead tokens/session · ~$2.32/month  ║[0m
+[1;31m  ╚════════════════════════════════════════════════════════════════════╝[0m
+  [2ma floor, not a total: 11 unused items (MCP servers, hooks) carry weight that w
+as never measured[0m
+
+  [1;36m⟡[0m [1mutilization 1%[0m  —  7/378 items fired · ~278/22998 tok touched (30d)
+
+  [36m── SKILLS (description injected every session) ───────────────────────────────
+─────────────────────────────[0m
+  [1;31m    ▸ reap  292 items · ~21415 tok/session[0m
+NAME                  TOK          SRC  PERM  USES  LAST   JUDGMENT
+import-timesheet      ~185  ▰▰▰▰▰  own  all   0     never  [31mREAP · unused[0m
+render-playlist       ~185  ▰▰▰▰▰  own  all   0     never  [31mREAP · unused[0m
+review-sitemap        ~177  ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+deploy-dataset        ~163  ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+validate-manifest     ~159  ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+parse-contract        ~157  ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+extract-receipt       ~149  ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+sync-changelog        ~145  ▰▰▰▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-timesheet   ~111  ▰▰▰▱▱  own  all   0     never  [31mREAP · unused[0m
+export-timesheet      ~110  ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-timesheet      ~110  ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-timesheet        ~109  ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-sitemap     ~102  ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-sitemap        ~101  ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-sitemap        ~101  ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-sitemap          ~100  ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-schema      ~100  ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-report      ~99   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-report         ~98   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-schema         ~98   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-report         ~98   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-schema         ~98   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-ledger      ~98   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-schema           ~97   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-ledger         ~96   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-report           ~96   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-ledger         ~96   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-ledger           ~95   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-receipt     ~93   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-timesheet   ~93   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-timesheet    ~92   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-timesheet    ~92   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-playlist    ~92   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-roster      ~92   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-timesheet      ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-receipt        ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-roster         ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-timesheet      ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-timesheet       ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-timesheet     ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-receipt        ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-roster         ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-timesheet      ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-invoice     ~91   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-invoice        ~90   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-playlist       ~90   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-receipt          ~90   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-roster           ~90   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-invoice        ~90   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-changelog   ~90   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-changelog      ~89   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-invoice          ~89   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-playlist         ~89   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-changelog      ~89   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-dataset     ~89   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-dataset        ~88   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-changelog        ~88   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-dataset        ~88   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-dataset          ~87   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-manifest    ~84   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-sitemap     ~84   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-sitemap      ~83   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-manifest       ~83   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-manifest       ~83   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-sitemap      ~83   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-contract    ~83   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-sitemap        ~82   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-sitemap        ~82   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-sitemap        ~82   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-manifest         ~82   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-sitemap         ~82   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-sitemap       ~82   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-catalog     ~82   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-schema       ~81   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-contract       ~81   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-contract       ~81   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-report      ~81   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-schema      ~81   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-report       ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-catalog        ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-schema         ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-contract         ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-schema        ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-catalog        ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-schema         ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-report       ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-schema       ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-backlog     ~80   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-ledger       ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-report         ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-schema         ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-report         ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-report         ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-schema         ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-catalog          ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-report          ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-schema          ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-report        ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-report         ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-ledger      ~79   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-backlog        ~78   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-ledger         ~78   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-ledger        ~78   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-backlog        ~78   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-ledger         ~78   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-ledger       ~78   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+validate-ledger       ~78   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-ledger         ~77   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-ledger         ~77   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-backlog          ~77   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-ledger          ~77   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-receipt      ~74   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-transcript    ~74   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-transcript   ~74   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-receipt     ~74   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-roster      ~74   ▰▰▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-playlist     ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-roster       ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-transcript     ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-timesheet     ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-receipt        ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-transcript     ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-timesheet     ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-receipt       ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-receipt        ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-receipt      ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-roster       ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-invoice     ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-playlist    ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+validate-receipt      ~73   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-timesheet       ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-changelog    ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-invoice      ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-receipt        ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-roster         ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-playlist       ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-roster         ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-receipt        ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-roster         ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-receipt         ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-roster          ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-playlist      ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-roster        ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-timesheet      ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-playlist       ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-roster         ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-invoice      ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-playlist     ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-changelog   ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+validate-invoice      ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+validate-playlist     ~72   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-invoice        ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-playlist       ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-invoice        ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-invoice        ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-playlist       ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-invoice         ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-playlist        ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-invoice       ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-invoice        ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-changelog    ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-timesheet        ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-dataset     ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+validate-changelog    ~71   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-dataset      ~70   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-changelog      ~70   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-changelog      ~70   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-changelog      ~70   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-changelog       ~70   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-changelog     ~70   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-changelog      ~70   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-dataset      ~70   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+validate-dataset      ~70   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-dataset        ~69   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-dataset        ~69   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-dataset         ~69   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-dataset       ~69   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-dataset        ~69   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-manifest    ~66   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-manifest     ~65   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-manifest     ~65   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-contract    ~65   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-contract     ~64   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-manifest       ~64   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-sitemap       ~64   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-manifest       ~64   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-manifest       ~64   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-sitemap       ~64   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-manifest        ~64   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-manifest      ~64   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-manifest       ~64   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-sitemap         ~63   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-catalog      ~63   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-contract       ~63   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-contract      ~63   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-sitemap        ~63   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-contract       ~63   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-contract     ~63   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-catalog     ~63   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+validate-contract     ~63   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-contract       ~62   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-catalog        ~62   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-contract       ~62   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-catalog       ~62   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-catalog        ~62   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-catalog      ~62   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-sitemap          ~62   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+validate-catalog      ~62   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-backlog      ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-catalog        ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-report        ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-schema        ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-catalog        ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-report        ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-schema        ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-catalog         ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-schema         ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-backlog     ~61   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-report          ~60   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-schema          ~60   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-backlog        ~60   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+publish-backlog       ~60   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-report         ~60   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-backlog        ~60   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+scaffold-backlog      ~60   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-schema           ~60   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+validate-backlog      ~60   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+deploy-backlog        ~59   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-ledger        ~59   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+import-backlog        ~59   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-ledger        ~59   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-backlog         ~59   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-ledger         ~59   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-report           ~59   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-ledger          ~58   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-ledger           ~58   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+translate-transcript  ~56   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+compress-transcript   ~55   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-transcript    ~55   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-transcript    ~55   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-transcript     ~55   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-transcript      ~54   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-roster        ~54   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+format-transcript     ~54   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-receipt       ~54   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-roster        ~54   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+parse-transcript      ~54   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-receipt        ~54   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+review-transcript     ~54   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-transcript       ~54   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-receipt         ~53   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-roster          ~53   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-invoice       ~53   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-playlist      ~53   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-invoice       ~53   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-playlist      ~53   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-playlist       ~53   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-roster         ~53   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-receipt          ~53   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-playlist        ~52   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-changelog     ~52   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-changelog     ~52   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-changelog      ~52   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-invoice        ~52   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-playlist         ~52   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-roster           ~52   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-dataset       ~51   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-dataset       ~51   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-invoice          ~51   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-dataset        ~50   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-dataset          ~49   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-manifest      ~46   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-manifest      ~46   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+audit-manifest        ~45   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-contract      ~45   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-contract      ~45   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-manifest       ~45   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-contract       ~44   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-manifest         ~44   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-catalog       ~43   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-catalog       ~43   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-catalog        ~43   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-contract         ~43   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-catalog          ~42   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+extract-backlog       ~41   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+migrate-backlog       ~41   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+resize-backlog        ~41   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+sync-backlog          ~40   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+summarise-transcript  ~38   ▰▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+export-transcript     ~36   ▱▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+render-transcript     ~36   ▱▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+lint-transcript       ~35   ▱▱▱▱▱  own  all   0     never  [31mREAP · unused[0m
+
+  [1;33m    ▸ mute  2 items · ~102 tok/session[0m
+NAME           TOK          SRC  PERM  USES  LAST        JUDGMENT
+audit-invoice  ~52   ▰▱▱▱▱  own  all   4     2026-08-23  [33mMUTE · heavy-rare[0m
+audit-dataset  ~50   ▰▱▱▱▱  own  all   5     2026-08-24  [33mMUTE · heavy-rare[0m
+
+  [1;32m    ▸ keep  4 items · ~176 tok/session[0m
+NAME             TOK          SRC  PERM  USES  LAST        JUDGMENT
+audit-changelog  ~51   ▰▱▱▱▱  own  all   8     2026-08-25  [32mKEEP · used[0m
+audit-contract   ~43   ▰▱▱▱▱  own  all   6     2026-08-24  [32mKEEP · used[0m
+audit-catalog    ~42   ▰▱▱▱▱  own  all   11    2026-08-26  [32mKEEP · used[0m
+audit-backlog    ~40   ▰▱▱▱▱  own  all   17    2026-08-27  [32mKEEP · used[0m
+
+  [36m── MCP SERVERS (tool schemas injected; weight unknown without running them) ──
+──────────────────────────────────────────────────────────[0m
+  [1;31m    ▸ reap  11 items[0m
+NAME       TOK   SRC  PERM  USES  LAST   JUDGMENT
+calendar      ?  usr  -     0     never  [31mREAP · unused[0m
+chat          ?  usr  -     0     never  [31mREAP · unused[0m
+crm           ?  usr  -     0     never  [31mREAP · unused[0m
+email         ?  usr  -     0     never  [31mREAP · unused[0m
+filestore     ?  usr  -     0     never  [31mREAP · unused[0m
+maps          ?  usr  -     0     never  [31mREAP · unused[0m
+metrics       ?  usr  -     0     never  [31mREAP · unused[0m
+search        ?  usr  -     0     never  [31mREAP · unused[0m
+tickets       ?  usr  -     0     never  [31mREAP · unused[0m
+warehouse     ?  usr  -     0     never  [31mREAP · unused[0m
+wiki          ?  usr  -     0     never  [31mREAP · unused[0m
+
+  [1;32m    ▸ keep  1 items[0m
+NAME     TOK   SRC  PERM  USES  LAST        JUDGMENT
+billing     ?  usr  -     8     2026-08-25  [32mKEEP · used[0m
+
+  [36m── AGENTS (description injected every session) ───────────────────────────────
+─────────────────────────────[0m
+  [1;31m    ▸ reap  68 items · ~1305 tok/session[0m
+NAME                  TOK          SRC  PERM  USES  LAST   JUDGMENT
+transcript-inspector  ~21   ▰▰▰▰▰  own  all   0     never  [31mREAP · unused[0m
+transcript-migrator   ~21   ▰▰▰▰▰  own  all   0     never  [31mREAP · unused[0m
+changelog-builder     ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+changelog-checker     ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+changelog-inspector   ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+changelog-migrator    ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+changelog-planner     ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+contract-inspector    ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+contract-migrator     ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+manifest-inspector    ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+manifest-migrator     ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+playlist-inspector    ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+playlist-migrator     ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+timesheet-builder     ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+timesheet-checker     ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+timesheet-inspector   ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+timesheet-migrator    ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+transcript-builder    ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+transcript-checker    ~20   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+backlog-builder       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+backlog-checker       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+backlog-inspector     ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+backlog-migrator      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+backlog-planner       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+catalog-builder       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+catalog-checker       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+catalog-inspector     ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+catalog-migrator      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+catalog-planner       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+contract-builder      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+contract-checker      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+contract-planner      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+dataset-builder       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+dataset-checker       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+dataset-inspector     ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+dataset-migrator      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+invoice-builder       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+invoice-checker       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+invoice-inspector     ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+invoice-migrator      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+ledger-inspector      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+ledger-migrator       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+manifest-builder      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+manifest-checker      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+playlist-builder      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+playlist-checker      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+receipt-builder       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+receipt-checker       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+receipt-inspector     ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+receipt-migrator      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+report-inspector      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+report-migrator       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+roster-inspector      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+roster-migrator       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+schema-inspector      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+schema-migrator       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+sitemap-builder       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+sitemap-checker       ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+sitemap-inspector     ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+sitemap-migrator      ~19   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+ledger-builder        ~18   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+ledger-checker        ~18   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+report-builder        ~18   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+report-checker        ~18   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+roster-builder        ~18   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+roster-checker        ~18   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+schema-builder        ~18   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+schema-checker        ~18   ▰▰▰▰▱  own  all   0     never  [31mREAP · unused[0m
+
+  [33m── 1 warning ──[0m
+    [2m/tmp/skillreaper-fixture: the oldest transcript on disk is 28 days old and c
+leanupPeriodDays is not set, so Claude Code's default of 30 days applies, so the
+ retention sweep is deleting evidence about as fast as it accumulates. Anything 
+used less often than that is invisible here, not merely cold. Raise cleanupPerio
+dDays in settings.json to keep more history.[0m
+
+  [1;31m▸ reap prune[0m  [2m— 371 items · ~22720 tok/session reclaimed[0m
+  [1;33m▸ reap mute[0m  [2m— audit-invoice, audit-dataset (~102 tok total)[0m
+
+  [2mAll estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all[0m
+
+  [2m⟡ skillreaper · github.com/thousandflowers/skillreaper[0m
+

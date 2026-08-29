@@ -1,0 +1,421 @@
+
+  ⟡ skillreaper — evidence-based pruning for your agent stack
+
+  window:  last 30 days · 34 sessions
+
+  ╔════════════════════════════════════════════════════════════════════╗
+  ║  371 items never used · ~22720 dead tokens/session · ~$2.32/month  ║
+  ╚════════════════════════════════════════════════════════════════════╝
+  a floor, not a total: 11 unused items (MCP servers, hooks) carry weight that was never measured
+
+  ⟡ utilization 1%  —  7/378 items fired · ~278/22998 tok touched (30d)
+
+  ── SKILLS (description injected every session) ────────────────────────────────────────────────────────────
+      ▸ reap  292 items · ~21415 tok/session
+NAME                  TOK          SRC  PERM  USES  LAST   JUDGMENT
+import-timesheet      ~185  ▰▰▰▰▰  own  all   0     never  REAP · unused
+render-playlist       ~185  ▰▰▰▰▰  own  all   0     never  REAP · unused
+review-sitemap        ~177  ▰▰▰▰▱  own  all   0     never  REAP · unused
+deploy-dataset        ~163  ▰▰▰▰▱  own  all   0     never  REAP · unused
+validate-manifest     ~159  ▰▰▰▰▱  own  all   0     never  REAP · unused
+parse-contract        ~157  ▰▰▰▰▱  own  all   0     never  REAP · unused
+extract-receipt       ~149  ▰▰▰▰▱  own  all   0     never  REAP · unused
+sync-changelog        ~145  ▰▰▰▱▱  own  all   0     never  REAP · unused
+summarise-timesheet   ~111  ▰▰▰▱▱  own  all   0     never  REAP · unused
+export-timesheet      ~110  ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-timesheet      ~110  ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-timesheet        ~109  ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-sitemap     ~102  ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-sitemap        ~101  ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-sitemap        ~101  ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-sitemap          ~100  ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-schema      ~100  ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-report      ~99   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-report         ~98   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-schema         ~98   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-report         ~98   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-schema         ~98   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-ledger      ~98   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-schema           ~97   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-ledger         ~96   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-report           ~96   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-ledger         ~96   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-ledger           ~95   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-receipt     ~93   ▰▰▱▱▱  own  all   0     never  REAP · unused
+translate-timesheet   ~93   ▰▰▱▱▱  own  all   0     never  REAP · unused
+compress-timesheet    ~92   ▰▰▱▱▱  own  all   0     never  REAP · unused
+scaffold-timesheet    ~92   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-playlist    ~92   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-roster      ~92   ▰▰▱▱▱  own  all   0     never  REAP · unused
+deploy-timesheet      ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-receipt        ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-roster         ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+format-timesheet      ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+parse-timesheet       ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+publish-timesheet     ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-receipt        ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-roster         ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+review-timesheet      ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-invoice     ~91   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-invoice        ~90   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-playlist       ~90   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-receipt          ~90   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-roster           ~90   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-invoice        ~90   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-changelog   ~90   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-changelog      ~89   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-invoice          ~89   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-playlist         ~89   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-changelog      ~89   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-dataset     ~89   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-dataset        ~88   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-changelog        ~88   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-dataset        ~88   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-dataset          ~87   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-manifest    ~84   ▰▰▱▱▱  own  all   0     never  REAP · unused
+translate-sitemap     ~84   ▰▰▱▱▱  own  all   0     never  REAP · unused
+compress-sitemap      ~83   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-manifest       ~83   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-manifest       ~83   ▰▰▱▱▱  own  all   0     never  REAP · unused
+scaffold-sitemap      ~83   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-contract    ~83   ▰▰▱▱▱  own  all   0     never  REAP · unused
+deploy-sitemap        ~82   ▰▰▱▱▱  own  all   0     never  REAP · unused
+format-sitemap        ~82   ▰▰▱▱▱  own  all   0     never  REAP · unused
+import-sitemap        ~82   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-manifest         ~82   ▰▰▱▱▱  own  all   0     never  REAP · unused
+parse-sitemap         ~82   ▰▰▱▱▱  own  all   0     never  REAP · unused
+publish-sitemap       ~82   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-catalog     ~82   ▰▰▱▱▱  own  all   0     never  REAP · unused
+compress-schema       ~81   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-contract       ~81   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-contract       ~81   ▰▰▱▱▱  own  all   0     never  REAP · unused
+translate-report      ~81   ▰▰▱▱▱  own  all   0     never  REAP · unused
+translate-schema      ~81   ▰▰▱▱▱  own  all   0     never  REAP · unused
+compress-report       ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-catalog        ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+format-schema         ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-contract         ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+publish-schema        ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-catalog        ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+review-schema         ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+scaffold-report       ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+scaffold-schema       ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+summarise-backlog     ~80   ▰▰▱▱▱  own  all   0     never  REAP · unused
+compress-ledger       ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+deploy-report         ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+deploy-schema         ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+format-report         ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+import-report         ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+import-schema         ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-catalog          ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+parse-report          ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+parse-schema          ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+publish-report        ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+review-report         ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+translate-ledger      ~79   ▰▰▱▱▱  own  all   0     never  REAP · unused
+export-backlog        ~78   ▰▰▱▱▱  own  all   0     never  REAP · unused
+format-ledger         ~78   ▰▰▱▱▱  own  all   0     never  REAP · unused
+publish-ledger        ~78   ▰▰▱▱▱  own  all   0     never  REAP · unused
+render-backlog        ~78   ▰▰▱▱▱  own  all   0     never  REAP · unused
+review-ledger         ~78   ▰▰▱▱▱  own  all   0     never  REAP · unused
+scaffold-ledger       ~78   ▰▰▱▱▱  own  all   0     never  REAP · unused
+validate-ledger       ~78   ▰▰▱▱▱  own  all   0     never  REAP · unused
+deploy-ledger         ~77   ▰▰▱▱▱  own  all   0     never  REAP · unused
+import-ledger         ~77   ▰▰▱▱▱  own  all   0     never  REAP · unused
+lint-backlog          ~77   ▰▰▱▱▱  own  all   0     never  REAP · unused
+parse-ledger          ~77   ▰▰▱▱▱  own  all   0     never  REAP · unused
+compress-receipt      ~74   ▰▰▱▱▱  own  all   0     never  REAP · unused
+publish-transcript    ~74   ▰▰▱▱▱  own  all   0     never  REAP · unused
+scaffold-transcript   ~74   ▰▰▱▱▱  own  all   0     never  REAP · unused
+translate-receipt     ~74   ▰▰▱▱▱  own  all   0     never  REAP · unused
+translate-roster      ~74   ▰▰▱▱▱  own  all   0     never  REAP · unused
+compress-playlist     ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+compress-roster       ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-transcript     ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-timesheet     ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-receipt        ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-transcript     ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-timesheet     ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-receipt       ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-receipt        ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-receipt      ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-roster       ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+translate-invoice     ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+translate-playlist    ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+validate-receipt      ~73   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-timesheet       ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+compress-changelog    ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+compress-invoice      ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-receipt        ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-roster         ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-playlist       ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-roster         ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-receipt        ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-roster         ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-receipt         ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-roster          ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-playlist      ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-roster        ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-timesheet      ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-playlist       ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-roster         ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-invoice      ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-playlist     ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+translate-changelog   ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+validate-invoice      ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+validate-playlist     ~72   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-invoice        ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-playlist       ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-invoice        ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-invoice        ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-playlist       ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-invoice         ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-playlist        ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-invoice       ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-invoice        ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-changelog    ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-timesheet        ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+translate-dataset     ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+validate-changelog    ~71   ▰▱▱▱▱  own  all   0     never  REAP · unused
+compress-dataset      ~70   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-changelog      ~70   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-changelog      ~70   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-changelog      ~70   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-changelog       ~70   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-changelog     ~70   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-changelog      ~70   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-dataset      ~70   ▰▱▱▱▱  own  all   0     never  REAP · unused
+validate-dataset      ~70   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-dataset        ~69   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-dataset        ~69   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-dataset         ~69   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-dataset       ~69   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-dataset        ~69   ▰▱▱▱▱  own  all   0     never  REAP · unused
+translate-manifest    ~66   ▰▱▱▱▱  own  all   0     never  REAP · unused
+compress-manifest     ~65   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-manifest     ~65   ▰▱▱▱▱  own  all   0     never  REAP · unused
+translate-contract    ~65   ▰▱▱▱▱  own  all   0     never  REAP · unused
+compress-contract     ~64   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-manifest       ~64   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-sitemap       ~64   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-manifest       ~64   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-manifest       ~64   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-sitemap       ~64   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-manifest        ~64   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-manifest      ~64   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-manifest       ~64   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-sitemap         ~63   ▰▱▱▱▱  own  all   0     never  REAP · unused
+compress-catalog      ~63   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-contract       ~63   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-contract      ~63   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-sitemap        ~63   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-contract       ~63   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-contract     ~63   ▰▱▱▱▱  own  all   0     never  REAP · unused
+translate-catalog     ~63   ▰▱▱▱▱  own  all   0     never  REAP · unused
+validate-contract     ~63   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-contract       ~62   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-catalog        ~62   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-contract       ~62   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-catalog       ~62   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-catalog        ~62   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-catalog      ~62   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-sitemap          ~62   ▰▱▱▱▱  own  all   0     never  REAP · unused
+validate-catalog      ~62   ▰▱▱▱▱  own  all   0     never  REAP · unused
+compress-backlog      ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-catalog        ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-report        ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-schema        ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-catalog        ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-report        ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-schema        ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-catalog         ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-schema         ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+translate-backlog     ~61   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-report          ~60   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-schema          ~60   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-backlog        ~60   ▰▱▱▱▱  own  all   0     never  REAP · unused
+publish-backlog       ~60   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-report         ~60   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-backlog        ~60   ▰▱▱▱▱  own  all   0     never  REAP · unused
+scaffold-backlog      ~60   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-schema           ~60   ▰▱▱▱▱  own  all   0     never  REAP · unused
+validate-backlog      ~60   ▰▱▱▱▱  own  all   0     never  REAP · unused
+deploy-backlog        ~59   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-ledger        ~59   ▰▱▱▱▱  own  all   0     never  REAP · unused
+import-backlog        ~59   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-ledger        ~59   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-backlog         ~59   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-ledger         ~59   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-report           ~59   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-ledger          ~58   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-ledger           ~58   ▰▱▱▱▱  own  all   0     never  REAP · unused
+translate-transcript  ~56   ▰▱▱▱▱  own  all   0     never  REAP · unused
+compress-transcript   ~55   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-transcript    ~55   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-transcript    ~55   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-transcript     ~55   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-transcript      ~54   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-roster        ~54   ▰▱▱▱▱  own  all   0     never  REAP · unused
+format-transcript     ~54   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-receipt       ~54   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-roster        ~54   ▰▱▱▱▱  own  all   0     never  REAP · unused
+parse-transcript      ~54   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-receipt        ~54   ▰▱▱▱▱  own  all   0     never  REAP · unused
+review-transcript     ~54   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-transcript       ~54   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-receipt         ~53   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-roster          ~53   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-invoice       ~53   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-playlist      ~53   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-invoice       ~53   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-playlist      ~53   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-playlist       ~53   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-roster         ~53   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-receipt          ~53   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-playlist        ~52   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-changelog     ~52   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-changelog     ~52   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-changelog      ~52   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-invoice        ~52   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-playlist         ~52   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-roster           ~52   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-dataset       ~51   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-dataset       ~51   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-invoice          ~51   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-dataset        ~50   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-dataset          ~49   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-manifest      ~46   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-manifest      ~46   ▰▱▱▱▱  own  all   0     never  REAP · unused
+audit-manifest        ~45   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-contract      ~45   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-contract      ~45   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-manifest       ~45   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-contract       ~44   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-manifest         ~44   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-catalog       ~43   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-catalog       ~43   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-catalog        ~43   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-contract         ~43   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-catalog          ~42   ▰▱▱▱▱  own  all   0     never  REAP · unused
+extract-backlog       ~41   ▰▱▱▱▱  own  all   0     never  REAP · unused
+migrate-backlog       ~41   ▰▱▱▱▱  own  all   0     never  REAP · unused
+resize-backlog        ~41   ▰▱▱▱▱  own  all   0     never  REAP · unused
+sync-backlog          ~40   ▰▱▱▱▱  own  all   0     never  REAP · unused
+summarise-transcript  ~38   ▰▱▱▱▱  own  all   0     never  REAP · unused
+export-transcript     ~36   ▱▱▱▱▱  own  all   0     never  REAP · unused
+render-transcript     ~36   ▱▱▱▱▱  own  all   0     never  REAP · unused
+lint-transcript       ~35   ▱▱▱▱▱  own  all   0     never  REAP · unused
+
+      ▸ mute  2 items · ~102 tok/session
+NAME           TOK          SRC  PERM  USES  LAST        JUDGMENT
+audit-invoice  ~52   ▰▱▱▱▱  own  all   4     2026-08-23  MUTE · heavy-rare
+audit-dataset  ~50   ▰▱▱▱▱  own  all   5     2026-08-24  MUTE · heavy-rare
+
+      ▸ keep  4 items · ~176 tok/session
+NAME             TOK          SRC  PERM  USES  LAST        JUDGMENT
+audit-changelog  ~51   ▰▱▱▱▱  own  all   8     2026-08-25  KEEP · used
+audit-contract   ~43   ▰▱▱▱▱  own  all   6     2026-08-24  KEEP · used
+audit-catalog    ~42   ▰▱▱▱▱  own  all   11    2026-08-26  KEEP · used
+audit-backlog    ~40   ▰▱▱▱▱  own  all   17    2026-08-27  KEEP · used
+
+  ── MCP SERVERS (tool schemas injected; weight unknown without running them) ────────────────────────────────────────────────────────────
+      ▸ reap  11 items
+NAME       TOK   SRC  PERM  USES  LAST   JUDGMENT
+calendar      ?  usr  -     0     never  REAP · unused
+chat          ?  usr  -     0     never  REAP · unused
+crm           ?  usr  -     0     never  REAP · unused
+email         ?  usr  -     0     never  REAP · unused
+filestore     ?  usr  -     0     never  REAP · unused
+maps          ?  usr  -     0     never  REAP · unused
+metrics       ?  usr  -     0     never  REAP · unused
+search        ?  usr  -     0     never  REAP · unused
+tickets       ?  usr  -     0     never  REAP · unused
+warehouse     ?  usr  -     0     never  REAP · unused
+wiki          ?  usr  -     0     never  REAP · unused
+
+      ▸ keep  1 items
+NAME     TOK   SRC  PERM  USES  LAST        JUDGMENT
+billing     ?  usr  -     8     2026-08-25  KEEP · used
+
+  ── AGENTS (description injected every session) ────────────────────────────────────────────────────────────
+      ▸ reap  68 items · ~1305 tok/session
+NAME                  TOK          SRC  PERM  USES  LAST   JUDGMENT
+transcript-inspector  ~21   ▰▰▰▰▰  own  all   0     never  REAP · unused
+transcript-migrator   ~21   ▰▰▰▰▰  own  all   0     never  REAP · unused
+changelog-builder     ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+changelog-checker     ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+changelog-inspector   ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+changelog-migrator    ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+changelog-planner     ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+contract-inspector    ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+contract-migrator     ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+manifest-inspector    ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+manifest-migrator     ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+playlist-inspector    ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+playlist-migrator     ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+timesheet-builder     ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+timesheet-checker     ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+timesheet-inspector   ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+timesheet-migrator    ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+transcript-builder    ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+transcript-checker    ~20   ▰▰▰▰▱  own  all   0     never  REAP · unused
+backlog-builder       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+backlog-checker       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+backlog-inspector     ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+backlog-migrator      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+backlog-planner       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+catalog-builder       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+catalog-checker       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+catalog-inspector     ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+catalog-migrator      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+catalog-planner       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+contract-builder      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+contract-checker      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+contract-planner      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+dataset-builder       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+dataset-checker       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+dataset-inspector     ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+dataset-migrator      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+invoice-builder       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+invoice-checker       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+invoice-inspector     ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+invoice-migrator      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+ledger-inspector      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+ledger-migrator       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+manifest-builder      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+manifest-checker      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+playlist-builder      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+playlist-checker      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+receipt-builder       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+receipt-checker       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+receipt-inspector     ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+receipt-migrator      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+report-inspector      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+report-migrator       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+roster-inspector      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+roster-migrator       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+schema-inspector      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+schema-migrator       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+sitemap-builder       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+sitemap-checker       ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+sitemap-inspector     ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+sitemap-migrator      ~19   ▰▰▰▰▱  own  all   0     never  REAP · unused
+ledger-builder        ~18   ▰▰▰▰▱  own  all   0     never  REAP · unused
+ledger-checker        ~18   ▰▰▰▰▱  own  all   0     never  REAP · unused
+report-builder        ~18   ▰▰▰▰▱  own  all   0     never  REAP · unused
+report-checker        ~18   ▰▰▰▰▱  own  all   0     never  REAP · unused
+roster-builder        ~18   ▰▰▰▰▱  own  all   0     never  REAP · unused
+roster-checker        ~18   ▰▰▰▰▱  own  all   0     never  REAP · unused
+schema-builder        ~18   ▰▰▰▰▱  own  all   0     never  REAP · unused
+schema-checker        ~18   ▰▰▰▰▱  own  all   0     never  REAP · unused
+
+  ── 1 warning ──
+    /tmp/skillreaper-fixture: the oldest transcript on disk is 28 days old and cleanupPeriodDays is not set, so Claude Code's default of 30 days applies, so the retention sweep is deleting evidence about as fast as it accumulates. Anything used less often than that is invisible here, not merely cold. Raise cleanupPeriodDays in settings.json to keep more history.
+
+  ▸ reap prune  — 371 items · ~22720 tok/session reclaimed
+  ▸ reap mute  — audit-invoice, audit-dataset (~102 tok total)
+
+  All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all
+
+  ⟡ skillreaper · github.com/thousandflowers/skillreaper
+

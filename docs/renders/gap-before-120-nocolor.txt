@@ -1,0 +1,11 @@
+
+  ⟡ loaded vs fired — last 30 days · 34 sessions
+
+  CATEGORY   LOADED  FIRED   UTIL                TOKENS
+  skills        298      6     2%   ▱▱▱▱▱▱▱▱▱▱   ~21693 →   278
+  mcp            12      1     8%   ▱▱▱▱▱▱▱▱▱▱         ? →     ?
+  agents         68      0     0%   ▱▱▱▱▱▱▱▱▱▱   ~ 1305 →     0
+  ─────────────────────────────────────────────────────────
+  total         378      7     1%   ▱▱▱▱▱▱▱▱▱▱   ~22998 →   278
+
+  ⟡ mute 2 heavy low-use skills · ~102 tok/session recoverable via `reap mute`

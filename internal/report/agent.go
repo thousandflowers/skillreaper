@@ -64,12 +64,15 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 	// provider updates its list; a format whose whole contract is "paste this
 	// verbatim" must not carry the one number that ages badly. The item count
 	// and the token count are measured facts and survive a price change.
-	fmt.Fprintf(w, "%d never used · ~%d dead tokens/session\n",
-		r.DeadCount, r.DeadTokensPerSession)
+	fmt.Fprintf(w, "%s · ~%d dead tokens/session\n",
+		NewHeadline(r).Line(), r.DeadTokensPerSession)
 
 	dead := deadRows(r)
 	if len(dead) == 0 {
-		fmt.Fprintln(w, "\nNothing unused in this window.")
+		// "unused" was the same conflation as the headline: what is empty here
+		// is the list of items reap will condemn, and items that never fired
+		// can still be held back from it.
+		fmt.Fprintln(w, "\nNothing to prune in this window.")
 	} else {
 		shown := dead
 		if len(shown) > top {
@@ -89,7 +92,7 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 		}
 		tw.flush()
 		if len(dead) > top {
-			fmt.Fprintf(w, "(%d more never-used items not shown — use --json for all)\n", len(dead)-top)
+			fmt.Fprintf(w, "(%d more marked REAP not shown — use --json for all)\n", len(dead)-top)
 		}
 		fmt.Fprintln(w, "\nTo prune: reap prune   (interactive, reversible via reap restore --all)")
 	}

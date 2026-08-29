@@ -42,3 +42,22 @@ jobs:
           ' coverage.txt
       - name: Build
         run: go build ./...
+
+  # docs/renders holds the before/after captures the redesign is argued from.
+  # Generated evidence that nothing re-checks goes stale in silence - the
+  # captures kept showing a headline the binary had stopped printing, and no
+  # test could notice - so the pair is rebuilt here from the released tag and
+  # from HEAD, and a difference fails the build.
+  #
+  # fetch-depth 0 because the "before" side is built from a tag.
+  renders:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Captures match the binaries
+        run: make renders-check

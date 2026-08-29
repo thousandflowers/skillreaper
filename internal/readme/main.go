@@ -81,6 +81,7 @@ type block struct {
 // recovered from the money field rather than restated, so the arithmetic shown
 // is the arithmetic the tool did.
 func blocks(r *report.Report) []block {
+	head := report.NewHeadline(r)
 	loaded, fired := r.Gap.Loaded, r.Gap.Fired
 	dead := r.DeadCount
 	tok := r.DeadTokensPerSession
@@ -103,7 +104,7 @@ pure token waste, paid for on every request before you type anything.`,
 
 		{"mine-costs", fmt.Sprintf(
 			`- %s items loaded
-- %s never used (%s)
+- %s never fired (%s), of which %s marked REAP
 - %s tok/session dead
 - ~%s tok/month burned on irrelevant instructions
 - ~$%.2f/month, ~$%.0f/year - the same waste priced instead of counted
@@ -116,7 +117,8 @@ weakest number here: <code>%s × %d × $%.2f ÷ 1e6</code> - input tokens only, 
 the item and token counts do not. See <a href="#limitations-transparency">Limitations</a>.</sub></p>
 
 <p align="center"><em>Measured on my own setup - %d sessions over %d days, %s. Run <code>reap</code> to see yours.</em></p>`,
-			spaced(loaded), spaced(dead), pctSpaced(dead, loaded), spaced(tok), spaced(roundTo(monthly, 1000)),
+			spaced(loaded), spaced(head.NeverFired), pctSpaced(head.NeverFired, loaded), spaced(dead),
+			spaced(tok), spaced(roundTo(monthly, 1000)),
 			r.MoneyPerMonth, r.MoneyPerMonth*12,
 			spaced(tok), r.SessionsPerMonth, price, price,
 			r.WindowDays, r.Sessions, r.WindowDays, measured)},

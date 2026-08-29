@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -92,10 +93,26 @@ func renderGapAgentString(r *Report) string {
 	return b.String()
 }
 
+// countReapRows counts printed table rows rather than occurrences of the word.
+// These tests used strings.Count(out, "REAP"), which was right only while the
+// word appeared nowhere but the verdict column; the headline names the verdict
+// now, and the count silently gained one.
+var reapRowRE = regexp.MustCompile(`^\d+ {2,}\S+ {2,}.*REAP`)
+
+func countReapRows(out string) int {
+	n := 0
+	for _, l := range strings.Split(out, "\n") {
+		if reapRowRE.MatchString(l) {
+			n++
+		}
+	}
+	return n
+}
+
 func TestRenderAgentExactBytes(t *testing.T) {
 	want := `skillreaper · last 30d · 12 sessions
 2/5 items fired · 40% utilization
-2 never used · ~445 dead tokens/session
+3 never fired · 2 marked REAP · ~445 dead tokens/session
 
 TOKENS  CATEGORY  NAME                          VERDICT  REASON
 300     skill     acme:legacy-schema-migration  REAP     unused
@@ -143,10 +160,10 @@ func TestRenderAgentCapsRowsAtAgentMaxRows(t *testing.T) {
 
 	got := renderAgentString(r)
 
-	if n := strings.Count(got, "REAP"); n != AgentMaxRows {
+	if n := countReapRows(got); n != AgentMaxRows {
 		t.Errorf("rendered %d REAP rows, want AgentMaxRows (%d)", n, AgentMaxRows)
 	}
-	wantMore := fmt.Sprintf("(%d more never-used items not shown — use --json for all)", total-AgentMaxRows)
+	wantMore := fmt.Sprintf("(%d more marked REAP not shown — use --json for all)", total-AgentMaxRows)
 	if !strings.Contains(got, wantMore) {
 		t.Errorf("missing overflow line %q in:\n%s", wantMore, got)
 	}
@@ -188,10 +205,10 @@ func TestRenderAgentTopCapsRowsAndWidths(t *testing.T) {
 
 	got := renderAgentStringTop(r, top)
 
-	if n := strings.Count(got, "REAP"); n != top {
+	if n := countReapRows(got); n != top {
 		t.Errorf("rendered %d REAP rows, want top (%d)", n, top)
 	}
-	wantMore := fmt.Sprintf("(%d more never-used items not shown — use --json for all)", total+1-top)
+	wantMore := fmt.Sprintf("(%d more marked REAP not shown — use --json for all)", total+1-top)
 	if !strings.Contains(got, wantMore) {
 		t.Errorf("missing overflow line %q in:\n%s", wantMore, got)
 	}
@@ -237,7 +254,7 @@ func TestRenderAgentTopBelowOneFallsBackToDefault(t *testing.T) {
 	// The flag layer rejects <1; the renderer must still not divide by it or
 	// render an empty table if it ever gets one.
 	for _, top := range []int{0, -1} {
-		if n := strings.Count(renderAgentStringTop(r, top), "REAP"); n != AgentMaxRows {
+		if n := countReapRows(renderAgentStringTop(r, top)); n != AgentMaxRows {
 			t.Errorf("top=%d rendered %d rows, want the default %d", top, n, AgentMaxRows)
 		}
 	}
@@ -252,9 +269,9 @@ func TestRenderAgentNoDeadRows(t *testing.T) {
 
 	want := `skillreaper · last 30d · 12 sessions
 2/5 items fired · 40% utilization
-0 never used · ~0 dead tokens/session
+3 never fired · 0 marked REAP · ~0 dead tokens/session
 
-Nothing unused in this window.
+Nothing to prune in this window.
 
 measured by skillreaper · github.com/thousandflowers/skillreaper
 `

@@ -291,7 +291,7 @@ func TestRenderText(t *testing.T) {
 	var buf bytes.Buffer
 	RenderText(&buf, fixtureReport(), false)
 	out := buf.String()
-	for _, want := range []string{"dead-skill", "REAP", "KEEP", "never used", "60 sessions"} {
+	for _, want := range []string{"dead-skill", "REAP", "KEEP", "never fired", "marked REAP", "60 sessions"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("text output missing %q", want)
 		}

@@ -114,24 +114,54 @@ func humanChars(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
-// renderPayloadQuality appends the payload-quality section to the gap report.
-// It is a no-op when there is no MCP payload evidence.
-func renderPayloadQuality(w io.Writer, r *Report, paint func(code, s string) string) {
+// renderPayloadQuality lists MCP tools by how much of what they return is
+// signal. It is a no-op when there is no MCP payload evidence.
+//
+// Two things were being spent badly here. The tool name was clipped at 40
+// characters, which on a name like
+// "mcp__plugin_ecc_playwright__browser_navigate" cuts off the part that
+// identifies the tool — while a ten-segment quality bar sat beside it. In real
+// data every quality lands between 93% and 100%, so those bars were ten
+// near-identical columns restating a percentage already on the line. The bar
+// is gone and the name column absorbed the width, so rows now name the tools
+// they are about.
+//
+// "noisy" was a yellow tint on the row. It is a word in its own column now,
+// and the column disappears entirely when nothing is flagged.
+func renderPayloadQuality(w io.Writer, r *Report, width int, paint func(code, s string) string) {
 	if len(r.MCPPayload) == 0 {
 		return
 	}
-	fmt.Fprintf(w, "\n  %s\n", paint(cBold, "⟡ payload quality — when an MCP tool fires, is the result signal or noise?"))
-	fmt.Fprintf(w, "  %s\n\n", paint(cDim, "high firing rate + low quality = context burned every call (not caught by mute)"))
+	fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule("payload quality", width-2)))
+	for _, l := range wrap("When an MCP tool fires, is the result signal or noise? A high firing rate "+
+		"with low quality is context burned on every call, which mute does not catch.",
+		width, "  ", "  ") {
+		fmt.Fprintln(w, paint(cDim, l))
+	}
 
-	fmt.Fprintf(w, "  %-40s %6s %7s   %-12s %10s\n", "TOOL", "CALLS", "QUALITY", "", "AVG")
+	var tools, calls, quality, avg, note []string
 	for _, pr := range r.MCPPayload {
-		tag := ""
+		tools = append(tools, pr.Tool)
+		calls = append(calls, humanNum(pr.Calls))
+		quality = append(quality, fmt.Sprintf("%d%%", pr.QualityPct))
+		avg = append(avg, "~"+avgChars(pr))
 		if pr.Noisy {
-			tag = "  " + paint(cBYell, "⚑ noisy")
+			note = append(note, "noisy")
+			continue
 		}
-		line := fmt.Sprintf("  %-40s %6d %6d%%   %-12s ~%9s",
-			truncate(pr.Tool, 40), pr.Calls, pr.QualityPct, utilBar(pr.QualityPct), avgChars(pr))
-		fmt.Fprintf(w, "%s%s\n", paint(utilColor(pr.QualityPct), line), tag)
+		note = append(note, "")
+	}
+	fmt.Fprintln(w)
+	tbl := layout([]col{
+		{head: "TOOL", flex: true, cells: tools},
+		{head: "CALLS", right: true, cells: calls},
+		{head: "QUALITY", right: true, cells: quality},
+		{head: "AVG", right: true, cells: avg},
+		{head: "NOTE", cells: note},
+	}, width, 2)
+	fmt.Fprintln(w, paint(cDim, tbl[0]))
+	for _, l := range tbl[1:] {
+		fmt.Fprintln(w, l)
 	}
 }
 

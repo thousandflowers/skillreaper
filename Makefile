@@ -16,6 +16,14 @@
 # lives in docs/wordmark.txt and is prepended here, so the whole fence stays
 # generated — a :start marker placed above a hand-kept wordmark would delete it
 # on the first run.
+# The badge carries its own disclaimer, inside the fence. The distinction lived
+# in a <sub> line under the block and in the prose beside it, and neither travels:
+# a reader who sees "1% utilization" at the top and "3.4%" further down concludes
+# one of them is wrong, and the badge is the one that gets screenshotted, linked
+# and pasted into a chat with none of its neighbours. A number that cannot be
+# reproduced has to say so where it is read.
+SAMPLE_NOTE = a generated sample stack, not a real install - run reap for your own numbers
+
 .PHONY: readme-numbers
 readme-numbers:
 	@set -eu; \
@@ -39,7 +47,7 @@ readme-numbers:
 			!inside { print }' README.md > "$$dir/README.md"; \
 		cat "$$dir/README.md" > README.md; \
 	}; \
-	{ cat docs/wordmark.txt; reap -agent | trim; } > "$$dir/numbers.txt"; \
+	{ cat docs/wordmark.txt; echo '$(SAMPLE_NOTE)'; echo; reap -agent | trim; } > "$$dir/numbers.txt"; \
 	reap gap | trim > "$$dir/gap.txt"; \
 	reap | grep utilization | trim > "$$dir/utilization.txt"; \
 	replace numbers "$$dir/numbers.txt"; \
@@ -59,13 +67,58 @@ readme-numbers:
 # One run, decoded once, every figure derived from it — mixing two runs is how
 # the page ended up carrying two different totals for the same stack.
 #
+# CAPTURE replays a stored run instead of measuring again:
+#
+#   make readme-mine CAPTURE=docs/measurements/2026-08-23.json
+#
+# That is how the published figures stay the ones docs/measurements holds and the
+# portfolio quotes. Re-measuring moves them, and a page that cites a run nobody
+# can reproduce is the failure this whole target exists to avoid.
+#
 #   make readme-mine
 #   make readme-mine && git diff --exit-code README.md   # stable within a day
 .PHONY: readme-mine
 readme-mine:
 	@set -eu; \
-	json="$$(mktemp)"; \
-	go run ./cmd/reap -json -no-nudge > "$$json"; \
+	json="$${CAPTURE:-}"; \
+	if [ -n "$$json" ]; then echo "replaying $$json"; else \
+		json="$$(mktemp)"; go run ./cmd/reap -json -no-nudge > "$$json"; fi; \
 	test -s "$$json" || { echo "reap produced no JSON" >&2; exit 1; }; \
 	go run ./internal/readme README.md < "$$json"; \
 	echo "README.md: figures regenerated from this machine's own transcripts"
+
+# Regenerate the before/after captures under docs/renders from two binaries:
+# "before" built from a released tag, "after" from this working tree, both run
+# against the same generated fixture.
+#
+# The fixture is the control, not a compromise. These captures are evidence
+# about the FORM of the report - what a redesign did to it - so the input has to
+# be identical on both sides for the comparison to isolate that variable. A
+# before and an after taken against two different stacks measures the stacks.
+# My own numbers are evidence of a different thing, the finding itself, and they
+# live in docs/measurements and in the README's "my install" block.
+#
+#   make renders                       # rewrite docs/renders/*.txt
+#   make renders BEFORE_REF=v0.6.3     # against an older release
+#   make renders-check                 # fail if the committed captures drifted
+#
+# renders-check exists because generated evidence that nothing re-checks goes
+# stale in silence: the previous captures kept showing a headline the binary had
+# stopped printing, and nothing in the repo could notice. Run it before tagging.
+BEFORE_REF ?= v0.7.0
+
+.PHONY: renders
+renders:
+	@docs/renders/capture.sh docs/renders "$(BEFORE_REF)"
+
+.PHONY: renders-check
+renders-check:
+	@set -eu; \
+	tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	docs/renders/capture.sh "$$tmp" "$(BEFORE_REF)" >/dev/null; \
+	if diff -ru docs/renders "$$tmp" --exclude='*.md' --exclude='*.sh'; then \
+		echo "docs/renders: captures match the binaries"; \
+	else \
+		echo "docs/renders is stale — run: make renders" >&2; exit 1; \
+	fi

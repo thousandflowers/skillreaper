@@ -1,0 +1,78 @@
+
+  [1mskillreaper · last 30 days · 34 sessions · 1 warning below[0m
+
+      [1m371[0m  items never fired, of 378 loaded
+  [1m~22,720[0m  dead tokens per session
+   [1m~$2.32[0m  per month at your usage
+[2m  371 of them marked REAP[0m
+[2m  a floor, not a total: 11 unused items (MCP servers, hooks) carry weight that was never measured[0m
+
+  [1mutilization 1%[0m  7/378 items fired · ~278/22998 tok touched (30d)
+
+  [36m── SKILLS · description injected every session ───────────────────────────────────────────────────[0m
+
+    [1mx  REAP · unused          292 items · ~21,415 tok/session[0m
+[2m       NAME               TOK  SRC  PERM  USES   LAST[0m
+    x  import-timesheet   185  own   all     0  never
+    x  render-playlist    185  own   all     0  never
+    x  review-sitemap     177  own   all     0  never
+    x  deploy-dataset     163  own   all     0  never
+    x  validate-manifest  159  own   all     0  never
+    x  parse-contract     157  own   all     0  never
+    [2m… 286 more · ~20,389 tok/session · full list: reap --md[0m
+
+    [1m~  MUTE · heavy-rare      2 items · ~102 tok/session[0m
+[2m       NAME           TOK  SRC  PERM  USES  LAST[0m
+    ~  audit-invoice   52  own   all     4    6d
+    ~  audit-dataset   50  own   all     5    5d
+
+    [2m=  KEEP · used            4 items · ~176 tok/session[0m
+[2m       NAME             TOK  SRC  PERM  USES  LAST[0m
+    =  audit-changelog   51  own   all     8    4d
+    =  audit-contract    43  own   all     6    5d
+    =  audit-catalog     42  own   all    11    3d
+    =  audit-backlog     40  own   all    17    2d
+
+  [36m── MCP SERVERS · tool schemas injected; weight unknown without running them ──────────────────────[0m
+
+    [1mx  REAP · unused          11 items[0m
+[2m       NAME       TOK  SRC  USES   LAST[0m
+    x  calendar     ?  usr     0  never
+    x  chat         ?  usr     0  never
+    x  crm          ?  usr     0  never
+    x  email        ?  usr     0  never
+    x  filestore    ?  usr     0  never
+    x  maps         ?  usr     0  never
+    [2m… 5 more · full list: reap --md[0m
+
+    [2m=  KEEP · used            1 item[0m
+[2m       NAME     TOK  SRC  USES  LAST[0m
+    =  billing    ?  usr     8    4d
+
+  [36m── AGENTS · description injected every session ───────────────────────────────────────────────────[0m
+
+    [1mx  REAP · unused          68 items · ~1,305 tok/session[0m
+[2m       NAME                  TOK  SRC  PERM  USES   LAST[0m
+    x  transcript-inspector   21  own   all     0  never
+    x  transcript-migrator    21  own   all     0  never
+    x  changelog-builder      20  own   all     0  never
+    x  changelog-checker      20  own   all     0  never
+    x  changelog-inspector    20  own   all     0  never
+    x  changelog-migrator     20  own   all     0  never
+    [2m… 62 more · ~1,183 tok/session · full list: reap --md[0m
+
+  [36m── 1 warning ─────────────────────────────────────────────────────────────────────────────────────[0m
+[2m    /tmp/skillreaper-fixture: the oldest[0m
+[2m      transcript on disk is 28 days old and cleanupPeriodDays is not set, so Claude Code's default[0m
+[2m      of 30 days applies, so the retention sweep is deleting evidence about as fast as it[0m
+[2m      accumulates. Anything used less often than that is invisible here, not merely cold. Raise[0m
+[2m      cleanupPeriodDays in settings.json to keep more history.[0m
+
+  [36m── DO ────────────────────────────────────────────────────────────────────────────────────────────[0m
+    [1mreap prune[0m   371 items · ~22,720 tok/session reclaimed
+    [1mreap mute[0m    2 skills · ~102 tok · audit-invoice, audit-dataset
+
+[2m  All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all[0m
+
+  [2m⟡ skillreaper · github.com/thousandflowers/skillreaper[0m
+

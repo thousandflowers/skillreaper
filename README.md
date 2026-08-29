@@ -7,9 +7,11 @@ S           K           I          L          L
 ##  ##  ##      ##   ## ##      ##      ##  ## 
 ##   ## ####### ##   ## ##      ####### ##   ##
 
+a generated sample stack, not a real install - run reap for your own numbers
+
 skillreaper · last 30d · 34 sessions
 7/378 items fired · 1% utilization
-371 never used · ~22720 dead tokens/session
+371 never fired · 371 marked REAP · ~22720 dead tokens/session
 
 TOKENS  CATEGORY  NAME                 VERDICT  REASON
 185     skill     import-timesheet     REAP     unused
@@ -22,7 +24,7 @@ TOKENS  CATEGORY  NAME                 VERDICT  REASON
 145     skill     sync-changelog       REAP     unused
 111     skill     summarise-timesheet  REAP     unused
 110     skill     export-timesheet     REAP     unused
-(361 more never-used items not shown — use --json for all)
+(361 more marked REAP not shown — use --json for all)
 
 To prune: reap prune   (interactive, reversible via reap restore --all)
 
@@ -109,7 +111,7 @@ prompt-cache hit rate. A typical setup:
 
 <!-- readme-mine-costs:start -->
 - 382 items loaded
-- 367 never used (96 %)
+- 369 never fired (96 %), of which 367 marked REAP
 - 19 755 tok/session dead
 - ~1 087 000 tok/month burned on irrelevant instructions
 - ~$3.26/month, ~$39/year - the same waste priced instead of counted
@@ -276,16 +278,16 @@ how much of what you load you actually use.
 
 <!-- readme-gap:start -->
 ```
-  ⟡ loaded vs fired — last 30 days · 34 sessions
+  ── loaded vs fired · last 30 days · 34 sessions ──────────────────────────────
 
-  CATEGORY   LOADED  FIRED   UTIL                TOKENS
-  skills        298      6     2%   ▱▱▱▱▱▱▱▱▱▱   ~21693 →   278
-  mcp            12      1     8%   ▱▱▱▱▱▱▱▱▱▱         ? →     ?
-  agents         68      0     0%   ▱▱▱▱▱▱▱▱▱▱   ~ 1305 →     0
-  ─────────────────────────────────────────────────────────
-  total         378      7     1%   ▱▱▱▱▱▱▱▱▱▱   ~22998 →   278
+  CATEGORY  LOADED  FIRED  UTIL              TOK LOADED  TOK USED
+  skills       298      6    2%  ▏▱▱▱▱▱▱▱▱▱     ~21,693       278
+  mcp           12      1    8%  ▏▱▱▱▱▱▱▱▱▱           ?         ?
+  agents        68      0    0%  ▱▱▱▱▱▱▱▱▱▱      ~1,305         0
+  ───────────────────────────────────────────────────────────────
+  total        378      7    1%  ▏▱▱▱▱▱▱▱▱▱     ~22,998       278
 
-  ⟡ mute 2 heavy low-use skills · ~102 tok/session recoverable via `reap mute`
+  ~  MUTE — 2 heavy low-use skills, ~102 tok/session recoverable with reap mute
 ```
 <!-- readme-gap:end -->
 
@@ -303,7 +305,7 @@ The default `reap` report also includes a compact utilization summary line:
 
 <!-- readme-utilization:start -->
 ```
-  ⟡ utilization 1%  —  7/378 items fired · ~278/22998 tok touched (30d)
+  utilization 1%  7/378 items fired · ~278/22998 tok touched (30d)
 ```
 <!-- readme-utilization:end -->
 

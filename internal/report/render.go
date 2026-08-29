@@ -245,13 +245,12 @@ func RenderText(w io.Writer, r *Report, color bool) {
 // the emphasis is weight and isolation instead of colour. Nothing in the block
 // is sized from the data, so nothing in it can overflow.
 func renderHeadline(w io.Writer, r *Report, width int, paint func(code, s string) string) {
+	head := NewHeadline(r)
+	deadVal, deadUnit := head.Figure()
 	figs := []struct{ val, unit string }{
-		{humanNum(r.DeadCount), "items never used"},
+		{deadVal, deadUnit},
 		{"~" + humanNum(r.DeadTokensPerSession), "dead tokens per session"},
 		{fmt.Sprintf("~$%.2f", r.MoneyPerMonth), "per month at your usage"},
-	}
-	if r.Gap != nil && r.Gap.Loaded > 0 {
-		figs[0].unit += fmt.Sprintf(", of %s loaded", humanNum(r.Gap.Loaded))
 	}
 	vw := 0
 	for _, f := range figs {
@@ -278,6 +277,13 @@ func renderHeadline(w io.Writer, r *Report, width int, paint func(code, s string
 // and they sit directly under the figures they qualify.
 func headlineNotes(r *Report) []string {
 	var out []string
+	// What the figure above does not say on its own: how many of the items that
+	// never fired reap will actually condemn. Without this line the reader has
+	// to subtract the two counts themselves and gets a number that matches
+	// neither, which is exactly how the old wording read as an arithmetic error.
+	if v := NewHeadline(r).Verdict(); v != "" {
+		out = append(out, v)
+	}
 	// The figures above are an estimate, per session and per item. This is
 	// neither: it is what the provider billed, and the only place the cache
 	// split can be seen. Resident context is paid once as a cache creation and
@@ -556,8 +562,8 @@ func permDisplay(row Row) string {
 func RenderMarkdown(w io.Writer, r *Report) {
 	fmt.Fprintf(w, "# skillreaper report\n\n")
 	fmt.Fprintf(w, "Window: last %d days · %d sessions analyzed\n\n", r.WindowDays, r.Sessions)
-	fmt.Fprintf(w, "**%d items never used · ~%d dead tokens/session · ~$%.2f/month**\n",
-		r.DeadCount, r.DeadTokensPerSession, r.MoneyPerMonth)
+	fmt.Fprintf(w, "**%s · ~%d dead tokens/session · ~$%.2f/month**\n",
+		NewHeadline(r).Line(), r.DeadTokensPerSession, r.MoneyPerMonth)
 	if r.DeadUnknownWeight > 0 {
 		fmt.Fprintf(w, "\nA floor, not a total: %d unused items (MCP servers, hooks) carry weight that was never measured.\n",
 			r.DeadUnknownWeight)

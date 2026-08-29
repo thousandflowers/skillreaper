@@ -1395,7 +1395,7 @@ func TestPlatformWithoutTranscriptsIsNotReapedOnAnotherPlatformsSessions(t *test
 }
 
 // Issue #32. With the config directory unreadable, every scanner returns
-// nothing and the banner prints "0 items never used · ~$0.00/month" with exit
+// nothing and the banner prints "0 items marked REAP · ~$0.00/month" with exit
 // 0, which is exactly what a genuinely clean stack prints. The warnings say the
 // opposite, but the banner is the loudest thing on the page and a wrapping
 // script sees only the exit status.

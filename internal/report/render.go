@@ -157,15 +157,27 @@ One read-only command, 100% local:
   github.com/thousandflowers/skillreaper`
 }
 
+// sectionTitles names each category. title is the single string Markdown has
+// always printed and must keep printing byte for byte. The text report reads
+// the same words as two pieces instead: a short name it can set in a rule, and
+// a gloss it drops when the measure cannot take it. Splitting the string is
+// what lets the heading degrade instead of wrapping.
 var sectionTitles = []struct {
 	cat   scan.Category
 	title string
+	short string
+	gloss string
 }{
-	{scan.CatSkill, "SKILLS (description injected every session)"},
-	{scan.CatMCP, "MCP SERVERS (tool schemas injected; weight unknown without running them)"},
-	{scan.CatAgent, "AGENTS (description injected every session)"},
-	{scan.CatHook, "HOOKS (report-only: output cost varies per event)"},
-	{scan.CatProse, "ALWAYS-LOADED PROSE (CLAUDE.md, rules)"},
+	{scan.CatSkill, "SKILLS (description injected every session)",
+		"SKILLS", "description injected every session"},
+	{scan.CatMCP, "MCP SERVERS (tool schemas injected; weight unknown without running them)",
+		"MCP SERVERS", "tool schemas injected; weight unknown without running them"},
+	{scan.CatAgent, "AGENTS (description injected every session)",
+		"AGENTS", "description injected every session"},
+	{scan.CatHook, "HOOKS (report-only: output cost varies per event)",
+		"HOOKS", "report-only: output cost varies per event"},
+	{scan.CatProse, "ALWAYS-LOADED PROSE (CLAUDE.md, rules)",
+		"ALWAYS-LOADED PROSE", "CLAUDE.md, rules"},
 }
 
 // RenderJSON writes the report as indented JSON.
@@ -176,50 +188,113 @@ func RenderJSON(w io.Writer, r *Report) error {
 }
 
 // RenderText writes the human-readable report. color toggles ANSI codes.
+//
+// The layout is bound to a measured width and nothing may exceed it: every
+// line below is produced by layout, wrapped by wrap, or truncated. The
+// 80-column guarantee is therefore a property of this code rather than of
+// whichever names happen to be installed on the machine it runs on.
+//
+// Colour is emphasis only. Hierarchy is carried by spacing, alignment, order
+// and rules; each verdict is carried by its word and an ASCII glyph. Turning
+// every escape code off changes how the report looks and nothing about what it
+// says, which is what makes NO_COLOR, a monochrome terminal and a pipe safe.
 func RenderText(w io.Writer, r *Report, color bool) {
 	paint := painter(color)
+	width := termWidth(w)
 
-	fmt.Fprintf(w, "\n  %s\n\n", paint(cBold, "⟡ skillreaper — evidence-based pruning for your agent stack"))
-	fmt.Fprintf(w, "  %s  %s",
-		paint(cDim, "window:"), paint(cBold, fmt.Sprintf("last %d days · %d sessions", r.WindowDays, r.Sessions)))
+	// One masthead line: window, evidence quality, and whether caveats follow.
+	// These are one thought — how far the numbers below can be trusted — and a
+	// reader who discovers four warnings only after scrolling past the
+	// verdicts has already read the verdicts wrong.
+	head := fmt.Sprintf("skillreaper · last %d days · %d sessions", r.WindowDays, r.Sessions)
 	if r.MalformedLines > 0 {
-		fmt.Fprintf(w, "  %s", paint(cDim, fmt.Sprintf("(%s)", MalformedSummary(r))))
+		head += " · " + MalformedSummary(r)
 	}
-	fmt.Fprintln(w)
+	if n := len(r.Warnings); n > 0 {
+		head += fmt.Sprintf(" · %d %s below", n, plural(n, "warning"))
+	}
+	fmt.Fprintf(w, "\n  %s\n", paint(cBold, truncate(head, width-2)))
 
 	if r.Sessions == 0 {
-		fmt.Fprintf(w, "\n  %s\n", paint(cYell, "⚠  no transcripts found in window — verdicts unavailable, inventory only."))
+		fmt.Fprintln(w)
+		for _, l := range wrap("no transcripts found in window — verdicts unavailable, inventory only.",
+			width, "  ! ", "    ") {
+			fmt.Fprintln(w, paint(cBold, l))
+		}
 	}
 
-	shockContent := fmt.Sprintf("%d items never used · ~%d dead tokens/session · ~$%.2f/month",
-		r.DeadCount, r.DeadTokensPerSession, r.MoneyPerMonth)
-	blockWidth := utf8.RuneCountInString(shockContent) + 6
-	shockLine := fmt.Sprintf("  ╔%s╗", strings.Repeat("═", blockWidth-2))
-	shockMid := fmt.Sprintf("  ║  %s  ║", shockContent)
-	shockBot := fmt.Sprintf("  ╚%s╝", strings.Repeat("═", blockWidth-2))
-	fmt.Fprintf(w, "\n%s\n%s\n%s\n",
-		paint(cBRed, shockLine),
-		paint(cBold+cBRed, shockMid),
-		paint(cBRed, shockBot))
-	// The box above is an estimate, per session and per item. This is neither:
-	// it is what the provider actually billed over the window, and the only
-	// place the cache split can be seen. Resident context is paid once as a
-	// cache creation and again on every later turn as a cache read, which is
-	// why the read total dwarfs the fresh input — that re-reading is the
-	// mechanism this tool has always asserted and never measured.
+	renderHeadline(w, r, width, paint)
+	renderGapLine(w, r, width, color)
+	renderSections(w, r, width, paint)
+	renderWarnings(w, r, width, paint)
+	renderActions(w, r, width, paint)
+}
+
+// renderHeadline prints the three figures the report exists to deliver.
+//
+// They used to share a single line inside a double-ruled box, separated by
+// interpuncts and painted bright red. Three reading problems in one. The box
+// was sized from its own text, so a wider number pushed it past the terminal
+// and split the rules from the content. The interpuncts ran a count, a rate
+// and a price together as one phrase, so the eye had to parse before it could
+// compare. And the emphasis was hue, which a monochrome terminal, NO_COLOR, a
+// pipe, and a meaningful share of readers all fail to receive.
+//
+// Stacked, right-aligned, one unit named per line: the digits line up so
+// magnitudes compare down the column, each figure says what it measures, and
+// the emphasis is weight and isolation instead of colour. Nothing in the block
+// is sized from the data, so nothing in it can overflow.
+func renderHeadline(w io.Writer, r *Report, width int, paint func(code, s string) string) {
+	figs := []struct{ val, unit string }{
+		{humanNum(r.DeadCount), "items never used"},
+		{"~" + humanNum(r.DeadTokensPerSession), "dead tokens per session"},
+		{fmt.Sprintf("~$%.2f", r.MoneyPerMonth), "per month at your usage"},
+	}
+	if r.Gap != nil && r.Gap.Loaded > 0 {
+		figs[0].unit += fmt.Sprintf(", of %s loaded", humanNum(r.Gap.Loaded))
+	}
+	vw := 0
+	for _, f := range figs {
+		if l := utf8.RuneCountInString(f.val); l > vw {
+			vw = l
+		}
+	}
+	fmt.Fprintln(w)
+	for _, f := range figs {
+		pad := strings.Repeat(" ", vw-utf8.RuneCountInString(f.val))
+		fmt.Fprintf(w, "  %s%s  %s\n", pad, paint(cBold, f.val), truncate(f.unit, width-4-vw))
+	}
+	for _, note := range headlineNotes(r) {
+		for _, l := range wrap(note, width, "  ", "  ") {
+			fmt.Fprintln(w, paint(cDim, l))
+		}
+	}
+}
+
+// headlineNotes are the qualifications on the figures above: what the total
+// leaves out, and what the provider actually billed over the window. They were
+// single lines running past two hundred characters, which at any real terminal
+// width broke into fragments starting at column zero. They are wrapped now,
+// and they sit directly under the figures they qualify.
+func headlineNotes(r *Report) []string {
+	var out []string
+	// The figures above are an estimate, per session and per item. This is
+	// neither: it is what the provider billed, and the only place the cache
+	// split can be seen. Resident context is paid once as a cache creation and
+	// again on every later turn as a cache read, which is why the read total
+	// dwarfs the fresh input — that re-reading is the mechanism this tool has
+	// always asserted and never measured.
 	if r.Measured.Messages > 0 && r.Measured.CacheRead > 0 {
-		fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf(
+		out = append(out, fmt.Sprintf(
 			"measured over the window: %s tokens re-read from cache across %d messages, against %s of fresh input",
-			humanBig(r.Measured.CacheRead), r.Measured.Messages, humanBig(r.Measured.Input))))
+			humanBig(r.Measured.CacheRead), r.Measured.Messages, humanBig(r.Measured.Input)))
 	}
-
-	// Without this line the box reads as the whole bill. It is not: the dead
+	// Without this line the total reads as the whole bill. It is not: the dead
 	// items whose weight could never be measured contribute 0 to it.
 	if r.DeadUnknownWeight > 0 {
-		noun := plural(r.DeadUnknownWeight, "item")
-		fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf(
+		out = append(out, fmt.Sprintf(
 			"a floor, not a total: %d unused %s (MCP servers, hooks) carry weight that was never measured",
-			r.DeadUnknownWeight, noun)))
+			r.DeadUnknownWeight, plural(r.DeadUnknownWeight, "item")))
 	}
 	if r.DeadToolChars > 0 {
 		// DeadToolChars is a total summed across every session; divide to show
@@ -228,148 +303,238 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		if r.Sessions > 1 {
 			perSession = r.DeadToolChars / r.Sessions
 		}
-		fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf("(init: ~%d chars of tool descriptions unused per session)", perSession)))
+		out = append(out, fmt.Sprintf("init: ~%d chars of tool descriptions unused per session", perSession))
 	}
+	return out
+}
 
-	renderGapLine(w, r, color)
-
+// renderSections prints one block per category, in the order a reader acts on
+// them. The rule fills the measure exactly rather than carrying sixty fixed
+// dashes onto whatever width the terminal happens to be.
+func renderSections(w io.Writer, r *Report, width int, paint func(code, s string) string) {
 	for _, sec := range sectionTitles {
 		rows := filterRows(r.Rows, sec.cat)
 		if len(rows) == 0 {
 			continue
 		}
-		fmt.Fprintf(w, "\n  %s\n", paint(cCyan, "── "+sec.title+" "+strings.Repeat("─", 60)))
-		renderSection(w, rows, paint)
-	}
-
-	if len(r.Warnings) > 0 {
-		fmt.Fprintf(w, "\n  %s\n", paint(cYell, fmt.Sprintf("── %d %s ──", len(r.Warnings), plural(len(r.Warnings), "warning"))))
-		for _, warn := range r.Warnings {
-			fmt.Fprintf(w, "    %s\n", paint(cDim, warn.Path+": "+warn.Msg))
+		// The gloss explains why a category costs tokens at all. It earns a
+		// place when there is room for it and costs a wrapped heading when
+		// there is not, so the measure decides rather than the author.
+		title := sec.short
+		if full := sec.short + " · " + sec.gloss; utf8.RuneCountInString(full)+6 <= width-2 {
+			title = full
 		}
+		fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule(title, width-2)))
+		renderGroups(w, rows, width, paint)
 	}
-
-	var muteNames []string
-	var muteTokens int
-	for _, row := range r.Rows {
-		if row.Verdict == VerdictMute {
-			muteNames = append(muteNames, row.Name)
-			muteTokens += row.Tokens
-		}
-	}
-	if r.DeadCount > 0 || len(muteNames) > 0 {
-		fmt.Fprintln(w)
-	}
-	if r.DeadCount > 0 {
-		fmt.Fprintf(w, "  %s  %s\n",
-			paint(cBRed, "▸ reap prune"),
-			paint(cDim, fmt.Sprintf("— %d items · ~%d tok/session reclaimed", r.DeadCount, r.DeadTokensPerSession)))
-	}
-	if len(muteNames) > 0 {
-		fmt.Fprintf(w, "  %s  %s",
-			paint(cBYell, "▸ reap mute"),
-			paint(cDim, fmt.Sprintf("— %s (~%d tok total)", strings.Join(muteNames, ", "), muteTokens)))
-		fmt.Fprintln(w)
-	}
-	fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, "All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all"))
 }
 
-// renderSection prints rows grouped by verdict, with group headers.
-func renderSection(w io.Writer, rows []Row, paint func(code, s string) string) {
-	maxTok := 0
-	for _, r := range rows {
-		if r.Tokens > maxTok {
-			maxTok = r.Tokens
-		}
-	}
+// maxGroupRows caps how many rows of one verdict group the text report prints.
+//
+// A real stack produces 383 rows and the old report printed every one: 469
+// lines, 289 of which said "REAP · unused". That is a single fact repeated 289
+// times, and it buried both the caveats and the command under six screens.
+// Six rows is enough to recognise what a group is made of — rows are sorted
+// heaviest first, so these are the ones worth recognising — and the line after
+// them states exactly how much was withheld and where the rest lives. Nothing
+// is concealed: reap prune lists every candidate before it touches anything,
+// and --json and --md still emit the whole inventory.
+const maxGroupRows = 6
+
+// renderGroups prints one table per verdict, heaviest verdict first.
+func renderGroups(w io.Writer, rows []Row, width int, paint func(code, s string) string) {
 	groups := groupByVerdict(rows)
-	first := true
 	for _, v := range []string{VerdictReap, VerdictMute, VerdictReview, VerdictKeep, VerdictInfo} {
 		items := groups[v]
-		// Skip empty groups (shouldn't happen but guard).
 		if len(items) == 0 {
 			continue
-		}
-
-		// ── Group header ──────────────────────────────────────
-		totalTok := 0
-		for _, r := range items {
-			totalTok += r.Tokens
-		}
-
-		// Total tokens display
-		tokStr := ""
-		if totalTok > 0 {
-			tokStr = fmt.Sprintf(" · ~%d tok/session", totalTok)
-		}
-
-		subColor := cDim
-		subIcon := "·"
-		switch v {
-		case VerdictReap:
-			subColor = cBRed
-			subIcon = "▸"
-		case VerdictMute:
-			subColor = cBYell
-			subIcon = "▸"
-		case VerdictReview:
-			subColor = cBYell
-			subIcon = "▸"
-		case VerdictKeep:
-			subColor = cBGreen
-			subIcon = "▸"
 		}
 
 		label := v
 		if v == VerdictInfo {
 			label = "info"
 		}
-		groupLine := fmt.Sprintf("    %s %s  %d items%s", subIcon, strings.ToLower(label), len(items), tokStr)
-
-		if !first {
-			// Thin separator between groups
-			fmt.Fprintf(w, "\n")
+		// When every row in a group carries the same reason, the reason
+		// belongs to the group rather than to each row. Saying it once here is
+		// what removes a column of 289 identical cells from the page.
+		if reason, same := commonReason(items); same && reason != "" {
+			label += " · " + reason
 		}
-		fmt.Fprintf(w, "  %s\n", paint(subColor, groupLine))
-		first = false
 
-		// ── Column header + rows ──────────────────────────────
-		tw := newTable(w)
-		tw.row("NAME", "TOK", "SRC", "PERM", "USES", "LAST", "JUDGMENT")
-		for _, row := range items {
-			weight := weightDisplay(row.Tokens, maxTok, row.WeightUnknown, paint)
-			src := shortSource(row.Source)
-			perm := permDisplay(row)
-
-			judgment := row.Verdict
-			if row.Reason != "" && row.Verdict != VerdictInfo {
-				judgment = row.Verdict + " · " + row.Reason
-			}
-			switch row.Verdict {
-			case VerdictReap:
-				// Broken skills (invoked, only errored) are louder than plain unused.
-				if row.Reason == ReasonBroken {
-					judgment = paint(cBRed, judgment)
-				} else {
-					judgment = paint(cRed, judgment)
-				}
-			case VerdictMute:
-				judgment = paint(cYell, judgment)
-			case VerdictKeep:
-				judgment = paint(cGreen, judgment)
-			case VerdictReview:
-				judgment = paint(cYell, judgment)
-			}
-
-			uses, last := "-", "-"
-			if row.Verdict != VerdictInfo {
-				uses = fmt.Sprintf("%d", row.Uses)
-				last = humanTime(row.LastUsed)
-			}
-			tw.row(truncate(row.Name, 44), weight, src, perm, uses, last, judgment)
+		total := 0
+		for _, it := range items {
+			total += it.Tokens
 		}
-		tw.flush()
+		head := fmt.Sprintf("%s  %-22s %d %s", mark(v), label, len(items), plural(len(items), "item"))
+		if total > 0 {
+			head += fmt.Sprintf(" · ~%s tok/session", humanNum(total))
+		}
+		// Bold on the two groups that carry an action, dim on the rest. Weight
+		// is the only emphasis a terminal has that a monochrome reader also
+		// receives, so it is spent on the rows a reader is here to act on.
+		emph := cDim
+		if v == VerdictReap || v == VerdictMute {
+			emph = cBold
+		}
+		fmt.Fprintf(w, "\n    %s\n", paint(emph, truncate(head, width-4)))
+
+		shown := items
+		if len(shown) > maxGroupRows {
+			shown = shown[:maxGroupRows]
+		}
+		// The column header is structure, the rows are content: the header is
+		// dimmed so the eye lands on the data first.
+		if tbl := layout(groupColumns(shown), width, 4); len(tbl) > 0 {
+			fmt.Fprintln(w, paint(cDim, tbl[0]))
+			for _, l := range tbl[1:] {
+				fmt.Fprintln(w, l)
+			}
+		}
+
+		if rest := len(items) - len(shown); rest > 0 {
+			restTok := 0
+			for _, it := range items[len(shown):] {
+				restTok += it.Tokens
+			}
+			more := fmt.Sprintf("… %d more", rest)
+			if restTok > 0 {
+				more += fmt.Sprintf(" · ~%s tok/session", humanNum(restTok))
+			}
+			more += " · full list: reap --md"
+			fmt.Fprintf(w, "    %s\n", paint(cDim, truncate(more, width-4)))
+		}
 	}
+}
+
+// groupColumns builds the cells for one verdict group.
+//
+// The empty strings are deliberate. layout drops any column whose cells are
+// all empty, which is what keeps USES, LAST and PERM out of the prose and hook
+// tables instead of printing them there as a field of dashes — and what
+// removes NOTE from a group whose rows all share one reason.
+func groupColumns(rows []Row) []col {
+	n := len(rows)
+	glyph := make([]string, n)
+	name := make([]string, n)
+	tok := make([]string, n)
+	src := make([]string, n)
+	perm := make([]string, n)
+	uses := make([]string, n)
+	last := make([]string, n)
+	note := make([]string, n)
+
+	_, sameReason := commonReason(rows)
+	for i, r := range rows {
+		glyph[i] = mark(r.Verdict)
+		name[i] = r.Name
+		tok[i] = tokens(r.Tokens, r.WeightUnknown)
+		src[i] = shortSource(r.Source)
+		if p := permDisplay(r); p != "-" {
+			perm[i] = p
+		}
+		if r.Verdict != VerdictInfo {
+			uses[i] = fmt.Sprintf("%d", r.Uses)
+			last[i] = age(r.LastUsed)
+		}
+		if !sameReason && r.Verdict != VerdictInfo {
+			note[i] = r.Reason
+		}
+	}
+	return []col{
+		{cells: glyph},
+		{head: "NAME", flex: true, cells: name},
+		{head: "TOK", right: true, cells: tok},
+		{head: "SRC", cells: src, shed: 1},
+		{head: "PERM", right: true, cells: perm, shed: 3},
+		{head: "USES", right: true, cells: uses},
+		{head: "LAST", right: true, cells: last, shed: 2},
+		{head: "NOTE", cells: note},
+	}
+}
+
+// commonReason reports the reason shared by every row, and whether they share
+// one at all.
+func commonReason(rows []Row) (string, bool) {
+	if len(rows) == 0 {
+		return "", false
+	}
+	first := rows[0].Reason
+	for _, r := range rows[1:] {
+		if r.Reason != first {
+			return "", false
+		}
+	}
+	return first, true
+}
+
+// renderWarnings prints the caveats, wrapped with a hanging indent.
+//
+// Each one says the verdicts above may be wrong about an entire platform, and
+// the longest in a real run is 379 characters. Printed as one line it became
+// five ragged rows all starting at column zero, so two adjacent warnings were
+// indistinguishable from one. The hanging indent is what keeps each one a
+// single visual block.
+func renderWarnings(w io.Writer, r *Report, width int, paint func(code, s string) string) {
+	if len(r.Warnings) == 0 {
+		return
+	}
+	title := fmt.Sprintf("%d %s", len(r.Warnings), plural(len(r.Warnings), "warning"))
+	fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule(title, width-2)))
+	for _, warn := range r.Warnings {
+		for _, l := range wrap(warn.Path+": "+warn.Msg, width, "    ", "      ") {
+			fmt.Fprintln(w, paint(cDim, l))
+		}
+	}
+}
+
+// renderActions closes the report with what to do about it.
+//
+// This block is the answer, and in a terminal the end of the output is the
+// part still on screen when the prompt returns — the top has scrolled away. So
+// it repeats the count and the reclaimable weight beside the command that acts
+// on them, which makes the last screenful self-contained: what to run, and
+// what running it buys.
+func renderActions(w io.Writer, r *Report, width int, paint func(code, s string) string) {
+	var muteNames []string
+	muteTokens := 0
+	for _, row := range r.Rows {
+		if row.Verdict == VerdictMute {
+			muteNames = append(muteNames, row.Name)
+			muteTokens += row.Tokens
+		}
+	}
+
+	if r.DeadCount > 0 || len(muteNames) > 0 {
+		fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule("DO", width-2)))
+		type action struct{ cmd, gain string }
+		var acts []action
+		if r.DeadCount > 0 {
+			acts = append(acts, action{"reap prune", fmt.Sprintf("%d %s · ~%s tok/session reclaimed",
+				r.DeadCount, plural(r.DeadCount, "item"), humanNum(r.DeadTokensPerSession))})
+		}
+		if len(muteNames) > 0 {
+			acts = append(acts, action{"reap mute", fmt.Sprintf("%d %s · ~%s tok · %s",
+				len(muteNames), plural(len(muteNames), "skill"), humanNum(muteTokens),
+				strings.Join(muteNames, ", "))})
+		}
+		cw := 0
+		for _, a := range acts {
+			if l := utf8.RuneCountInString(a.cmd); l > cw {
+				cw = l
+			}
+		}
+		for _, a := range acts {
+			pad := strings.Repeat(" ", cw-utf8.RuneCountInString(a.cmd))
+			fmt.Fprintf(w, "    %s%s   %s\n", paint(cBold, a.cmd), pad, truncate(a.gain, width-7-cw))
+		}
+	}
+
+	fmt.Fprintln(w)
+	for _, l := range wrap("All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all",
+		width, "  ", "  ") {
+		fmt.Fprintln(w, paint(cDim, l))
+	}
+	fmt.Fprintln(w)
 }
 
 // permDisplay shows a skill/agent's permission surface: "all" when
@@ -385,29 +550,6 @@ func permDisplay(row Row) string {
 	default:
 		return "-"
 	}
-}
-
-// weightDisplay returns a compact visual representation of token weight:
-// a number like "~248" with a mini bar proportional to maxTok.
-func weightDisplay(tok, maxTok int, unknown bool, _ func(code, s string) string) string {
-	if unknown {
-		return "   ?"
-	}
-	if maxTok == 0 {
-		return fmt.Sprintf("~%d", tok)
-	}
-	// Calculate bar segments: 5 blocks max
-	barPct := float64(tok) / float64(maxTok)
-	filled := int(barPct * 5)
-	if filled < 0 {
-		filled = 0
-	}
-	if filled > 5 {
-		filled = 5
-	}
-	// Unicode block chars: full (▰) and empty (▱)
-	bar := strings.Repeat("▰", filled) + strings.Repeat("▱", 5-filled)
-	return fmt.Sprintf("%-5s %s", fmt.Sprintf("~%d", tok), bar)
 }
 
 // RenderMarkdown writes the report as a shareable Markdown document.

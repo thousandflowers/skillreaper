@@ -483,11 +483,30 @@ func TestRunKeep(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("report exit = %d", code)
 	}
-	if !strings.Contains(out.String(), "KEEP · keep") {
-		t.Errorf("report should show KEEP · keep, got: %s", out.String())
-	}
+	// The text report no longer repeats "VERDICT · reason" on every row — the
+	// verdict names its own group and the reason sits in the NOTE column, so a
+	// group of 289 rows stopped printing the same two words 289 times. The
+	// claim under test is unchanged: deadskill is held at KEEP because the
+	// user kept it. It is now read off the row rather than out of a joined
+	// string.
 	if !strings.Contains(out.String(), "KEEP") {
-		t.Errorf("deadskill should have KEEP verdict")
+		t.Errorf("deadskill should have KEEP verdict, got: %s", out.String())
+	}
+	var row string
+	for _, l := range strings.Split(out.String(), "\n") {
+		if strings.Contains(l, "deadskill") {
+			row = l
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("no deadskill row in report: %s", out.String())
+	}
+	if !strings.HasPrefix(strings.TrimSpace(row), "=") {
+		t.Errorf("deadskill row should carry the KEEP glyph, got %q", row)
+	}
+	if !strings.Contains(row, "keep") {
+		t.Errorf("deadskill row should give the keep reason, got %q", row)
 	}
 }
 

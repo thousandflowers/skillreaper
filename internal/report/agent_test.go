@@ -92,6 +92,10 @@ func renderGapAgentString(r *Report) string {
 	return b.String()
 }
 
+// countReapRows counts printed table rows rather than occurrences of the word.
+// These tests used strings.Count(out, "REAP"), which was right only while the
+// word appeared nowhere but the verdict column; the headline names the verdict
+// now, and the count silently gained one.
 func TestRenderAgentExactBytes(t *testing.T) {
 	want := `skillreaper · last 30d · 12 sessions
 2/5 items fired · 40% utilization

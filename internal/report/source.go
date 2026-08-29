@@ -71,27 +71,39 @@ func SourceTotals(rows []Row) []SourceTotal {
 // items into the handful of decisions behind it. The column is sized from the
 // longest source name, because plugin coordinates run long and a fixed width
 // silently ragged the one line that matters most.
+// The source column used to be sized from the longest name with no upper
+// bound, and plugin coordinates run long: on a real stack that produced lines
+// of 97 columns, so the note saying whether a source can be pruned at all —
+// the one thing the reader is here to learn — wrapped off the right edge. The
+// source is the flexible column now and gives way to the measure, because a
+// truncated plugin coordinate is still recognisable while a wrapped note is
+// not readable at all.
 func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int, humanTok func(int) string) {
 	if len(totals) < 2 {
 		return
 	}
-	width := 0
+	var srcs, items, toks, notes []string
 	for _, t := range totals {
-		if len(t.Source) > width {
-			width = len(t.Source)
-		}
-	}
-	fmt.Fprintf(w, "  by source — %d unused %s came from %d places:\n",
-		deadItems, plural(deadItems, "item"), len(totals))
-	for _, t := range totals {
-		note := fmt.Sprintf("%d prunable here", t.Removable)
+		srcs = append(srcs, t.Source)
+		items = append(items, fmt.Sprintf("%d %s", t.Items, plural(t.Items, "item")))
+		toks = append(toks, "~"+humanTok(t.Tokens)+" tok")
 		if t.Removable == 0 {
 			// reap can see these and cannot touch them: they are registered by
 			// a plugin, and the host agent owns that registration.
-			note = "disable via /plugin"
+			notes = append(notes, "disable via /plugin")
+			continue
 		}
-		fmt.Fprintf(w, "    %-*s  %4d %-6s ~%-8s %s\n",
-			width, t.Source, t.Items, plural(t.Items, "item"), humanTok(t.Tokens)+" tok", note)
+		notes = append(notes, fmt.Sprintf("%d prunable here", t.Removable))
+	}
+	fmt.Fprintf(w, "  by source — %d unused %s came from %d places:\n",
+		deadItems, plural(deadItems, "item"), len(totals))
+	for _, l := range layout([]col{
+		{head: "SOURCE", flex: true, cells: srcs},
+		{head: "ITEMS", right: true, cells: items},
+		{head: "TOKENS", right: true, cells: toks},
+		{head: "ACTION", cells: notes},
+	}, termWidth(w), 4) {
+		fmt.Fprintln(w, l)
 	}
 	fmt.Fprintln(w)
 }

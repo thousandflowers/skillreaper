@@ -197,41 +197,134 @@ func sortCategories(cats map[string]*RouteCategory) []RouteCategory {
 func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 	paint := painter(color)
 	if plan.Skipped {
-		fmt.Fprintf(w, "\n%s\n  %s\n", paint(cBold, "reap route"),
-			paint(cDim, fmt.Sprintf("Only %d skills survive a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first.", plan.TotalSkills, plan.MinSkills)))
+		width := termWidth(w)
+		fmt.Fprintf(w, "\n  %s\n", paint(cBold, "reap route"))
+		for _, l := range wrap(fmt.Sprintf(
+			"Only %d skills survive a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first.",
+			plan.TotalSkills, plan.MinSkills), width, "  ", "  ") {
+			fmt.Fprintln(w, paint(cDim, l))
+		}
 		return
 	}
-	fmt.Fprintf(w, "\n%s\n", paint(cBold, "reap route — usage-informed lazy-load plan (proposed, never applied)"))
-	fmt.Fprintf(w, "  %s\n\n",
-		paint(cDim, fmt.Sprintf("%d skills survive a prune · %d sessions · expose threshold %.0f%%",
-			plan.TotalSkills, plan.Sessions, plan.ExposeThreshold*100)))
+	// Every prose line here ran past 100 columns — the advisory, and the
+	// closing "this is a plan" caveat at 109. Those are the two lines that
+	// stop someone applying a plan they should not, which made them the worst
+	// ones to leave as fragments. They wrap now, and the skill tables are laid
+	// out to the measure instead of to fixed 40- and 36-character clips that
+	// cut names mid-word.
+	width := termWidth(w)
+	fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule("reap route · usage-informed lazy-load plan", width-2)))
+	for _, l := range wrap(fmt.Sprintf(
+		"Proposed, never applied. %d skills survive a prune · %d sessions · expose threshold %.0f%%.",
+		plan.TotalSkills, plan.Sessions, plan.ExposeThreshold*100), width, "  ", "  ") {
+		fmt.Fprintln(w, paint(cDim, l))
+	}
 
 	if plan.BelowFloor {
-		fmt.Fprintf(w, "  %s\n", paint(cBYell, fmt.Sprintf("ⓘ %d skills is below ~%d — native skill loading is usually enough here.", plan.TotalSkills, RouteAdviceFloor)))
-		fmt.Fprintf(w, "  %s\n\n", paint(cDim, "Routing trades a little selection accuracy for token savings. Prune first; route only if context is tight."))
-	}
-
-	fmt.Fprintf(w, "  %s  %s\n", paint(cBold, "EXPOSED"), paint(cDim, fmt.Sprintf("(stay top-level)            ~%s tok resident", humanChars(plan.ExposedTok))))
-	if len(plan.Exposed) == 0 {
-		fmt.Fprintf(w, "    %s\n", paint(cDim, "(none)"))
-	}
-	for _, s := range plan.Exposed {
-		fmt.Fprintf(w, "    %-40s %4d×  %s\n", truncate(s.Name, 40), s.Uses, paint(cDim, ratePct(s.Rate)+"  "+s.Reason))
-	}
-
-	fmt.Fprintf(w, "\n  %s  %s\n", paint(cBold, "ROUTED"), paint(cDim, fmt.Sprintf("(loaded on demand)         ~%s tok deferred", humanChars(plan.RoutedTok))))
-	if len(plan.Categories) == 0 {
-		fmt.Fprintf(w, "    %s\n", paint(cDim, "(none — every surviving skill fires often enough to stay exposed)"))
-	}
-	for _, c := range plan.Categories {
-		fmt.Fprintf(w, "    %s %s\n", paint(cBYell, "▸ "+routeCatLabel(c)), paint(cDim, fmt.Sprintf("~%s tok", humanChars(c.RoutedTok))))
-		for _, s := range c.Skills {
-			fmt.Fprintf(w, "        %-36s %4d×  %s\n", truncate(s.Name, 36), s.Uses, paint(cDim, ratePct(s.Rate)))
+		fmt.Fprintln(w)
+		for _, l := range wrap(fmt.Sprintf(
+			"%d skills is below ~%d — native skill loading is usually enough here. Routing trades a "+
+				"little selection accuracy for token savings. Prune first; route only if context is tight.",
+			plan.TotalSkills, RouteAdviceFloor), width, "  !  ", "     ") {
+			fmt.Fprintln(w, paint(cBold, l))
 		}
 	}
 
-	fmt.Fprintf(w, "\n  %s\n", paint(cBold, fmt.Sprintf("Net: ~%s tok/session moved out of resident context.", humanChars(plan.RoutedTok))))
-	fmt.Fprintf(w, "  %s\n", paint(cDim, "This is a plan — nothing is applied. Pair with `reap mute` to also strip the descriptions of routed skills."))
+	routeGroup(w, width, paint, "EXPOSED", "stay top-level",
+		humanChars(plan.ExposedTok)+" tok resident", plan.Exposed, "(none)", true)
+
+	fmt.Fprintf(w, "\n  %s  %s\n", paint(cBold, "ROUTED"),
+		paint(cDim, fmt.Sprintf("loaded on demand · ~%s tok deferred", humanChars(plan.RoutedTok))))
+	if len(plan.Categories) == 0 {
+		for _, l := range wrap("(none — every surviving skill fires often enough to stay exposed)",
+			width, "     ", "     ") {
+			fmt.Fprintln(w, paint(cDim, l))
+		}
+	}
+	// One table across every category rather than one per category. Each
+	// category had its own header and its own column widths, so three leaf
+	// routers meant three NAME/USES/RATE headers and three different places
+	// the numbers landed — nothing could be compared across them. Laying every
+	// routed skill out together gives one header, one set of columns, and a
+	// category label that reads as a divider inside the table instead of as
+	// the title of a new one.
+	if len(plan.Categories) > 0 {
+		var all []RouteSkill
+		for _, c := range plan.Categories {
+			all = append(all, c.Skills...)
+		}
+		// The column header is dropped here: these rows have the same shape as
+		// the exposed ones a few lines above, which already carry one, and a
+		// second header immediately before a category divider read as though
+		// it belonged to that category rather than to all of them.
+		tbl := routeRows(width, 7, all, false)
+		at := 1
+		for _, c := range plan.Categories {
+			fmt.Fprintf(w, "\n     %s  %s\n", paint(cBold, routeCatLabel(c)),
+				paint(cDim, fmt.Sprintf("~%s tok", humanChars(c.RoutedTok))))
+			for range c.Skills {
+				fmt.Fprintln(w, tbl[at])
+				at++
+			}
+		}
+	}
+
+	fmt.Fprintln(w)
+	for _, l := range wrap(fmt.Sprintf("Net: ~%s tok/session moved out of resident context.",
+		humanChars(plan.RoutedTok)), width, "  ", "  ") {
+		fmt.Fprintln(w, paint(cBold, l))
+	}
+	for _, l := range wrap("A plan only — nothing is applied. Pair with reap mute to strip the "+
+		"descriptions of routed skills as well.", width, "  ", "  ") {
+		fmt.Fprintln(w, paint(cDim, l))
+	}
+}
+
+// routeGroup prints one titled block of skills.
+func routeGroup(w io.Writer, width int, paint func(code, s string) string,
+	title, gloss, weight string, skills []RouteSkill, empty string, reason bool) {
+	fmt.Fprintf(w, "\n  %s  %s\n", paint(cBold, title), paint(cDim, gloss+" · ~"+weight))
+	if len(skills) == 0 {
+		for _, l := range wrap(empty, width, "     ", "     ") {
+			fmt.Fprintln(w, paint(cDim, l))
+		}
+		return
+	}
+	routeTable(w, width, 5, paint, skills, reason)
+}
+
+// routeRows lays skill rows out to the measure and returns them, header first,
+// so a caller can interleave category dividers without losing alignment. The
+// reason column is left empty for routed skills, which all carry the same one
+// — layout then drops it.
+func routeRows(width, indent int, skills []RouteSkill, reason bool) []string {
+	var names, uses, rates, reasons []string
+	for _, s := range skills {
+		names = append(names, s.Name)
+		uses = append(uses, humanNum(s.Uses))
+		rates = append(rates, ratePct(s.Rate))
+		if reason {
+			reasons = append(reasons, s.Reason)
+			continue
+		}
+		reasons = append(reasons, "")
+	}
+	return layout([]col{
+		{head: "NAME", flex: true, cells: names},
+		{head: "USES", right: true, cells: uses},
+		{head: "RATE", right: true, cells: rates},
+		{head: "REASON", cells: reasons},
+	}, width, indent)
+}
+
+// routeTable prints one self-contained block of skills.
+func routeTable(w io.Writer, width, indent int, paint func(code, s string) string,
+	skills []RouteSkill, reason bool) {
+	tbl := routeRows(width, indent, skills, reason)
+	fmt.Fprintln(w, paint(cDim, tbl[0]))
+	for _, l := range tbl[1:] {
+		fmt.Fprintln(w, l)
+	}
 }
 
 // routeCatLabel formats a category header like "ecc (namespace)".

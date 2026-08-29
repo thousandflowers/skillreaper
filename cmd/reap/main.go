@@ -333,7 +333,7 @@ func outOfRangeFlags(opts options) []string {
 	unbounded := math.Inf(1)
 	bounds := []flagBound{
 		// A window of zero or fewer days yields a complete, well-formed,
-		// entirely empty report — "0 items never used" is indistinguishable
+		// entirely empty report — "0 items never fired" is indistinguishable
 		// from a genuinely clean stack, which is the worst way to be wrong.
 		{name: "--days", val: float64(opts.days), min: 1, max: unbounded, why: "a window of zero days produces an empty report that reads like a clean one"},
 		{name: "--min-sessions", val: float64(opts.minSessions), min: 0, max: unbounded},
@@ -880,7 +880,7 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 	}
 	// Nothing inventoried while warnings were raised is a failed scan, and it
 	// renders identically to a genuinely clean stack: the same banner, the same
-	// "0 items never used", the same exit 0. The warnings say otherwise, but the
+	// "0 items never fired", the same exit 0. The warnings say otherwise, but the
 	// banner is the loudest thing on the page and a wrapping script sees only
 	// the status. Name it and exit non-zero so the two can be told apart.
 	// Only a warning that means "I could not read this" turns an empty

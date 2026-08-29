@@ -1,4 +1,12 @@
 # Measurement - 2026-08-23
+#
+# Kept as recorded. The headline below reads "367 items never used" directly
+# above "13/382 items fired": that wording was a defect in the binary named in
+# the header, v0.6.4, where the count under those words was the REAP verdicts
+# and not the items that never fired. v0.8.0 prints both counts - see the
+# CHANGELOG entry "The headline named a count it was not counting". Nothing in
+# this file is corrected: it is what that binary printed on that day, and the
+# numbers it carries are the ones the README and the portfolio quote.
 
 Raw, unedited output. One run, one machine, one binary. Every figure the
 README and the portfolio quote for 'my own installation' comes from this file.

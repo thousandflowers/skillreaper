@@ -1558,7 +1558,7 @@ func TestUnknownModelWarns(t *testing.T) {
 
 // Issue #31. Every numeric flag except --top was passed through unvalidated.
 // The dangerous pair is --days 0 and --days -5: both produced a complete,
-// well-formed, entirely empty report, so "0 items never used" was
+// well-formed, entirely empty report, so "0 items never fired" was
 // indistinguishable from a genuinely clean stack.
 func TestNumericFlagBounds(t *testing.T) {
 	rejected := []struct {

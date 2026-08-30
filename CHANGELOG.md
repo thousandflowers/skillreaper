@@ -113,6 +113,22 @@ still reversible.
   nowhere in the tool, which is not where it is asked. `--json`, `--md` and
   `--agent` are unchanged.
 
+### `reap snapshot` and `reap diff`
+
+A report answers "how does the stack look now". `reap snapshot` writes the run's
+`--json` payload beside the evidence digest, and `reap diff` compares two of
+them, newest against previous by default: what appeared, what left, what changed
+verdict, and the movement in dead tokens and utilization.
+
+The case it exists to catch leads the output: an item that is **back after being
+pruned**. That line is read from the prune manifest, not inferred from the two
+snapshots, so it distinguishes "this tool removed it and it returned" from
+"something is different"; an item you restored yourself is not reported.
+
+No new scanning and no new parser - the payload is exactly what `--json` already
+prints, so a snapshot cannot disagree with the run that produced it. Snapshots
+are never taken automatically.
+
 ### `SOURCE_DATE_EPOCH` pins the clock
 
 `reap` measures its evidence window from the wall clock and renders ages against

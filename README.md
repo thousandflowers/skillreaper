@@ -99,6 +99,8 @@ The whole surface, in the order you use it:
 | | `reap mute <name>` | Strip a heavy rarely-used description, keep the skill callable |
 | **Engineer** | `reap route` | Propose a lazy-load routing plan for a library too big to prune flat |
 | | `reap apm` | Emit a proposed APM `apm.yml`, so a team reproduces one lean set |
+| **Compare** | `reap snapshot` | Keep this run, so a later one has something to be measured against |
+| | `reap diff` | What appeared, left, changed verdict, and did anything come back after a prune |
 
 Everything above the **Act** row is read-only. You can run the entire
 measurement side without changing a single file.
@@ -117,6 +119,8 @@ measurement side without changing a single file.
 | `reap apm` | |
 | `reap manifest <name>` | |
 | `reap share` | |
+| `reap snapshot` <sup>1</sup> | |
+| `reap diff` | |
 
 **Nothing is ever deleted.** `reap prune` moves files into a `reaped/`
 directory with a versioned manifest, `reap mute` keeps a backup of the
@@ -125,9 +129,10 @@ entry, leaving your other hooks alone. Every write is **atomic** (temp file +
 rename) and **confined** to your Claude directory, so an interrupted prune,
 mute, or hook edit leaves the original file intact, never a half-written mix.
 
-<sub><sup>1</sup> The one file a read-only command can write is skillreaper's
-own throttle state, <code>~/.claude/reaped/nudge-state.json</code>: the default
-report touches it only so a hint it already showed you does not repeat. Pass
+<sub><sup>1</sup> The only files a read-only command writes are skillreaper's
+own: <code>~/.claude/reaped/nudge-state.json</code>, which the default report
+touches so a hint it already showed you does not repeat, and the snapshot
+<code>reap snapshot</code> exists to write. Neither touches your stack. Pass
 <code>--no-nudge</code> (or set <code>SKILLREAPER_NO_NUDGE=1</code>) and not
 even that happens. No command in either column sends anything over the
 network.</sub>
@@ -326,6 +331,9 @@ reap route                    # propose a usage-informed lazy-load routing plan 
 reap apm                      # emit a proposed APM apm.yml from this repo's firing
 reap apm --diff apm.yml       # reconcile: what to add (fired, undeclared) / drop (declared, cold)
 reap share                    # print a ready-to-paste line about what you reclaimed
+reap snapshot                 # save this run's --json payload for later comparison
+reap diff                     # compare the newest two snapshots
+reap diff <a> <b>             # compare two named snapshots
 reap manifest <name>          # emit a release manifest for one skill
 reap install-hook             # install weekly nudge (SessionStart hook)
 reap install-hook --dry-run   # preview without writing
@@ -494,6 +502,34 @@ reap apm --diff apm.yml         # reconcile: add fired-but-undeclared, drop decl
 
 <br>
 
+### snapshot and diff - what changed since last time
+
+A report is a photograph. The questions that recur are comparative: did a
+pruned item come back, is the bloat growing or shrinking after a prune.
+
+`reap snapshot` writes the run's `--json` payload beside the evidence digest.
+`reap diff` compares two of them, newest against previous by default, and
+reports what appeared, what left, what changed verdict, and the movement in
+dead tokens and utilization.
+
+The case it exists to catch leads the output: **an item that is back after
+being pruned**. Plugin and marketplace updates reinstall silently, and that
+line is read from the prune manifest rather than guessed from the two
+snapshots, so it says "this tool removed it and it returned" rather than
+"something is different". An item you restored yourself is not reported, since
+that was deliberate.
+
+<pre>reap snapshot            # save this run
+reap diff                # newest vs previous
+reap diff &lt;a&gt; &lt;b&gt;        # two named snapshots
+reap diff --json         # structured output</pre>
+
+Snapshots are never taken automatically. State nobody asked for is the disease
+this tool treats; `reap install-hook` is the place to opt into a periodic one,
+once `diff` has proved useful.
+
+<br>
+
 ### install-hook - the weekly nudge
 
 ```bash
@@ -652,8 +688,6 @@ Tracked as issues, grouped by the problem they solve.
   corpus ([#53](https://github.com/thousandflowers/skillreaper/issues/53));
   measuring wrong-tool picks
   ([#55](https://github.com/thousandflowers/skillreaper/issues/55)).
-- **Over time** - `reap snapshot` / `reap diff` over the existing `--json`
-  payload ([#52](https://github.com/thousandflowers/skillreaper/issues/52)).
 - **Teams** - shared policy with verdicts that stay on each machine
   ([#89](https://github.com/thousandflowers/skillreaper/issues/89)), and a
   hosted view of them

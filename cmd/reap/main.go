@@ -29,6 +29,7 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/report"
 	"github.com/thousandflowers/skillreaper/internal/scan"
+	"github.com/thousandflowers/skillreaper/internal/snapshot"
 	"github.com/thousandflowers/skillreaper/internal/usage"
 )
 
@@ -85,6 +86,8 @@ Usage:
   reap unmute <name>|--all  restore a muted skill's description
   reap restore <id>|--all   undo prune actions
   reap share [flags]        print a ready-to-share message about your savings
+  reap snapshot             save this run's --json payload for later comparison
+  reap diff [<a> [<b>]]     compare two snapshots (default: newest vs previous)
   reap install-hook         add a weekly SessionStart nudge to settings.json
   reap uninstall-hook       remove skillreaper's SessionStart nudge
   reap version              print version
@@ -258,6 +261,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return cmdUninstallHook(opts, stdout, stderr)
 	case "share":
 		return cmdShare(opts, stdout, stderr)
+	case "snapshot":
+		return cmdSnapshot(opts, stdout, stderr)
+	case "diff":
+		return cmdDiff(opts, rest, stdout, stderr)
 	case "nudge":
 		return cmdNudge(opts, stdout, stderr)
 	case "version":
@@ -1631,6 +1638,74 @@ func cmdShare(opts options, stdout, stderr io.Writer) int {
 	default:
 		report.RenderShareText(stdout, total)
 	}
+	return 0
+}
+
+// cmdSnapshot writes this run's report where diff can find it later. It takes
+// no measurement of its own: the payload is exactly what --json prints, so a
+// snapshot can never disagree with the run that produced it.
+func cmdSnapshot(opts options, stdout, stderr io.Writer) int {
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	path, err := snapshot.Save(opts.claudeDir, r, clock.Now())
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "snapshot written: %s\n", path)
+	return 0
+}
+
+// cmdDiff compares two snapshots. With no arguments it takes the newest two,
+// which is the question people actually have; naming both is for going further
+// back. Snapshots are never taken automatically - unasked-for state is the
+// disease this tool treats - so an empty history says how to start one rather
+// than reporting nothing.
+func cmdDiff(opts options, args []string, stdout, stderr io.Writer) int {
+	var from, to string
+	switch len(args) {
+	case 0, 1:
+		saved, err := snapshot.List(opts.claudeDir)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		if len(saved) < 2 {
+			fmt.Fprintf(stderr, "need two snapshots to compare, found %d. take one with: reap snapshot\n", len(saved))
+			return 1
+		}
+		if len(args) == 1 {
+			from, to = args[0], saved[len(saved)-1]
+		} else {
+			from, to = saved[len(saved)-2], saved[len(saved)-1]
+		}
+	default:
+		from, to = args[0], args[1]
+	}
+
+	a, err := snapshot.Load(from)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	b, err := snapshot.Load(to)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+
+	d := snapshot.Compare(a, b, from, to, snapshot.PrunedKeys(opts.claudeDir))
+	if opts.asJSON {
+		if err := snapshot.RenderJSON(stdout, d); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	snapshot.RenderText(stdout, d)
 	return 0
 }
 

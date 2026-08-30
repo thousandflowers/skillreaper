@@ -77,9 +77,114 @@ pure token waste, paid for on every request before you type anything.
 <a href="docs/measurements/">docs/measurements/</a>. Every "on my own installation"
 figure on this page comes from that one run.</sub>
 
-**One command. Zero config. Read-only.** It reads your real session transcripts,
-finds every skill / MCP / agent your AI loads but never fires, and shows you
-exactly what it costs you.
+**One command. Zero config.** It reads your real session transcripts, finds
+every skill / MCP / agent your AI loads but never fires, and shows you exactly
+what it costs you.
+
+<br>
+
+## What it does
+
+skillreaper is a **measuring instrument** for your agent's context window.
+Pruning is one of the things you do with the measurement, not the point of it.
+The whole surface, in the order you use it:
+
+| Stage | Command | What it answers |
+|---|---|---|
+| **Measure** | `reap` | What do I load, what actually fires, what does the dead part cost per session? |
+| | `reap gap` | What share of each category is ever used, and which MCP tools fire but return noise? |
+| | `reap by-project` | Which project is actually firing each skill? |
+| **Decide** | `reap why <name>` | Why did *this* item get *this* verdict, on what evidence? |
+| **Act** | `reap prune` | Quarantine the dead items, reversibly |
+| | `reap mute <name>` | Strip a heavy rarely-used description, keep the skill callable |
+| **Engineer** | `reap route` | Propose a lazy-load routing plan for a library too big to prune flat |
+| | `reap apm` | Emit a proposed APM `apm.yml`, so a team reproduces one lean set |
+
+Everything above the **Act** row is read-only. You can run the entire
+measurement side without changing a single file.
+
+<br>
+
+## What it reads, what it writes
+
+| Read-only, changes nothing | Writes, always reversible |
+|---|---|
+| `reap` <sup>1</sup> | `reap prune` &nbsp;↔&nbsp; `reap restore --all` |
+| `reap gap` | `reap mute <name>` &nbsp;↔&nbsp; `reap unmute <name>` |
+| `reap by-project` | `reap keep <name>` &nbsp;↔&nbsp; `reap keep --remove <name>` |
+| `reap why <name>` | `reap install-hook` &nbsp;↔&nbsp; `reap uninstall-hook` |
+| `reap route` | |
+| `reap apm` | |
+| `reap manifest <name>` | |
+| `reap share` | |
+
+**Nothing is ever deleted.** `reap prune` moves files into a `reaped/`
+directory with a versioned manifest, `reap mute` keeps a backup of the
+description it strips, and `reap uninstall-hook` removes only skillreaper's own
+entry, leaving your other hooks alone. Every write is **atomic** (temp file +
+rename) and **confined** to your Claude directory, so an interrupted prune,
+mute, or hook edit leaves the original file intact, never a half-written mix.
+
+<sub><sup>1</sup> The one file a read-only command can write is skillreaper's
+own throttle state, <code>~/.claude/reaped/nudge-state.json</code>: the default
+report touches it only so a hint it already showed you does not repeat. Pass
+<code>--no-nudge</code> (or set <code>SKILLREAPER_NO_NUDGE=1</code>) and not
+even that happens. No command in either column sends anything over the
+network.</sub>
+
+<br>
+
+## First 60 seconds
+
+Three commands, in this order. Only the third one writes anything, and it
+prints its own undo line.
+
+```bash
+reap                       # 1. measure: what you load, what fires, what it costs
+reap why <name>            # 2. decide: the evidence behind one verdict
+reap prune                 # 3. act: quarantine the dead ones, interactive
+```
+
+**1. `reap`** prints the report at the top of this page. Every row carries a
+verdict:
+
+| Label | Meaning |
+|---|---|
+| **`REAP(broken)`** | Invoked but errored - broken, not just cold |
+| **`REAP`** | Zero uses - safe to quarantine |
+| **`MUTE`** | Used rarely + heavy - description stripped, skill stays available |
+| **`KEEP`** | Used, tiny, or manually protected |
+| **`REVIEW`** | Too new or not enough sessions |
+
+Every verdict includes a reason suffix explaining *why*, and an item whose
+evidence was incomplete stays `REVIEW` rather than being flagged.
+
+**2. `reap why <name>`** is how you argue with a verdict before acting on it.
+It shows the whole case for one item, so you are not trusting a label:
+
+```
+skill:import-timesheet
+
+verdict      REAP(unused)
+reason       zero uses in the evidence window
+token weight ~185 tok  (description: 684 chars)
+sessions     34 total in window
+uses         0
+last seen    never
+installed    unknown
+keep-list    no
+claude-md    not referenced
+→ safe to prune. run: reap prune
+```
+
+**3. `reap prune`** asks before it moves anything, quarantines what you confirm
+into `reaped/`, and ends by printing `reap restore --all`. If a verdict looks
+wrong, `reap keep <name>` protects the item permanently instead.
+
+<p align="center"><sub>The <code>why</code> output above is real, produced
+against the same generated sample stack as the report at the top of this page
+(<a href="docs/gif-helpers/hero-fixture.sh">hero-fixture.sh</a>) - so the item
+names are the fixture's, not anyone's install.</sub></p>
 
 <br>
 
@@ -208,7 +313,7 @@ Upgrading, uninstalling, and platform-specific tips →
 
 ```bash
 reap                          # scan + report (read-only)
-reap gap                      # loaded-vs-fired utilization breakdown
+reap gap                      # loaded-vs-fired utilization + MCP payload quality
 reap prune                    # quarantine REAP items (reversible)
 reap mute <name>              # strip description, keep skill available
 reap unmute <name>            # restore description from backup
@@ -220,7 +325,7 @@ reap by-project               # skills bucketed by the project that fired them
 reap route                    # propose a usage-informed lazy-load routing plan (opt-in)
 reap apm                      # emit a proposed APM apm.yml from this repo's firing
 reap apm --diff apm.yml       # reconcile: what to add (fired, undeclared) / drop (declared, cold)
-reap gap                      # now also scores MCP payload quality (fires-but-noise)
+reap share                    # print a ready-to-paste line about what you reclaimed
 reap manifest <name>          # emit a release manifest for one skill
 reap install-hook             # install weekly nudge (SessionStart hook)
 reap install-hook --dry-run   # preview without writing
@@ -245,31 +350,26 @@ reap version                  # print version
 
 <br>
 
-Everything is **reversible**. `reap prune` moves files to a `reaped/`
-directory with a versioned manifest. Nothing is ever deleted. Run
-`reap restore --all` and everything goes back exactly where it was.
+### share - the number, ready to paste
 
-Every write is **atomic** (temp file + rename) and **confined** to your
-Claude directory, so an interrupted prune, mute, or hook edit leaves the
-original file intact - never a half-written mix.
+`reap share` prints one line about what you reclaimed, with the install command
+under it. Read-only: it measures and prints, nothing else. `--json` and `--md`
+are there for anything that wants to post it automatically.
+
+```
+Just cut ~22.8k tokens/session of dead context from my AI agent with skillreaper.
+One read-only command, 100% local:
+
+  brew install thousandflowers/tap/skillreaper
+  github.com/thousandflowers/skillreaper
+```
+
+<p align="center"><sub>Same generated sample stack as the report at the top of
+this page - the figure is the fixture's, not mine.</sub></p>
 
 <br>
 
 ## Reading the report
-
-### Verdicts
-
-| Label | Meaning |
-|---|---|
-| **`REAP(broken)`** | Invoked but errored - broken, not just cold |
-| **`REAP`** | Zero uses - safe to quarantine |
-| **`MUTE`** | Used rarely + heavy - description stripped, skill stays available |
-| **`KEEP`** | Used, tiny, or manually protected |
-| **`REVIEW`** | Too new or not enough sessions |
-
-Every verdict includes a reason suffix explaining *why*.
-
-<br>
 
 ### Loaded vs fired: measuring context-window utilization
 
@@ -329,6 +429,35 @@ mute does not catch it.
 
 <br>
 
+### by-project - which project actually fires each skill
+
+A skill that looks cold across the whole window is often a skill that is alive
+in exactly one repo. `reap by-project` buckets each fired skill by the project
+that fired it, one row per skill-and-project pair, and marks a skill that fired
+in exactly one project as `repo-local` - the case this view exists for, since a
+per-repo tool should not be read as global dead weight.
+
+```
+  ── skills by project · last 30 days · 34 sessions ────────────────────────────
+
+  SKILL            PROJECT        FIRINGS  NOTE
+  audit-backlog    acme-platform       17  repo-local
+  audit-catalog    acme-platform       11  repo-local
+  audit-changelog  acme-platform        8  repo-local
+  audit-contract   acme-platform        6  repo-local
+  audit-dataset    acme-platform        5  repo-local
+  audit-invoice    acme-platform        4  repo-local
+```
+
+<p align="center"><sub>Same generated sample stack as the blocks above. This
+capture is one of the files <code>make renders-check</code> verifies, so it
+cannot drift from what the binary prints.</sub></p>
+
+<pre>reap by-project          # text table
+reap by-project --json   # JSON output</pre>
+
+<br>
+
 ## Beyond pruning
 
 ### route - context engineering for large tool libraries
@@ -365,7 +494,7 @@ reap apm --diff apm.yml         # reconcile: add fired-but-undeclared, drop decl
 
 <br>
 
-### Weekly nudge
+### install-hook - the weekly nudge
 
 ```bash
 reap install-hook
@@ -380,6 +509,34 @@ skillreaper: 3 skills flagged for pruning since last check. Run reap to review.
 ```
 
 Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.
+
+`reap install-hook --dry-run` prints the exact `settings.json` it would write
+and exits without touching the file. Existing hooks and top-level keys are
+merged, never replaced, and the entry carries a marker comment so
+`reap uninstall-hook` can find and remove only its own line:
+
+```
+dry-run — would write /tmp/skillreaper-fixture/settings.json:
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/tmp/skillreaper-demo/reap' nudge  # skillreaper-weekly-nudge"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+<p align="center"><sub>Real <code>--dry-run</code> output against the same
+generated sample stack, so the two paths are the fixture's and a throwaway
+build's - yours are your Claude directory and wherever <code>reap</code> is
+installed.</sub></p>
 
 `reap uninstall-hook` removes only the skillreaper entry - other hooks untouched.
 
@@ -487,10 +644,9 @@ docs/           demo assets
 
 Tracked as issues, grouped by the problem they solve.
 
-- **Docs** - split read-only from writing commands and add a "First 60 seconds"
-  ([#50](https://github.com/thousandflowers/skillreaper/issues/50)); surface
-  `by-project`, `share` and `install-hook`
-  ([#51](https://github.com/thousandflowers/skillreaper/issues/51)).
+- **Docs** - say inside the report itself that the analysis read local files
+  only and sent nothing over the network, where the claim is read rather than
+  only in this page ([#50](https://github.com/thousandflowers/skillreaper/issues/50)).
 - **Teams** - `reap apm` is what reproduces a lean set across a team, but
   coordinates resolve only from `apm.lock.yaml`, so a repo without one gets
   placeholders. Plus scanning every detected platform, not only Claude Code

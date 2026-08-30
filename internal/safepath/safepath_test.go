@@ -9,6 +9,7 @@ import (
 
 func TestWithinDir(t *testing.T) {
 	root, _ := filepath.Abs(t.TempDir())
+	sep := string(filepath.Separator)
 	cases := []struct {
 		name   string
 		target string
@@ -17,6 +18,8 @@ func TestWithinDir(t *testing.T) {
 		{"itself", root, true},
 		{"child", filepath.Join(root, "a"), true},
 		{"nested child", filepath.Join(root, "a", "b"), true},
+		{"dot-dot remains within", root + sep + "a" + sep + ".." + sep + "b", true},
+		{"dot-dot escapes", root + sep + ".." + sep + filepath.Base(root) + "-outside", false},
 		{"sibling", filepath.Join(filepath.Dir(root), "other"), false},
 		{"parent", filepath.Dir(root), false},
 		{"prefix trick", filepath.Dir(root) + "x", false},
@@ -25,6 +28,15 @@ func TestWithinDir(t *testing.T) {
 		if got := WithinDir(root, c.target); got != c.want {
 			t.Errorf("%s: WithinDir(%q) = %v, want %v", c.name, c.target, got, c.want)
 		}
+	}
+}
+
+func TestWithinDirRejectsEmptyBoundary(t *testing.T) {
+	if WithinDir("", t.TempDir()) {
+		t.Error("expected an empty root not to contain an unrelated target")
+	}
+	if WithinDir(t.TempDir(), "") {
+		t.Error("expected a root not to contain an empty target resolved from the working directory")
 	}
 }
 
@@ -89,7 +101,23 @@ func TestParentWithinForWriteRejectsSymlinkedParentOutsideRoot(t *testing.T) {
 	}
 }
 
-func TestReadRegularFileWithinRejectsFinalSymlink(t *testing.T) {
+func TestExistingRegularFileWithinRejectsFinalSymlink(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "real.json")
+	if err := os.WriteFile(real, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "state.json")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if _, err := ExistingRegularFileWithin(root, link); err == nil {
+		t.Fatal("expected final symlink to be rejected even when it resolves inside root")
+	}
+}
+
+func TestReadRegularFileWithinRejectsSymlinkEscape(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(outside, []byte("{}"), 0o600); err != nil {
@@ -101,7 +129,54 @@ func TestReadRegularFileWithinRejectsFinalSymlink(t *testing.T) {
 	}
 
 	if _, err := ReadRegularFileWithin(root, link, 1024); err == nil {
-		t.Fatal("expected final symlink to be rejected")
+		t.Fatal("expected a read through a symlink outside root to be rejected")
+	}
+}
+
+func TestAtomicWriteFileWithinRejectsSymlinkedParentOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "state")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	outsideTarget := filepath.Join(outside, "config.json")
+	err := AtomicWriteFileWithin(root, filepath.Join(link, "config.json"), []byte("escaped"), 0o600)
+	if err == nil {
+		t.Fatal("expected atomic write through a symlinked parent to be rejected")
+	}
+	if _, statErr := os.Stat(outsideTarget); !os.IsNotExist(statErr) {
+		t.Fatalf("write escaped root: stat outside target: %v", statErr)
+	}
+}
+
+func TestReadRegularFileWithinEnforcesByteCap(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "state.json")
+	if err := os.WriteFile(path, []byte("12345"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ReadRegularFileWithin(root, path, 4); err == nil {
+		t.Fatal("expected an oversized regular file to be rejected")
+	}
+	got, err := ReadRegularFileWithin(root, path, 5)
+	if err != nil {
+		t.Fatalf("read at exact byte cap: %v", err)
+	}
+	if string(got) != "12345" {
+		t.Fatalf("read at exact byte cap = %q, want %q", got, "12345")
+	}
+}
+
+func TestRegularFileHelpersRejectDirectory(t *testing.T) {
+	root := t.TempDir()
+	if _, err := ExistingRegularFileWithin(root, root); err == nil {
+		t.Fatal("expected ExistingRegularFileWithin to reject a directory")
+	}
+	if _, err := ReadRegularFileWithin(root, root, 1024); err == nil {
+		t.Fatal("expected ReadRegularFileWithin to reject a directory")
 	}
 }
 

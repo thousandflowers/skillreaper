@@ -108,6 +108,22 @@ still reversible.
 - The report closes with a `DO` block naming each command beside what running it
   reclaims.
 - Group and action lines say "1 item", not "1 items".
+- The report closes by saying the analysis was local: only files on this machine
+  were read, nothing was sent over the network. The claim was in the README and
+  nowhere in the tool, which is not where it is asked. `--json`, `--md` and
+  `--agent` are unchanged.
+
+### `SOURCE_DATE_EPOCH` pins the clock
+
+`reap` measures its evidence window from the wall clock and renders ages against
+it, so anything generated from a fixture carried a value that moved with the day
+it was produced. Setting `SOURCE_DATE_EPOCH` to a Unix timestamp now pins the
+instant the views are measured against, which is what lets the captures under
+`docs/renders` be compared byte for byte.
+
+Only the views take it. Timestamps that record something that actually happened,
+the quarantine manifest, the lock file and the nudge state, keep the real clock,
+so it can never write a false time into a file. A malformed value is ignored.
 
 ### The headline named a count it was not counting
 

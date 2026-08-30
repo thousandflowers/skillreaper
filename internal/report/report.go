@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thousandflowers/skillreaper/internal/clock"
 	"github.com/thousandflowers/skillreaper/internal/cost"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/usage"
@@ -108,7 +109,7 @@ type Report struct {
 // and totals.
 func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) *Report {
 	r := &Report{
-		GeneratedAt:     time.Now(),
+		GeneratedAt:     clock.Now(),
 		WindowDays:      st.WindowDays,
 		Sessions:        st.Sessions,
 		Measured:        st.Measured,

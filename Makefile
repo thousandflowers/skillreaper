@@ -28,7 +28,8 @@ SAMPLE_NOTE = a generated sample stack, not a real install - run reap for your o
 readme-numbers:
 	@set -eu; \
 	dir="$$(mktemp -d)/hero-claude"; \
-	docs/gif-helpers/hero-fixture.sh "$$dir" >/dev/null; \
+	SOURCE_DATE_EPOCH="$$(docs/gif-helpers/hero-fixture.sh "$$dir")"; \
+	export SOURCE_DATE_EPOCH; \
 	reap() { go run ./cmd/reap -claude-dir "$$dir" -claude-json "$$dir/.claude.json" \
 		-no-nudge -no-color "$$@"; }; \
 	trim() { awk 'NF { seen = 1 } seen { buf[++n] = $$0 } \
@@ -105,6 +106,23 @@ readme-mine:
 # renders-check exists because generated evidence that nothing re-checks goes
 # stale in silence: the previous captures kept showing a headline the binary had
 # stopped printing, and nothing in the repo could notice. Run it before tagging.
+#
+# CHECKED: every capture the working tree produces, byte for byte. reap now
+# takes SOURCE_DATE_EPOCH (#96) and capture.sh pins it to the fixture's own
+# anchor, so the evidence window and the rendered ages no longer depend on when
+# the captures were made. There is no mask and no date filter any more.
+#
+# NOT CHECKED: the *-before-* captures. That side is built from BEFORE_REF, a
+# released binary that predates the variable and therefore still measures its
+# window from the wall clock. Against a fixture frozen on a literal anchor it
+# drops one session per day out of the last-30-days window and the header count
+# walks down, 34 to 33 to 32, so re-running this a week from now would fail on
+# the before side alone while the working tree is perfectly reproducible.
+#
+# They stay committed because they are what the redesign is evidence against,
+# and they cannot change on their own: BEFORE_REF is an immutable tag. Point
+# BEFORE_REF at a release that understands SOURCE_DATE_EPOCH - 0.8.0 is the
+# first - and this exclusion can go, along with this paragraph.
 BEFORE_REF ?= v0.7.0
 
 .PHONY: renders
@@ -117,8 +135,12 @@ renders-check:
 	tmp="$$(mktemp -d)"; \
 	trap 'rm -rf "$$tmp"' EXIT; \
 	docs/renders/capture.sh "$$tmp" "$(BEFORE_REF)" >/dev/null; \
-	if diff -ru docs/renders "$$tmp" --exclude='*.md' --exclude='*.sh'; then \
-		echo "docs/renders: captures match the binaries"; \
+	status=0; \
+	for f in docs/renders/*-after-*.txt; do \
+		diff -u "$$f" "$$tmp/$$(basename "$$f")" || status=1; \
+	done; \
+	if [ "$$status" -eq 0 ]; then \
+		echo "docs/renders: the after captures match the working tree binary"; \
 	else \
 		echo "docs/renders is stale — run: make renders" >&2; exit 1; \
 	fi

@@ -11,16 +11,55 @@
 #        -no-nudge --agent
 set -euo pipefail
 
-# Dates go back N days, and the two date(1) implementations disagree about how
-# to say that: BSD wants -v-3d, GNU wants -d "3 days ago". The script was
-# written on macOS and used the BSD spelling only, so every Linux contributor -
-# and the CI job that rebuilds the captures - failed here before reap was even
-# built, with "date: invalid option -- 'v'".
-if date -v-1d +%Y >/dev/null 2>&1; then
-	days_ago() { date -v-"$1"d "${@:2}"; }          # BSD
-else
-	days_ago() { date -d "$1 days ago" "${@:2}"; }  # GNU
-fi
+# UTC and the C locale for everything below, so neither the machine's zone nor
+# its locale reaches a timestamp, an mtime, or a sort order. touch -t reads its
+# argument in local time, so this has to be exported, not passed per call.
+export TZ=UTC LC_ALL=C
+
+# ANCHOR is the one instant every timestamp in this fixture is measured from,
+# and it is a literal so the fixture is byte-identical on every machine and on
+# every day. It used to be the moment the script ran, which dragged the time of
+# day into a calendar date: built at 01:29 CEST the clock is already 23:29 UTC
+# of the day before, so "3 days ago" resolved to a different UTC date than the
+# same call at 21:35, and the committed captures stopped matching for no reason
+# but the hour.
+#
+# A literal only works because reap now takes SOURCE_DATE_EPOCH (#96). Its
+# evidence window is measured from the wall clock, so against a frozen fixture
+# an unpinned reap would drop one session per day out of the last-30-days
+# window and walk the header count down, 34 to 33 to 32. Anyone running reap
+# against this fixture has to export the epoch printed on stdout below;
+# capture.sh and `make readme-numbers` both do.
+#
+# Midday keeps every whole-day offset far from a boundary in any zone.
+ANCHOR="2026-08-30T12:00:00Z"
+
+# Dates come from python3, not date(1), because the two date(1) implementations
+# share no spelling for "format this instant": BSD wants -r, GNU wants -d @, and
+# neither accepts the other's. This script used the BSD spelling alone once and
+# every Linux contributor - and the CI job that rebuilds the captures - failed
+# here before reap was even built, with "date: invalid option -- 'v'". A second
+# guess at the other dialect is a second chance to be wrong on a machine nobody
+# runs locally, and CI runs `make renders-check` on ubuntu. capture.sh already
+# requires python3, so this costs no new dependency and leaves one code path.
+#
+# In UTC a day is exactly 86400 seconds, so whole-day offsets cannot drift.
+epoch_at() {                          # epoch_at <days-back> -> seconds
+	printf '%s\n' "$((ANCHOR_EPOCH - $1 * 86400))"
+}
+
+ANCHOR_EPOCH="$(python3 -c '
+import datetime, sys
+t = datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ")
+print(int(t.replace(tzinfo=datetime.timezone.utc).timestamp()))
+' "$ANCHOR")"
+
+# days_ago <days-back> <output-format>, the format spelled as date(1) takes it
+days_ago() { python3 -c '
+import datetime, sys
+t = datetime.datetime.fromtimestamp(int(sys.argv[1]), datetime.timezone.utc)
+print(t.strftime(sys.argv[2].lstrip("+")))
+' "$(epoch_at "$1")" "$2"; }
 
 ROOT="${1:-/tmp/hero-claude}"
 rm -rf "$ROOT"
@@ -116,7 +155,7 @@ for i in $(seq 1 34); do
 	# 1..29: day 30 would sit on the window edge and drop out of the count
 	day=$(( (i * 28 / 34) + 1 ))
 	T="$ROOT/projects/acme-platform/session-$i.jsonl"
-	ts="$(days_ago "$day" -u +%Y-%m-%dT%H:%M:%SZ)"
+	ts="$(days_ago "$day" +%Y-%m-%dT%H:%M:%SZ)"
 	: > "$T"
 	for f in "${!fired[@]}"; do
 		# skill 0 fires most often, skill 5 barely: i % (f+2) spreads the rates
@@ -135,3 +174,8 @@ done
 
 printf 'built %s: %d skills, %d agents, %d mcp servers, 34 sessions\n' \
 	"$ROOT" "${#skills[@]}" "$agents" "${#SERVERS[@]}" >&2
+
+# The anchor, on stdout, as the epoch reap wants in SOURCE_DATE_EPOCH. Printed
+# rather than duplicated in every caller: one literal, and no second copy to
+# drift away from it.
+printf '%s\n' "$ANCHOR_EPOCH"

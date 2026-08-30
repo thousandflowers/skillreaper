@@ -15,6 +15,13 @@
 # needs no controlling terminal; the carriage returns it inserts are stripped.
 set -euo pipefail
 
+# The machine's zone and locale must not reach the captures: reap renders the
+# LAST column as a calendar date, and a run in one zone can land it on a
+# different day than the same run in another. LC_ALL pins collation too, since
+# the report sorts names. hero-fixture.sh exports the same pair for its own
+# timestamps; both are set because either script can be run on its own.
+export TZ=UTC LC_ALL=C
+
 out=${1:?usage: capture.sh <outdir> [before-ref]}
 before_ref=${2:-v0.7.0}
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -39,7 +46,12 @@ git -C "$root" worktree add --detach "$work/before" "$before_ref" >/dev/null
 # the same warning at different points and the captures could never match across
 # platforms. CI found exactly that. The path is part of the control now.
 fixture=/tmp/skillreaper-fixture
-"$root/docs/gif-helpers/hero-fixture.sh" "$fixture" >/dev/null
+# The fixture prints the epoch of its own anchor, and reap is pinned to it, so
+# the window it measures and the ages it renders no longer depend on when this
+# runs. The v0.7.0 binary predates the variable and ignores it - see the note on
+# the before captures in the Makefile.
+SOURCE_DATE_EPOCH="$("$root/docs/gif-helpers/hero-fixture.sh" "$fixture")"
+export SOURCE_DATE_EPOCH
 
 pty() {                                   # run "$@" with a pty on stdout
   python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))' "$@"

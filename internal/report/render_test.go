@@ -101,3 +101,28 @@ func TestHumanBigScalesPastThousands(t *testing.T) {
 		}
 	}
 }
+
+// The privacy claim is the one line in the report that exists for a reader who
+// will never open the repository page, so it is pinned here rather than left to
+// whoever next edits the closing block. The machine formats must not carry it:
+// --agent output is pasted verbatim into a conversation and --json is parsed.
+func TestTextReportStatesTheAnalysisWasLocal(t *testing.T) {
+	r := &Report{Sessions: 1}
+
+	// Collapsed, because the line wraps to the terminal width and the claim
+	// would otherwise be asserted only at the widths where it happens to fit.
+	flat := func(s string) string { return strings.Join(strings.Fields(s), " ") }
+	const claim = "Analysis is local: only files on this machine were read, nothing was sent over the network."
+
+	var text bytes.Buffer
+	RenderText(&text, r, false)
+	if !strings.Contains(flat(text.String()), claim) {
+		t.Errorf("the text report must say the analysis was local, got:\n%s", text.String())
+	}
+
+	var agent bytes.Buffer
+	RenderAgent(&agent, r, 10)
+	if strings.Contains(flat(agent.String()), claim) {
+		t.Error("the agent format must stay clean of the privacy line")
+	}
+}

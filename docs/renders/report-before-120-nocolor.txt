@@ -308,15 +308,15 @@ lint-transcript       ~35   ▱▱▱▱▱  own  all   0     never  REAP · unu
 
       ▸ mute  2 items · ~102 tok/session
 NAME           TOK          SRC  PERM  USES  LAST        JUDGMENT
-audit-invoice  ~52   ▰▱▱▱▱  own  all   4     2026-08-23  MUTE · heavy-rare
-audit-dataset  ~50   ▰▱▱▱▱  own  all   5     2026-08-24  MUTE · heavy-rare
+audit-invoice  ~52   ▰▱▱▱▱  own  all   4     2026-08-24  MUTE · heavy-rare
+audit-dataset  ~50   ▰▱▱▱▱  own  all   5     2026-08-25  MUTE · heavy-rare
 
       ▸ keep  4 items · ~176 tok/session
 NAME             TOK          SRC  PERM  USES  LAST        JUDGMENT
-audit-changelog  ~51   ▰▱▱▱▱  own  all   8     2026-08-25  KEEP · used
-audit-contract   ~43   ▰▱▱▱▱  own  all   6     2026-08-24  KEEP · used
-audit-catalog    ~42   ▰▱▱▱▱  own  all   11    2026-08-26  KEEP · used
-audit-backlog    ~40   ▰▱▱▱▱  own  all   17    2026-08-27  KEEP · used
+audit-changelog  ~51   ▰▱▱▱▱  own  all   8     2026-08-26  KEEP · used
+audit-contract   ~43   ▰▱▱▱▱  own  all   6     2026-08-25  KEEP · used
+audit-catalog    ~42   ▰▱▱▱▱  own  all   11    2026-08-27  KEEP · used
+audit-backlog    ~40   ▰▱▱▱▱  own  all   17    2026-08-28  KEEP · used
 
   ── MCP SERVERS (tool schemas injected; weight unknown without running them) ──────────────────────────────────────────
 ──────────────────
@@ -336,7 +336,7 @@ wiki          ?  usr  -     0     never  REAP · unused
 
       ▸ keep  1 items
 NAME     TOK   SRC  PERM  USES  LAST        JUDGMENT
-billing     ?  usr  -     8     2026-08-25  KEEP · used
+billing     ?  usr  -     8     2026-08-26  KEEP · used
 
   ── AGENTS (description injected every session) ────────────────────────────────────────────────────────────
       ▸ reap  68 items · ~1305 tok/session

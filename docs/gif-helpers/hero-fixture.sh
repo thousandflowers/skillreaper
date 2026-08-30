@@ -11,16 +11,40 @@
 #        -no-nudge --agent
 set -euo pipefail
 
-# Dates go back N days, and the two date(1) implementations disagree about how
-# to say that: BSD wants -v-3d, GNU wants -d "3 days ago". The script was
-# written on macOS and used the BSD spelling only, so every Linux contributor -
-# and the CI job that rebuilds the captures - failed here before reap was even
-# built, with "date: invalid option -- 'v'".
-if date -v-1d +%Y >/dev/null 2>&1; then
-	days_ago() { date -v-"$1"d "${@:2}"; }          # BSD
-else
-	days_ago() { date -d "$1 days ago" "${@:2}"; }  # GNU
+# UTC and the C locale for everything below, so neither the machine's zone nor
+# its locale reaches a timestamp, an mtime, or a sort order. touch -t reads its
+# argument in local time, so this has to be exported, not passed per call.
+export TZ=UTC LC_ALL=C
+
+# ANCHOR is the one instant every timestamp in this fixture is measured from.
+#
+# It used to be the moment the script ran, and that dragged the time of day into
+# a calendar date: built at 01:29 CEST the clock is already 23:29 UTC of the day
+# before, so "3 days ago" resolved to a different UTC date than the same call at
+# 21:35, and the committed captures stopped matching for no reason but the hour.
+# Midday UTC is the farthest an anchor can sit from either boundary, so no whole
+# -day offset below can cross one.
+#
+# The anchor is today's date and not a hardcoded constant because reap windows
+# its evidence on time.Now(): freeze these sessions and they leave the 30-day
+# window one per day, taking the session count in the header down with them -
+# 34, then 33, then 32. Fixing that needs a clock injection point in reap, which
+# is #96; until then the LAST column is what renders-check excludes.
+ANCHOR="$(date -u +%Y-%m-%d)T12:00:00Z"
+
+# Offsets are plain epoch arithmetic rather than each date(1)'s own relative-date
+# dialect: only the two lines that read a date are implementation-specific, and
+# in UTC a day is always exactly 86400 seconds, so no offset can drift.
+if date -v-1d +%Y >/dev/null 2>&1; then                                     # BSD
+	ANCHOR_EPOCH="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$ANCHOR" +%s)"
+	at_epoch() { date -u -r "$1" "$2"; }
+else                                                                        # GNU
+	ANCHOR_EPOCH="$(date -u -d "$ANCHOR" +%s)"
+	at_epoch() { date -u -d "@$1" "$2"; }
 fi
+
+# days_ago <days-back> <output-format>
+days_ago() { at_epoch "$((ANCHOR_EPOCH - $1 * 86400))" "$2"; }
 
 ROOT="${1:-/tmp/hero-claude}"
 rm -rf "$ROOT"
@@ -116,7 +140,7 @@ for i in $(seq 1 34); do
 	# 1..29: day 30 would sit on the window edge and drop out of the count
 	day=$(( (i * 28 / 34) + 1 ))
 	T="$ROOT/projects/acme-platform/session-$i.jsonl"
-	ts="$(days_ago "$day" -u +%Y-%m-%dT%H:%M:%SZ)"
+	ts="$(days_ago "$day" +%Y-%m-%dT%H:%M:%SZ)"
 	: > "$T"
 	for f in "${!fired[@]}"; do
 		# skill 0 fires most often, skill 5 barely: i % (f+2) spreads the rates

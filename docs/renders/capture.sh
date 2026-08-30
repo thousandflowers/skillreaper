@@ -15,6 +15,13 @@
 # needs no controlling terminal; the carriage returns it inserts are stripped.
 set -euo pipefail
 
+# The machine's zone and locale must not reach the captures: reap renders the
+# LAST column as a calendar date, and a run in one zone can land it on a
+# different day than the same run in another. LC_ALL pins collation too, since
+# the report sorts names. hero-fixture.sh exports the same pair for its own
+# timestamps; both are set because either script can be run on its own.
+export TZ=UTC LC_ALL=C
+
 out=${1:?usage: capture.sh <outdir> [before-ref]}
 before_ref=${2:-v0.7.0}
 root=$(cd "$(dirname "$0")/../.." && pwd)

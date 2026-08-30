@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/banner"
+	"github.com/thousandflowers/skillreaper/internal/clock"
 	"github.com/thousandflowers/skillreaper/internal/cost"
 	"github.com/thousandflowers/skillreaper/internal/evidence"
 	"github.com/thousandflowers/skillreaper/internal/hook"
@@ -514,7 +515,7 @@ func gather(opts options) (*report.Report, error) {
 
 	items = dedupeByPath(items)
 
-	cutoff := time.Now().AddDate(0, 0, -opts.days)
+	cutoff := clock.Now().AddDate(0, 0, -opts.days)
 
 	var st *usage.Stats
 	// The durable evidence record, loaded before any parsing so transcripts
@@ -1601,7 +1602,7 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 		WindowDays:    opts.days,
 		Muted:         muted,
 		ClaudeMDRef:   claudeMD,
-		Now:           time.Now(),
+		Now:           clock.Now(),
 	})
 
 	if opts.asJSON {

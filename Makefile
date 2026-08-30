@@ -28,7 +28,8 @@ SAMPLE_NOTE = a generated sample stack, not a real install - run reap for your o
 readme-numbers:
 	@set -eu; \
 	dir="$$(mktemp -d)/hero-claude"; \
-	docs/gif-helpers/hero-fixture.sh "$$dir" >/dev/null; \
+	SOURCE_DATE_EPOCH="$$(docs/gif-helpers/hero-fixture.sh "$$dir")"; \
+	export SOURCE_DATE_EPOCH; \
 	reap() { go run ./cmd/reap -claude-dir "$$dir" -claude-json "$$dir/.claude.json" \
 		-no-nudge -no-color "$$@"; }; \
 	trim() { awk 'NF { seen = 1 } seen { buf[++n] = $$0 } \
@@ -106,25 +107,22 @@ readme-mine:
 # stale in silence: the previous captures kept showing a headline the binary had
 # stopped printing, and nothing in the repo could notice. Run it before tagging.
 #
-# EXCLUDED FROM THE COMPARISON: the LAST column, and only that column. Every
-# other byte of every capture is compared as it is.
+# CHECKED: every capture the working tree produces, byte for byte. reap now
+# takes SOURCE_DATE_EPOCH (#96) and capture.sh pins it to the fixture's own
+# anchor, so the evidence window and the rendered ages no longer depend on when
+# the captures were made. There is no mask and no date filter any more.
 #
-# Why: the fixture has to anchor its sessions to today, because reap windows its
-# evidence on time.Now() (cmd/reap/main.go, `cutoff := time.Now().AddDate(...)`).
-# Freeze the fixture on a literal date instead and its sessions fall out of the
-# 30-day window one per day, taking the header count with them - 34 sessions,
-# then 33, then 32. But reap renders LAST as an absolute calendar date, so an
-# anchor that moves with today puts a different date in that column on every day
-# the captures are regenerated. Deterministic everywhere except the one column
-# that cannot be, so the mask below neutralises that column on BOTH sides before
-# diffing. It matches a date sitting between the USES column and the two-space
-# gap before JUDGMENT, which is the only place a date appears in these files -
-# it is not a general date filter, and it is not a permissive diff.
+# NOT CHECKED: the *-before-* captures. That side is built from BEFORE_REF, a
+# released binary that predates the variable and therefore still measures its
+# window from the wall clock. Against a fixture frozen on a literal anchor it
+# drops one session per day out of the last-30-days window and the header count
+# walks down, 34 to 33 to 32, so re-running this a week from now would fail on
+# the before side alone while the working tree is perfectly reproducible.
 #
-# The real fix is a clock injection point in reap (SOURCE_DATE_EPOCH, or the
-# corpus-relative window of #53), after which the fixture takes a literal anchor,
-# LAST compares byte for byte, and the mask and this comment both get deleted:
-# https://github.com/thousandflowers/skillreaper/issues/96
+# They stay committed because they are what the redesign is evidence against,
+# and they cannot change on their own: BEFORE_REF is an immutable tag. Point
+# BEFORE_REF at a release that understands SOURCE_DATE_EPOCH - 0.8.0 is the
+# first - and this exclusion can go, along with this paragraph.
 BEFORE_REF ?= v0.7.0
 
 .PHONY: renders
@@ -136,18 +134,13 @@ renders-check:
 	@set -eu; \
 	tmp="$$(mktemp -d)"; \
 	trap 'rm -rf "$$tmp"' EXIT; \
-	docs/renders/capture.sh "$$tmp/fresh" "$(BEFORE_REF)" >/dev/null; \
-	mask() { \
-		mkdir -p "$$2"; \
-		for f in "$$1"/*.txt; do \
-			sed -E 's/([0-9][[:space:]]+)[0-9]{4}-[0-9]{2}-[0-9]{2}([[:space:]][[:space:]])/\1<LASTDATE>\2/g' \
-				"$$f" > "$$2/$$(basename "$$f")"; \
-		done; \
-	}; \
-	mask docs/renders "$$tmp/committed"; \
-	mask "$$tmp/fresh" "$$tmp/regenerated"; \
-	if diff -ru "$$tmp/committed" "$$tmp/regenerated"; then \
-		echo "docs/renders: captures match the binaries (LAST column excluded, see #96)"; \
+	docs/renders/capture.sh "$$tmp" "$(BEFORE_REF)" >/dev/null; \
+	status=0; \
+	for f in docs/renders/*-after-*.txt; do \
+		diff -u "$$f" "$$tmp/$$(basename "$$f")" || status=1; \
+	done; \
+	if [ "$$status" -eq 0 ]; then \
+		echo "docs/renders: the after captures match the working tree binary"; \
 	else \
 		echo "docs/renders is stale — run: make renders" >&2; exit 1; \
 	fi

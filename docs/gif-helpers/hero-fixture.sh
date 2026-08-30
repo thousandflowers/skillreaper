@@ -16,21 +16,23 @@ set -euo pipefail
 # argument in local time, so this has to be exported, not passed per call.
 export TZ=UTC LC_ALL=C
 
-# ANCHOR is the one instant every timestamp in this fixture is measured from.
+# ANCHOR is the one instant every timestamp in this fixture is measured from,
+# and it is a literal so the fixture is byte-identical on every machine and on
+# every day. It used to be the moment the script ran, which dragged the time of
+# day into a calendar date: built at 01:29 CEST the clock is already 23:29 UTC
+# of the day before, so "3 days ago" resolved to a different UTC date than the
+# same call at 21:35, and the committed captures stopped matching for no reason
+# but the hour.
 #
-# It used to be the moment the script ran, and that dragged the time of day into
-# a calendar date: built at 01:29 CEST the clock is already 23:29 UTC of the day
-# before, so "3 days ago" resolved to a different UTC date than the same call at
-# 21:35, and the committed captures stopped matching for no reason but the hour.
-# Midday UTC is the farthest an anchor can sit from either boundary, so no whole
-# -day offset below can cross one.
+# A literal only works because reap now takes SOURCE_DATE_EPOCH (#96). Its
+# evidence window is measured from the wall clock, so against a frozen fixture
+# an unpinned reap would drop one session per day out of the last-30-days
+# window and walk the header count down, 34 to 33 to 32. Anyone running reap
+# against this fixture has to export the epoch printed on stdout below;
+# capture.sh and `make readme-numbers` both do.
 #
-# The anchor is today's date and not a hardcoded constant because reap windows
-# its evidence on time.Now(): freeze these sessions and they leave the 30-day
-# window one per day, taking the session count in the header down with them -
-# 34, then 33, then 32. Fixing that needs a clock injection point in reap, which
-# is #96; until then the LAST column is what renders-check excludes.
-ANCHOR="$(date -u +%Y-%m-%d)T12:00:00Z"
+# Midday keeps every whole-day offset far from a boundary in any zone.
+ANCHOR="2026-08-30T12:00:00Z"
 
 # Offsets are plain epoch arithmetic rather than each date(1)'s own relative-date
 # dialect: only the two lines that read a date are implementation-specific, and
@@ -159,3 +161,8 @@ done
 
 printf 'built %s: %d skills, %d agents, %d mcp servers, 34 sessions\n' \
 	"$ROOT" "${#skills[@]}" "$agents" "${#SERVERS[@]}" >&2
+
+# The anchor, on stdout, as the epoch reap wants in SOURCE_DATE_EPOCH. Printed
+# rather than duplicated in every caller: one literal, and no second copy to
+# drift away from it.
+printf '%s\n' "$ANCHOR_EPOCH"

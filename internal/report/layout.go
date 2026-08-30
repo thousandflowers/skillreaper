@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/thousandflowers/skillreaper/internal/banner"
+	"github.com/thousandflowers/skillreaper/internal/clock"
 )
 
 // Width limits for the text report.
@@ -150,7 +151,7 @@ func age(t time.Time) string {
 	if t.IsZero() {
 		return "never"
 	}
-	d := int(time.Since(t).Hours() / 24)
+	d := int(clock.Now().Sub(t).Hours() / 24)
 	switch {
 	case d <= 0:
 		return "today"

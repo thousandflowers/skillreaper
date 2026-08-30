@@ -46,7 +46,12 @@ git -C "$root" worktree add --detach "$work/before" "$before_ref" >/dev/null
 # the same warning at different points and the captures could never match across
 # platforms. CI found exactly that. The path is part of the control now.
 fixture=/tmp/skillreaper-fixture
-"$root/docs/gif-helpers/hero-fixture.sh" "$fixture" >/dev/null
+# The fixture prints the epoch of its own anchor, and reap is pinned to it, so
+# the window it measures and the ages it renders no longer depend on when this
+# runs. The v0.7.0 binary predates the variable and ignores it - see the note on
+# the before captures in the Makefile.
+SOURCE_DATE_EPOCH="$("$root/docs/gif-helpers/hero-fixture.sh" "$fixture")"
+export SOURCE_DATE_EPOCH
 
 pty() {                                   # run "$@" with a pty on stdout
   python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))' "$@"

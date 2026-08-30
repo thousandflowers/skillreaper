@@ -34,19 +34,32 @@ export TZ=UTC LC_ALL=C
 # Midday keeps every whole-day offset far from a boundary in any zone.
 ANCHOR="2026-08-30T12:00:00Z"
 
-# Offsets are plain epoch arithmetic rather than each date(1)'s own relative-date
-# dialect: only the two lines that read a date are implementation-specific, and
-# in UTC a day is always exactly 86400 seconds, so no offset can drift.
-if date -v-1d +%Y >/dev/null 2>&1; then                                     # BSD
-	ANCHOR_EPOCH="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$ANCHOR" +%s)"
-	at_epoch() { date -u -r "$1" "$2"; }
-else                                                                        # GNU
-	ANCHOR_EPOCH="$(date -u -d "$ANCHOR" +%s)"
-	at_epoch() { date -u -d "@$1" "$2"; }
-fi
+# Dates come from python3, not date(1), because the two date(1) implementations
+# share no spelling for "format this instant": BSD wants -r, GNU wants -d @, and
+# neither accepts the other's. This script used the BSD spelling alone once and
+# every Linux contributor - and the CI job that rebuilds the captures - failed
+# here before reap was even built, with "date: invalid option -- 'v'". A second
+# guess at the other dialect is a second chance to be wrong on a machine nobody
+# runs locally, and CI runs `make renders-check` on ubuntu. capture.sh already
+# requires python3, so this costs no new dependency and leaves one code path.
+#
+# In UTC a day is exactly 86400 seconds, so whole-day offsets cannot drift.
+epoch_at() {                          # epoch_at <days-back> -> seconds
+	printf '%s\n' "$((ANCHOR_EPOCH - $1 * 86400))"
+}
 
-# days_ago <days-back> <output-format>
-days_ago() { at_epoch "$((ANCHOR_EPOCH - $1 * 86400))" "$2"; }
+ANCHOR_EPOCH="$(python3 -c '
+import datetime, sys
+t = datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ")
+print(int(t.replace(tzinfo=datetime.timezone.utc).timestamp()))
+' "$ANCHOR")"
+
+# days_ago <days-back> <output-format>, the format spelled as date(1) takes it
+days_ago() { python3 -c '
+import datetime, sys
+t = datetime.datetime.fromtimestamp(int(sys.argv[1]), datetime.timezone.utc)
+print(t.strftime(sys.argv[2].lstrip("+")))
+' "$(epoch_at "$1")" "$2"; }
 
 ROOT="${1:-/tmp/hero-claude}"
 rm -rf "$ROOT"

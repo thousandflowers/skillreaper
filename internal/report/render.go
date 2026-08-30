@@ -540,6 +540,16 @@ func renderActions(w io.Writer, r *Report, width int, paint func(code, s string)
 		width, "  ", "  ") {
 		fmt.Fprintln(w, paint(cDim, l))
 	}
+	// The privacy claim belongs where it is acted on, not only in the README.
+	// A tool that reads ~/.claude and then offers to move things out of it has
+	// to answer "where did this go?" at the moment someone watches it work; a
+	// reader who never opens the repository page has otherwise seen the claim
+	// nowhere. Wrapped like the line above, so it holds the width contract at
+	// any terminal size.
+	for _, l := range wrap("Analysis is local: only files on this machine were read, nothing was sent over the network.",
+		width, "  ", "  ") {
+		fmt.Fprintln(w, paint(cDim, l))
+	}
 	fmt.Fprintln(w)
 }
 

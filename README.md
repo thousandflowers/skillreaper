@@ -644,9 +644,6 @@ docs/           demo assets
 
 Tracked as issues, grouped by the problem they solve.
 
-- **Docs** - say inside the report itself that the analysis read local files
-  only and sent nothing over the network, where the claim is read rather than
-  only in this page ([#50](https://github.com/thousandflowers/skillreaper/issues/50)).
 - **Teams** - `reap apm` is what reproduces a lean set across a team, but
   coordinates resolve only from `apm.lock.yaml`, so a repo without one gets
   placeholders. Plus scanning every detected platform, not only Claude Code

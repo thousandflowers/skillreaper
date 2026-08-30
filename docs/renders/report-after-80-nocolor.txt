@@ -75,6 +75,8 @@
     reap mute    2 skills · ~102 tok · audit-invoice, audit-dataset
 
   All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all
+  Analysis is local: only files on this machine were read, nothing was sent over
+  the network.
 
   ⟡ skillreaper · github.com/thousandflowers/skillreaper
 

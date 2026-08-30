@@ -35,7 +35,13 @@ func TestWithinDirRejectsEmptyBoundary(t *testing.T) {
 	if WithinDir("", t.TempDir()) {
 		t.Error("expected an empty root not to contain an unrelated target")
 	}
-	if WithinDir(t.TempDir(), "") {
+	// t.Chdir so the empty target resolves from a directory this test chose:
+	// WithinDir turns "" into the working directory, and the assertion was
+	// silently relying on the test binary never being run from inside the
+	// temporary root.
+	root := t.TempDir()
+	t.Chdir(t.TempDir())
+	if WithinDir(root, "") {
 		t.Error("expected a root not to contain an empty target resolved from the working directory")
 	}
 }
@@ -112,8 +118,51 @@ func TestExistingRegularFileWithinRejectsFinalSymlink(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 
-	if _, err := ExistingRegularFileWithin(root, link); err == nil {
+	_, err := ExistingRegularFileWithin(root, link)
+	if err == nil {
 		t.Fatal("expected final symlink to be rejected even when it resolves inside root")
+	}
+	// Asserting on the message, not merely on rejection: os.Lstat reports a
+	// symlink as non-regular too, so the IsRegular guard below shadows the
+	// symlink guard. Without this the test still passed with the symlink check
+	// deleted, pinning that the path is refused but not that it is refused for
+	// being a symlink.
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected the symlink guard to reject it, got %v", err)
+	}
+}
+
+func TestRejectFinalSymlinkAllowsAMissingPath(t *testing.T) {
+	root := t.TempDir()
+	if err := RejectFinalSymlink(filepath.Join(root, "not-created-yet.json")); err != nil {
+		t.Fatalf("a path that does not exist yet must be allowed: %v", err)
+	}
+}
+
+func TestAtomicWriteFileWithinRejectsFinalSymlinkOutOfRoot(t *testing.T) {
+	// The companion of the symlinked-parent case: here every directory on the
+	// way is honest and only the final name is a symlink pointing out of the
+	// tree. ParentWithinForWrite cannot see it, so RejectFinalSymlink is the
+	// only guard standing, and nothing exercised it.
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "escaped.json")
+	if err := os.WriteFile(outside, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "state.json")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if err := AtomicWriteFileWithin(root, link, []byte("overwritten"), 0o600); err == nil {
+		t.Fatal("expected a write to a final symlink pointing out of root to be rejected")
+	}
+	got, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "original" {
+		t.Fatalf("write escaped root: outside file is now %q", got)
 	}
 }
 

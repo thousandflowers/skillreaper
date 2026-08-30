@@ -644,18 +644,20 @@ docs/           demo assets
 
 Tracked as issues, grouped by the problem they solve.
 
-- **Teams** - `reap apm` is what reproduces a lean set across a team, but
-  coordinates resolve only from `apm.lock.yaml`, so a repo without one gets
-  placeholders. Plus scanning every detected platform, not only Claude Code
-  ([#41](https://github.com/thousandflowers/skillreaper/issues/41)).
+- **Weigh MCP** - an MCP server's tool schemas are injected every session, but
+  their size is only knowable by running the server, so those rows read `?`
+  today and the total under-counts
+  ([#27](https://github.com/thousandflowers/skillreaper/issues/27)).
 - **Better verdicts** - `--since` / `--until` and a window that respects the
   corpus ([#53](https://github.com/thousandflowers/skillreaper/issues/53));
-  telling rare apart from dead
-  ([#54](https://github.com/thousandflowers/skillreaper/issues/54)); measuring
-  wrong-tool picks
+  measuring wrong-tool picks
   ([#55](https://github.com/thousandflowers/skillreaper/issues/55)).
 - **Over time** - `reap snapshot` / `reap diff` over the existing `--json`
   payload ([#52](https://github.com/thousandflowers/skillreaper/issues/52)).
+- **Teams** - shared policy with verdicts that stay on each machine
+  ([#89](https://github.com/thousandflowers/skillreaper/issues/89)), and a
+  hosted view of them
+  ([#90](https://github.com/thousandflowers/skillreaper/issues/90)).
 
 Not planned: a CI job running `reap` (a runner has no session transcripts, so it
 would measure nothing - the periodic loop is `reap install-hook`), an
@@ -672,7 +674,7 @@ and git commit ranges (transcripts carry timestamps, which `--since` /
 Included in [awesome-go](https://github.com/avelino/awesome-go#artificial-intelligence)
 (182k ★, Artificial Intelligence section) and
 [awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills#community-skills)
-(30k ★). Three external contributors, 17 merged commits. The verdict logic has
+(30k ★). Four external contributors, 19 merged commits. The verdict logic has
 been ported into another project with attribution in the code
 ([lean-agency](https://github.com/badithya-ms/lean-agency)).
 

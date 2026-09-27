@@ -187,15 +187,28 @@ VERIFY_PROMPT = (
     "own file names, commands, CI job names, internal tools); it is written for another AI agent (Codex, Cursor, "
     "OpenAI tools) or relies on skills/tools it does not include; it needs an account or a paid third-party "
     "service, or advertises a product or paid upgrade; it targets a different platform than the TASK; it is thin "
-    "or generic advice an assistant would follow anyway; it does not actually do the TASK, or covers only a narrow special case of it (e.g. only invoices when the TASK is organizing any files); it does the same job as a skill the developer already uses or already has installed (judge by the names). Otherwise keep it. "
+    "or generic advice an assistant would follow anyway; it does not actually do the TASK, or covers only a narrow special case of it (e.g. only invoices when the TASK is organizing any files); it does the same job as a skill the developer already uses or already has installed (judge by what the closest installed skills DO, not by similar names). Otherwise keep it. "
     "Reply with ONLY a JSON object: {\"keep\": true or false, \"reason\": \"one short sentence in ITALIAN "
     "on why\", \"use\": \"if kept: one short sentence in ITALIAN saying what the skill does in this work, "
     "addressed to the developer, no em-dash\"}.")
 
 
-def verify(task: str, md: str, used_txt: str = "") -> dict:
+def words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z]{4,}", text.lower())}
+
+
+def closest_installed(md: str, installed: list[dict], n: int = 8) -> str:
+    """Le installate con più parole in comune: il solo nome inganna (agent-sort ordina componenti, non file)."""
+    mw = words(md[:3000])
+    best = sorted(installed, key=lambda s: -len(mw & words(s["name"] + " " + s["desc"])))[:n]
+    return "\n".join(f"- {s['name']}: {cut(s['desc'], 160)}" for s in best)
+
+
+def verify(task: str, md: str, used_txt: str = "", installed: list[dict] | None = None) -> dict:
+    near = closest_installed(md, installed or [])
     out = claude_json(VERIFY_PROMPT, f"TASK: {task}\n\nSkills the developer already uses: {used_txt or 'none'}\n\n"
-                                     f"SKILL.md:\n{md[:MD_VERIFY_CHARS]}", effort="high")
+                                     f"Installed skills closest to this one (read what they do, not just the name):\n"
+                                     f"{near or 'none'}\n\nSKILL.md:\n{md[:MD_VERIFY_CHARS]}", effort="high")
     return out if isinstance(out, dict) and "keep" in out else {"keep": False, "reason": "verifica non riuscita"}
 
 
@@ -243,7 +256,7 @@ def work_groups(sessions: list[dict], model: str | None = None) -> list[dict]:
         ids = sorted({int(i) for i in g.get("sessions", []) if str(i).isdigit() and int(i) < len(sessions)} - taken)
         taken |= set(ids)
         if ids:
-            groups.append({**g, "idx": ids})
+            groups.append({**g, "sid": [sessions[i]["id"] for i in ids]})
     return groups
 
 
@@ -304,19 +317,23 @@ def main():
     lap("sessioni e modello")
 
     # ---- 1. Tipi di lavoro (Claude) + copertura ----
-    log(f"Claude raggruppa {len(sessions)} sessioni per tipo di lavoro…")
+    by_id = {x["id"]: x for x in sessions}
     themes = []
     gcache = Path(args.gruppi_cache) if args.gruppi_cache else None
-    fresh = gcache and gcache.exists() and time.time() - gcache.stat().st_mtime < GROUPS_TTL
+    fresh = gcache and gcache.exists() and time.time() - gcache.stat().st_mtime < GROUPS_TTL \
+        and all("sid" in g for g in json.loads(gcache.read_text()))  # cache vecchia (con posizioni): rifalla
     if fresh and not args.rifai_gruppi:
         log(f"Gruppi dalla cache {gcache} (di meno di un giorno; --rifai-gruppi per rifarli)")
         wg = json.loads(gcache.read_text())
     else:
+        log(f"Claude raggruppa {len(sessions)} sessioni per tipo di lavoro…")
         wg = work_groups(sessions, args.gruppi_modello)
         if gcache:
             gcache.write_text(json.dumps(wg, ensure_ascii=False))
     for g in wg:
-        ss = [sessions[i] for i in g["idx"]]
+        ss = [by_id[x] for x in g.get("sid", []) if x in by_id]
+        if not ss:
+            continue
         skills_here = Counter(k for x in ss for k in x["skills"])
         covered_by, cov_n = skills_here.most_common(1)[0] if skills_here else (None, 0)
         themes.append({"nome": str(g.get("name", "")), "delegabile": bool(g.get("delegable")),
@@ -435,7 +452,8 @@ def main():
         f"a JSON array: [{{\"pick\": \"0.2\", \"why\": \"...\"}}]. Empty array if nothing is good.",
         "\n\n".join(parts)) or []
 
-    lap("scelta (Claude)")
+    if args.selezione == "scelta":
+        lap("scelta (Claude)")
 
     # ---- Report ----
     lines = ["# Reinvestire il contesto liberato", "",
@@ -465,8 +483,9 @@ def main():
                                   c["costo"], t["task"], ti))
     # ---- 7. Verifica: ogni proposta riletta per intero, da sola (la scelta ne vede 20 insieme e ne lascia passare) ----
     with ThreadPoolExecutor(min(8, max(1, len(picks)))) as ex:
-        checks_ = list(ex.map(lambda pk: verify(pk[4], pk[0].get("md", ""), used_txt), picks))
-    rejected = [(pk[0]["name"], v.get("reason", "")) for pk, v in zip(picks, checks_) if not v.get("keep")]
+        checks_ = list(ex.map(lambda pk: verify(pk[4], pk[0].get("md", ""), used_txt, installed), picks))
+    rejected = list({pk[0]["name"]: (pk[0]["name"], v.get("reason", ""))
+                     for pk, v in zip(picks, checks_) if not v.get("keep")}.values())  # una riga per skill
     picks = [pk if pk[1] else (pk[0], v.get("use") or v.get("reason", ""), *pk[2:])
              for pk, v in zip(picks, checks_) if v.get("keep")]
     if args.selezione == "verifica":  # una per compito, al massimo --max

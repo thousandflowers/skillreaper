@@ -64,6 +64,22 @@ are not used by `reinvest_prova.py` — Laya lost to simpler alternatives in eve
 - **skills.sh search is wording-sensitive** ("file organization tool" → expo-router, "file
   organizer" → file-organizer), so queries are asked for as skill-name-style phrases.
 
+- **Group cache must key on session ids, not positions**: new sessions shift positions and silently
+  remap groups to the wrong sessions.
+- **Name-only duplicate checks mislead** (`agent-sort` sorts plugin components, not files): the verifier
+  also gets the descriptions of the 8 installed skills sharing the most words with the candidate.
+- **Remaining instability**: when two candidates for one task are both borderline, verification keeps
+  one or the other across runs. A double-pass (keep only if it passes twice) would fix it at ~2× cost.
+
+## Token cost per kind of work
+
+`token_per_lavoro.py` compares tokens per request inside each kind of work, with vs without each skill
+the user invoked. On this user's data only releases had enough sessions on both sides (5 vs 6):
+`ship-release` ≈ 30% fewer tokens per request. Everywhere else ≤ 1 session used a skill. Skill presence
+is confounded with session size (a release inside a website session doubles its cost), so a
+"with vs without" figure needs ~5 sessions per side. Estimating savings for a skill the user never ran
+is impossible from history: it needs replaying past requests in an isolated copy, with and without it.
+
 ## Open questions before porting
 
 - How long to cache groups (a day, a week, until N new sessions).

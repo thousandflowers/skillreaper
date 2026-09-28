@@ -1,0 +1,148 @@
+"""The three judgments reinvest asks Claude for: group sessions, check coverage, verify a candidate."""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from sessions import canon, cut
+
+MODEL = "sonnet"
+# A clean `claude -p`: no user hooks, plugins, MCP servers, skills or CLAUDE.md (they cost ~25 s per call and
+# leak persona text into the answer), and no saved session, so reinvest never reads its own calls back.
+LEAN = ["--setting-sources", "", "--strict-mcp-config", "--tools", "", "--disable-slash-commands",
+        "--no-session-persistence", "--system-prompt",
+        "You do exactly what the request asks and reply only in the requested format."]
+THINK_TOKENS = "16000"  # verification needs it: without, skills written for someone else's repo get through
+DOC_CHARS = 15000       # how much of a SKILL.md / README the verifier reads (almost always all of it)
+
+
+def ask_json(prompt: str, body: str, think: bool = True, effort: str | None = None):
+    """Run one `claude -p` call and parse the JSON in its answer (one retry). None if it never parses."""
+    claude = shutil.which("claude")
+    if not claude:
+        sys.exit("reinvest needs the `claude` CLI on PATH.")
+    cmd = [claude, "-p", prompt, *LEAN, "--model", MODEL] + (["--effort", effort] if effort else [])
+    # --setting-sources "" also drops the thinking setting, so it is chosen here, per call
+    env = {**os.environ, "MAX_THINKING_TOKENS": THINK_TOKENS if think else "0"}
+    for _ in range(2):
+        out = subprocess.run(cmd, input=body, capture_output=True, text=True, timeout=900,
+                             cwd=tempfile.gettempdir(), env=env).stdout
+        for open_, close in (("[", "]"), ("{", "}")):
+            i, j = out.find(open_), out.rfind(close)
+            if i >= 0 and j > i:
+                try:  # fast models sometimes leave a trailing comma
+                    return json.loads(re.sub(r",\s*([\]}])", r"\1", out[i:j + 1]))
+                except ValueError:
+                    pass
+    return None
+
+
+def words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z]{4,}", text.lower()))
+
+
+def closest_installed(text: str, installed: list[dict], n: int) -> list[dict]:
+    """Installed skills sharing the most words with `text`: names alone mislead (agent-sort sorts plugins, not files)."""
+    tw = words(text)
+    return sorted(installed, key=lambda s: -len(tw & words(s["name"] + " " + s["desc"])))[:n]
+
+
+def skill_lines(skills: list[dict], width: int = 160) -> str:
+    return "\n".join(f"- {s['name']}: {cut(s['desc'], width)}" for s in skills) or "none"
+
+
+# ---------------------------------------------------------------------------
+# 1. Kinds of work
+# ---------------------------------------------------------------------------
+# Embeddings group prompts by project or by phrasing, never by kind of work (tried thresholds 0.55-0.75,
+# with and without centering). One call over all sessions does, and returns ids, so counts are exact.
+
+GROUP_PROMPT = (
+    "Each line is the start of one conversation a developer had with an AI coding assistant, with its id. "
+    "Group the conversations by the KIND of work they ask for, NOT by project: different projects asking for the "
+    "same kind of work (e.g. releasing a new version) belong together; the same project asking for different kinds "
+    "of work belongs apart. A group that fits only one project is wrong: merge it into the general kind of work it "
+    "is an instance of (fixing reported UI bugs, releasing, editing a website...). Each conversation goes in at "
+    "most one group; leave out conversations that fit no recurring kind of work. For each group give: 'name': 2-4 "
+    "words naming the kind of work, no project names; 'sessions': the ids; 'delegable': true only if a reusable "
+    "agent skill could take over this work (not chit-chat, one-off questions, generic 'continue'); 'task': one "
+    "sentence describing the work the way a reusable skill would (inputs, steps, output), with no names of the "
+    "user's OWN projects but KEEPING names of public platforms, stores, languages and tools (Raycast Store, Chrome "
+    "Web Store, Homebrew, Figma, Swift); 'queries': 5 short search queries (1-3 words) phrased like the NAME a skill "
+    "for this work would have (e.g. 'file organizer', 'bug triage'), specific to broad; 'mcp_queries': 3 single "
+    "words naming the app, platform or resource an MCP server for this work would connect to (e.g. 'figma', "
+    "'filesystem', 'wifi'). Reply with ONLY a JSON array: [{\"name\": \"...\", \"sessions\": [0, 4], "
+    "\"delegable\": true, \"task\": \"...\", \"queries\": [\"...\"], \"mcp_queries\": [\"...\"]}].")
+
+
+def group_sessions(sessions: list[dict]) -> list[dict]:
+    body = "\n".join(f"[{i}] {cut(' | '.join(s['prompts'][:3]), 500)}" for i, s in enumerate(sessions))
+    # without extended thinking: 235 s -> ~20 s, same groups
+    out = ask_json(GROUP_PROMPT, body, think=False, effort="medium")
+    groups, taken = [], set()
+    for g in out if isinstance(out, list) else []:
+        if not isinstance(g, dict):
+            continue
+        ids = sorted({int(i) for i in g.get("sessions", []) if str(i).isdigit() and int(i) < len(sessions)} - taken)
+        taken |= set(ids)
+        if ids:  # cache by session id, not position: new sessions shift positions
+            groups.append({**g, "session_ids": [sessions[i]["id"] for i in ids]})
+    return groups
+
+
+# ---------------------------------------------------------------------------
+# 2. Coverage by an installed skill
+# ---------------------------------------------------------------------------
+
+COVER_PROMPT = (
+    "For each numbered kind of work below, the developer's installed skills that look closest are listed with what "
+    "they do. Answer with the name of the installed skill that ALREADY does this kind of work well enough to be "
+    "used for it, or null if none does (a skill for a different platform, a narrow part, or only similar wording "
+    "does not count). Reply with ONLY a JSON object mapping each number to a name or null.")
+
+
+def covering_skills(kinds: list[dict], installed: list[dict]) -> list[str | None]:
+    if not kinds:
+        return []
+    body = "\n\n".join(f"[{i}] {k['task']}\n" + skill_lines(
+        closest_installed(k["task"] + " " + " ".join(k["examples"]), installed, 12))
+        for i, k in enumerate(kinds))
+    out = ask_json(COVER_PROMPT, body, think=False, effort="medium")
+    out = out if isinstance(out, dict) else {}
+    names = {canon(s["name"]): s["name"] for s in installed}
+    return [names.get(canon(str(out.get(str(i)) or ""))) for i in range(len(kinds))]
+
+
+# ---------------------------------------------------------------------------
+# 3. Verification of one candidate
+# ---------------------------------------------------------------------------
+# One call per (task, candidate), in parallel. A single batched choice among ~20 candidates was slower and let
+# through a skill tuned to another company's repo, a Codex-only skill and a paid-service ad.
+
+VERIFY_PROMPT = (
+    "You check ONE agent skill or MCP server proposed to a developer who uses Claude Code, for the TASK below. "
+    "Read the whole SKILL.md or README. Reject it if ANY of these is true: it is written for one specific other "
+    "project or codebase (its own file names, commands, CI job names, internal tools); it is written for another "
+    "AI agent (Codex, Cursor, OpenAI tools) or relies on skills/tools it does not include; it needs an account or "
+    "a paid third-party service, or advertises a product or paid upgrade; it targets a different platform than the "
+    "TASK; it is thin or generic advice an assistant would follow anyway; it only wraps what the assistant already "
+    "does with standard command-line tools (gh, git, curl, the filesystem); it does not actually do the TASK, or "
+    "covers only a narrow special case of it (e.g. only invoices when the TASK is organizing any files); it does "
+    "the same job as a skill the developer already uses or has installed (judge by what the closest installed "
+    "skills DO, not by similar names). Otherwise keep it. Reply with ONLY a JSON object: {\"keep\": true or "
+    "false, \"reason\": \"one short sentence\", \"use\": \"if kept: one short sentence saying what it does in "
+    "this work, addressed to the developer\", \"tools\": for an MCP server the number of tools it exposes (best "
+    "estimate from the README), else 0}.")
+
+
+def verify(task: str, doc: str, used: list[dict], installed: list[dict]) -> dict:
+    body = (f"TASK: {task}\n\nSkills the developer already uses:\n{skill_lines(used, 120)}\n\n"
+            f"Installed skills closest to this one (read what they do, not just the name):\n"
+            f"{skill_lines(closest_installed(doc[:3000], installed, 8))}\n\nDOCUMENT:\n{doc[:DOC_CHARS]}")
+    out = ask_json(VERIFY_PROMPT, body, effort="high")
+    return out if isinstance(out, dict) and "keep" in out else {"keep": False, "reason": "verification failed"}

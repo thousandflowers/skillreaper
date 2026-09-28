@@ -1,89 +1,81 @@
 # reap reinvest — prototype
 
-Python prototype of a possible `reap reinvest` step: after `reap prune` frees context, look at the
-user's own Claude Code sessions, find the kinds of work that recur, and propose at most 3 skills from
-skills.sh that would do that work — or nothing, which is the common and correct answer.
+`reap` finds the skills you never use. `reinvest` looks at the work you actually do, finds the kinds of work
+no skill covers, and proposes **swaps**: mute some never-used skills, install one skill or MCP server that does
+that work, for about the same tokens per session. You pick the swaps with the arrow keys.
 
-Not part of the Go build. Kept here to decide whether and how to port it.
+Python, standard library only. Not part of the Go build: kept here to decide whether and how to port it.
 
 ## Run
 
 ```bash
-python -m venv .venv && .venv/bin/pip install sentence-transformers scikit-learn
-.venv/bin/python reinvest_prova.py                  # report in prove_laya/reinvest.md (~30-110 s)
-.venv/bin/python reinvest_prova.py --rifai-gruppi   # regroup sessions instead of reusing the 1-day cache
+python3 reinvest.py --dry-run   # pick swaps, print what would run, change nothing
+python3 reinvest.py             # same, then asks before installing and muting
+python3 reinvest.py --regroup   # regroup sessions instead of reusing today's groups
+python3 token_cost.py           # tokens per request per kind of work, with vs without each skill you used
 ```
 
-Needs the `claude` CLI. Reads `~/.claude` only; installs nothing. `prove_laya/` holds excerpts of the
-user's prompts and is gitignored: never commit it.
+Needs `reap` and `claude` on PATH. Takes about 1–2 minutes (Claude does the grouping and the verification).
+Cache, report and log live in `~/.cache/skillreaper/reinvest/`; nothing is written in the repo.
 
-`sentence-transformers` / `scikit-learn` are only needed for `--catalogo tutto`; the default path uses none.
-`laya_prove_mac.py` is the shared library (session reading, skills.sh fetching); its Laya experiments
-are not used by `reinvest_prova.py` — Laya lost to simpler alternatives in every earlier test.
+## Picker
 
-## Pipeline (default)
+```
+✓  mute     ecc:deployment-patterns   ~51 tok/session · never used
+   install  ◂ web-design-reviewer ▸   ~95 tok/session · skill   2/3
+            for Portfolio Website Editing (9 sessions)
+```
 
-1. **Sessions** — only ones a person wrote: drop `entrypoint: sdk-*` (`claude -p`), subagent
-   transcripts, sessions opened in this folder, and the session still in progress.
-2. **Kinds of work** — one `claude -p` call groups all sessions by kind of work (not by project) and
-   returns session ids, a general task sentence and 5 search queries per group. Cached for a day.
-   Groups under 3 sessions, or mostly covered by a skill the user already invokes, are skipped.
-3. **Candidates** — skills.sh search with those queries, ranked by position in the results of that
-   task's queries. On the first 429 the run switches to GitHub raw only.
-4. **Filters** — already installed, too few installs, risky patterns in SKILL.md.
-5. **Verification** — every (task, candidate) pair is checked alone by Claude with the full SKILL.md
-   and the names of all installed skills. Rejects: written for another project or agent, needs a
-   paid service or advertises one, wrong platform, generic advice, narrow special case, duplicate of
-   an installed skill. One pick per task, max 3.
+↑↓ next swap · ←→ other candidates for this swap · enter accept/undo · q done.
+Applying installs the candidate (`npx skills add` / `claude mcp add`), then runs `reap mute` on what it
+replaces — reversible with `reap unmute`, and works for plugin skills too. A failed install mutes nothing.
+
+## Pipeline
+
+| file | does |
+|---|---|
+| `sessions.py` | reads the sessions you wrote: drops `claude -p`/SDK runs, subagents, this folder, the open session |
+| `llm.py` | the three Claude calls: group sessions by kind of work, check coverage, verify a candidate |
+| `sources.py` | skills.sh search + SKILL.md, official MCP registry + README, risky-pattern check |
+| `swaps.py` | pairs each fit with REAP skills of similar weight, the picker, applying |
+| `reinvest.py` | runs it all; weights and verdicts come from `reap --json` |
+
+1. **Kinds of work** — one Claude call groups all sessions by kind of work, not by project. Groups are cached
+   for a day by session id.
+2. **Gaps** — kinds seen in ≥3 sessions, delegable, and covered by no skill: neither one you use in most of
+   those sessions nor an installed one (a second, small call judges the 12 closest installed skills by what
+   they do). Installed-but-unused coverage is out of scope here: that is a future `reap reuse`.
+3. **Candidates** — skills.sh results ranked by position in that gap's searches (≥20 installs), plus MCP
+   servers from the official registry (single-word searches). SKILL.md / README fetched only for these.
+4. **Verification** — every (gap, candidate) read in full by Claude, alone, with the skills you use and the
+   installed skills closest to it. Rejects: written for another project or agent, paid service or ad, wrong
+   platform, generic advice, wraps standard CLI tools, narrow special case, duplicate of what you have.
+5. **Swaps** — the first fit per gap (max 3), paired with 1–3 REAP skills of about the same weight.
+   MCP weight is an estimate (≈200 tokens per tool).
 
 ## What the experiments showed
 
-20 runs on one real user's data (73 sessions, 327 installed skills, 7 ever used).
+Measured on one real install (~70 human sessions, 327 skills, 7 ever used), over ~30 runs.
 
-- **Embeddings cannot find kinds of work.** Clustering prompts (thresholds 0.55–0.75, with and
-  without mean-centering) groups by project or by phrasing. One Claude call groups by kind of work
-  correctly and gives exact session counts.
-- **Embeddings cannot find duplicates either.** A 0.85 similarity threshold caught 0 of 10 duplicate
-  pairs a Claude judge found.
-- **Instability comes from grouping, not selection.** Fresh groups every run: 0–18% overlap of
-  proposals across runs. Fixed groups: 100%. Hence the group cache.
-- **Per-candidate verification beats one batched choice.** Faster (~40 s vs ~100 s), stricter, and
-  its reasons are right; the batched choice let through a skill tuned to another company's repo, a
-  Codex-only skill and a paid-service ad.
-- **Most weak proposals duplicate installed-but-unused skills** (feature-dev, code-reviewer,
-  webapp-testing…). Proposing the twin of a skill that prune just removed is pointless, so the
-  verifier gets all installed names.
-- **GitHub catalogs + embeddings add nothing** over skills.sh search alone: same final proposal.
-  The Go port needs no ML.
-- **More candidates don't help once ranking is right.** For most of this user's recurring work
-  there is no good skill in the catalog; "no proposal" is usually correct.
-- **`claude -p` cost:** the user's hooks/plugins/MCP/CLAUDE.md add ~25 s per call and leak persona
-  text into answers; `--setting-sources "" --strict-mcp-config --tools "" --disable-slash-commands
-  --no-session-persistence` plus a minimal system prompt fixes both. Extended thinking off for
-  grouping (235 s → ~18 s, same quality), on for verification.
-- **skills.sh search is wording-sensitive** ("file organization tool" → expo-router, "file
-  organizer" → file-organizer), so queries are asked for as skill-name-style phrases.
-
-- **Group cache must key on session ids, not positions**: new sessions shift positions and silently
-  remap groups to the wrong sessions.
-- **Name-only duplicate checks mislead** (`agent-sort` sorts plugin components, not files): the verifier
-  also gets the descriptions of the 8 installed skills sharing the most words with the candidate.
-- **Remaining instability**: when two candidates for one task are both borderline, verification keeps
-  one or the other across runs. A double-pass (keep only if it passes twice) would fix it at ~2× cost.
-
-## Token cost per kind of work
-
-`token_per_lavoro.py` compares tokens per request inside each kind of work, with vs without each skill
-the user invoked. On this user's data only releases had enough sessions on both sides (5 vs 6):
-`ship-release` ≈ 30% fewer tokens per request. Everywhere else ≤ 1 session used a skill. Skill presence
-is confounded with session size (a release inside a website session doubles its cost), so a
-"with vs without" figure needs ~5 sessions per side. Estimating savings for a skill the user never ran
-is impossible from history: it needs replaying past requests in an isolated copy, with and without it.
+- **Embeddings cannot find kinds of work or duplicates.** Clustering grouped by project or phrasing at every
+  threshold; a 0.85 similarity caught 0 of 10 duplicates a Claude judge found. One Claude call groups correctly.
+- **Instability comes from grouping.** Fresh groups per run: 0–18% overlap of proposals. Cached: 100%.
+- **Per-candidate verification beats one batched choice**: faster, stricter, right reasons.
+- **Most weak proposals duplicated installed-but-unused skills**, and name-only checks misfire
+  (`agent-sort` sorts plugin components, not files): the verifier reads what the closest installed skills do.
+- **`claude -p` cost**: user hooks/plugins/MCP/CLAUDE.md add ~25 s per call and leak persona text;
+  the flags in `llm.LEAN` remove both. Extended thinking off for grouping (235 s → ~20 s), on for verification.
+- **skills.sh search is wording-sensitive** ("file organization tool" → expo-router, "file organizer" →
+  file-organizer): queries are asked for as skill-name-style phrases. Downloading every result's description
+  cost ~80 s and 429s; only candidates are fetched now.
+- **Tokens with vs without a skill** (`token_cost.py`) are only comparable with a few sessions on each side:
+  releases with `ship-release` used ~30% fewer tokens per request (5 vs 6 sessions); elsewhere too few.
+  Savings for a skill never run cannot be read from history.
+- **Remaining instability**: when two candidates for one gap are both borderline, verification keeps one or
+  the other across runs.
 
 ## Open questions before porting
 
-- How long to cache groups (a day, a week, until N new sessions).
-- Where it lives: its own `reap reinvest` command or a question at the end of `reap prune`.
-- What it shows: only proposals, or also the kinds-of-work table (the most reliable output so far).
-- When several candidates pass verification for a task, pick the best one, not the first.
-- Does `reap prune` count `claude -p` sessions as usage? Worth checking separately.
+- An appendix in the plain `reap` report showing the last cached swaps (fast), vs only this command (slow).
+- How long to cache groups.
+- `reap reuse`: kinds of work covered by an installed skill you never invoke.

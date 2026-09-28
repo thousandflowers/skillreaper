@@ -1,0 +1,170 @@
+"""Where candidates come from: skills.sh search and the official MCP registry, plus their SKILL.md / README."""
+from __future__ import annotations
+
+import json
+import re
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+from sessions import canon, clean
+
+SKILLS_SH = "https://skills.sh"
+MCP_REGISTRY = "https://registry.modelcontextprotocol.io/v0/servers"
+CACHE = Path.home() / ".cache" / "skillreaper" / "reinvest"
+SEARCH_TTL = 86400  # skills.sh rate-limits hard (429): reuse searches for a day
+PER_QUERY = 12
+MCP_PER_TASK = 5
+# Where a repo keeps a skill; the skills CLI reads SKILL.md from raw.githubusercontent.com the same way.
+SKILL_PATHS = ["skills/{s}/SKILL.md", "{s}/SKILL.md", ".claude/skills/{s}/SKILL.md", ".agents/skills/{s}/SKILL.md",
+               "skill/{s}/SKILL.md", "SKILL.md"]
+RISKY = [
+    (r"curl[^\n|]{0,200}\|\s*(ba|z)?sh", "downloads and runs code"),
+    (r"wget[^\n|]{0,200}\|\s*(ba|z)?sh", "downloads and runs code"),
+    (r"ignore (all )?(previous|prior) instructions", "tries to override instructions"),
+    (r"base64\s+(-d|--decode)", "decodes hidden content"),
+    (r"(webhook|pastebin|ngrok|requestbin)", "may send data out"),
+    (r"(\.env|id_rsa|\.ssh/|keychain|api[_-]?key)[^\n]{0,80}(curl|post|upload|send|fetch)", "may send secrets out"),
+    (r"rm\s+-rf\s+(/|~)(\s|$)", "destructive command"),
+    (r"xattr\s+-c", "bypasses macOS quarantine"),
+]
+
+_skillssh_blocked = threading.Event()  # after the first 429, stop asking skills.sh for this run
+
+
+def http_get(url: str, timeout: int = 15) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "skillreaper-reinvest/0.1"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def http_json(url: str, tries: int = 3):
+    for attempt in range(tries):
+        try:
+            return json.loads(http_get(url).decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 500, 502, 503, 504) and attempt < tries - 1:
+                time.sleep(min(int(e.headers.get("Retry-After") or 0) or 2 ** (attempt + 1), 8))
+                continue
+            raise
+
+
+def frontmatter(text: str) -> dict:
+    """The YAML frontmatter of a SKILL.md, flat keys only (enough for name/description)."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    out, key, buf = {}, None, []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        m = re.match(r"^([A-Za-z_-]+):\s*(.*)$", line)
+        if m and not line[:1].isspace():
+            if key:
+                out[key] = " ".join(buf).strip()
+            key, val = m.group(1), m.group(2).strip()
+            buf = [] if val in (">", "|", ">-", "|-", ">+", "|+", "") else [val.strip("\"'")]
+        elif key and line[:1].isspace():
+            buf.append(line.strip().strip("\"'"))
+    if key:
+        out[key] = " ".join(buf).strip()
+    return out
+
+
+def risks(doc: str) -> list[str]:
+    low = doc.lower()
+    return sorted({why for pattern, why in RISKY if re.search(pattern, low)})
+
+
+# ---------------------------------------------------------------------------
+# skills.sh
+# ---------------------------------------------------------------------------
+
+def search_skills(queries: list[str], skip_names: set[str]) -> list[dict]:
+    """Search results only (no SKILL.md yet): name, repo, installs and each query's rank."""
+    CACHE.mkdir(parents=True, exist_ok=True)
+    found = {}
+    for q in queries:
+        f = CACHE / f"search_{re.sub(r'[^a-z0-9]+', '_', q.lower())}.json"
+        if f.exists() and time.time() - f.stat().st_mtime < SEARCH_TTL:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        else:
+            try:
+                data = http_json(f"{SKILLS_SH}/api/search?" + urllib.parse.urlencode({"q": q, "limit": PER_QUERY}))
+            except Exception:  # noqa: BLE001  (a failed query just contributes nothing)
+                continue
+            f.write_text(json.dumps(data), encoding="utf-8")
+        for rank, sk in enumerate(data.get("skills", [])):
+            item = found.setdefault(sk["id"], {
+                "id": sk["id"], "kind": "skill", "source": sk.get("source", ""), "slug": sk.get("skillId", ""),
+                "name": sk.get("name", sk.get("skillId", "")), "installs": int(sk.get("installs") or 0), "hits": {}})
+            item["hits"][q] = rank
+    return [it for it in found.values() if canon(it["name"]) not in skip_names]
+
+
+def skill_doc(item: dict) -> str:
+    """The full SKILL.md: GitHub raw first (a CDN, no rate limit), skills.sh download API as fallback."""
+    src, slug = item.get("source", ""), item.get("slug", "")
+    if src.count("/") == 1 and "." not in src.split("/")[0]:
+        for pattern in SKILL_PATHS:
+            try:
+                doc = http_get(f"https://raw.githubusercontent.com/{src}/HEAD/"
+                               + pattern.format(s=urllib.parse.quote(slug)), timeout=10).decode("utf-8", "replace")
+            except Exception:  # noqa: BLE001
+                continue
+            meta = frontmatter(doc)
+            # a repo-root SKILL.md only counts if it is this skill, not another one in a multi-skill repo
+            if meta.get("description") and (pattern != "SKILL.md" or canon(meta.get("name", "")) == canon(slug)):
+                return doc
+    if _skillssh_blocked.is_set():
+        return ""
+    owner, _, repo = src.partition("/")
+    try:
+        data = http_json(f"{SKILLS_SH}/api/download/{owner}/{repo}/{urllib.parse.quote(slug)}", tries=1)
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            _skillssh_blocked.set()
+        return ""
+    except Exception:  # noqa: BLE001
+        return ""
+    return next((x["contents"] for x in data.get("files", []) if x.get("path", "").endswith("SKILL.md")), "")
+
+
+# ---------------------------------------------------------------------------
+# MCP registry
+# ---------------------------------------------------------------------------
+
+def readme(repo_url: str) -> str:
+    m = re.match(r"https?://github\.com/([^/]+/[^/#?]+)", repo_url or "")
+    if not m:
+        return ""
+    for name in ("README.md", "readme.md"):
+        try:
+            return http_get(f"https://raw.githubusercontent.com/{m.group(1).removesuffix('.git')}/HEAD/{name}",
+                            timeout=10).decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
+def search_mcp(words: list[str]) -> list[dict]:
+    """MCP servers for these words (the registry search is literal: single words work, phrases don't)."""
+    found = {}
+    for w in words:
+        try:
+            data = http_json(f"{MCP_REGISTRY}?" + urllib.parse.urlencode({"search": w, "limit": 20}), tries=2)
+        except Exception:  # noqa: BLE001
+            continue
+        for x in data.get("servers", []):
+            server = x.get("server", {})
+            found.setdefault(server.get("name"), server)  # the registry lists every version: keep the first
+    servers = [s for n, s in found.items() if n][: MCP_PER_TASK * 2]
+    with ThreadPoolExecutor(8) as ex:
+        docs = list(ex.map(lambda s: readme((s.get("repository") or {}).get("url", "")), servers))
+    return [{"id": s["name"], "kind": "mcp", "name": s.get("title") or s["name"].split("/")[-1],
+             "desc": clean(s.get("description", "")), "server": s, "installs": 0, "doc": doc}
+            for s, doc in zip(servers, docs) if doc][:MCP_PER_TASK]

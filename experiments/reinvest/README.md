@@ -74,6 +74,24 @@ Measured on one real install (~70 human sessions, 327 skills, 7 ever used), over
 - **Remaining instability**: when two candidates for one gap are both borderline, verification keeps one or
   the other across runs.
 
+## Known issues (next session starts here)
+
+1. **Real apply never run.** `npx skills add … -g -y`, `claude mcp add` and `reap mute` were only exercised
+   in `--dry-run`. Check which agents `skills add` installs to without `-a`, and that a failure mid-swap
+   leaves nothing half-done.
+2. **MCP safety is weak.** `risks()` scans the README text only; a server like `mcp-macos` (runs arbitrary
+   AppleScript/commands) passed verification. MCP servers need their own checks (what the tools can do,
+   remote vs local, required env vars).
+3. **MCP weight is a guess** (~200 tokens per tool from the README). A 2800-token server paired with 706 muted
+   tokens shows a large net cost; measure real tool-schema size or say "unknown".
+4. **Borderline candidates flip between runs** (verification is not deterministic). Option: keep a candidate
+   only if it passes two verifications (≈2× verify time).
+5. **First fit per gap, not the best one.** When several candidates pass for one gap, the first in search
+   order becomes the default; the others are only reachable with ←/→.
+6. **Candidate weight is chars/4**, reap uses its own estimate; small mismatches in the net figure.
+7. **Session count once read 68, then 61 minutes later**, not reproduced; worth a look at `read_transcripts`.
+8. **skills.sh 429s** still cut the SKILL.md fallback for the rest of a run.
+
 ## Open questions before porting
 
 - An appendix in the plain `reap` report showing the last cached swaps (fast), vs only this command (slow).

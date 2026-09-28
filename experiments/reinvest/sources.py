@@ -32,8 +32,21 @@ RISKY = [
     (r"rm\s+-rf\s+(/|~)(\s|$)", "destructive command"),
     (r"xattr\s+-c", "bypasses macOS quarantine"),
 ]
+# An MCP server's tools run on every call without the agent reading them first: one that runs any command or
+# script hands the model a shell under a friendlier name. Matched against tool names and capability phrases.
+MCP_RISKY = [
+    (r"\b(run|execute|exec)_(command|shell|script|applescript|jxa|code|terminal|process)s?\b",
+     "has a tool that runs any command or script"),
+    (r"\b(shell_exec|exec_command|run_shell|eval_code)\b", "has a tool that runs any command or script"),
+    (r"\b(execute|run)s? (arbitrary|any|shell|terminal|system) (commands?|code|scripts?)",
+     "runs arbitrary commands"),
+    (r"\b(execute|run)s? (commands or )?applescript|applescript (execution|runner)",
+     "runs arbitrary AppleScript"),
+]
 
-_skillssh_blocked = threading.Event()  # after the first 429, stop asking skills.sh for this run
+SKILLSSH_TRIES = 4      # a 429 waits Retry-After and retries, instead of giving up on skills.sh for the run
+SKILLSSH_MAX_WAIT = 30  # seconds; longer Retry-After values are capped
+_skillssh = threading.Lock()  # one skills.sh request at a time: parallel ones are what trips the rate limit
 
 
 def http_get(url: str, timeout: int = 15) -> bytes:
@@ -75,9 +88,17 @@ def frontmatter(text: str) -> dict:
     return out
 
 
-def risks(doc: str) -> list[str]:
+def risks(doc: str, mcp: bool = False) -> list[str]:
     low = doc.lower()
-    return sorted({why for pattern, why in RISKY if re.search(pattern, low)})
+    return sorted({why for pattern, why in RISKY + (MCP_RISKY if mcp else []) if re.search(pattern, low)})
+
+
+def mcp_where(server: dict) -> str:
+    """'runs locally' for a package, 'remote, <host>' for a hosted server: a remote one sees what you send it."""
+    if server.get("packages"):
+        return "runs locally"
+    hosts = {urllib.parse.urlparse(r.get("url", "")).hostname for r in server.get("remotes") or []} - {None}
+    return f"remote, {', '.join(sorted(hosts))}" if hosts else "unknown origin"
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +115,9 @@ def search_skills(queries: list[str], skip_names: set[str]) -> list[dict]:
             data = json.loads(f.read_text(encoding="utf-8"))
         else:
             try:
-                data = http_json(f"{SKILLS_SH}/api/search?" + urllib.parse.urlencode({"q": q, "limit": PER_QUERY}))
-            except Exception:  # noqa: BLE001  (a failed query just contributes nothing)
+                data = _skillssh_json(f"{SKILLS_SH}/api/search?" + urllib.parse.urlencode({"q": q, "limit": PER_QUERY}))
+            except Exception as e:  # noqa: BLE001  (a failed query just contributes nothing)
+                print(f"skills.sh search {q!r}: {e}")
                 continue
             f.write_text(json.dumps(data), encoding="utf-8")
         for rank, sk in enumerate(data.get("skills", [])):
@@ -107,7 +129,34 @@ def search_skills(queries: list[str], skip_names: set[str]) -> list[dict]:
 
 
 def skill_doc(item: dict) -> str:
-    """The full SKILL.md: GitHub raw first (a CDN, no rate limit), skills.sh download API as fallback."""
+    """The full SKILL.md, cached for a day: GitHub raw first (a CDN, no rate limit), skills.sh as fallback."""
+    f = CACHE / f"doc_{re.sub(r'[^a-z0-9]+', '_', item.get('id', '').lower())}.md"
+    if f.exists() and time.time() - f.stat().st_mtime < SEARCH_TTL:
+        return f.read_text(encoding="utf-8")
+    doc = _fetch_skill_doc(item)
+    if doc:  # a miss may be a transient failure: not cached
+        CACHE.mkdir(parents=True, exist_ok=True)
+        f.write_text(doc, encoding="utf-8")
+    return doc
+
+
+def _skillssh_json(url: str):
+    """GET skills.sh one request at a time, waiting out 429s. Raises what the last try raised."""
+    with _skillssh:
+        for attempt in range(SKILLSSH_TRIES):
+            try:
+                return json.loads(http_get(url).decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                if e.code != 429 or attempt == SKILLSSH_TRIES - 1:
+                    raise
+                try:
+                    wait = int(e.headers.get("Retry-After") or 0)
+                except ValueError:  # Retry-After may be an HTTP date
+                    wait = 0
+                time.sleep(min(wait or 2 ** (attempt + 1), SKILLSSH_MAX_WAIT))
+
+
+def _fetch_skill_doc(item: dict) -> str:
     src, slug = item.get("source", ""), item.get("slug", "")
     if src.count("/") == 1 and "." not in src.split("/")[0]:
         for pattern in SKILL_PATHS:
@@ -120,16 +169,11 @@ def skill_doc(item: dict) -> str:
             # a repo-root SKILL.md only counts if it is this skill, not another one in a multi-skill repo
             if meta.get("description") and (pattern != "SKILL.md" or canon(meta.get("name", "")) == canon(slug)):
                 return doc
-    if _skillssh_blocked.is_set():
-        return ""
     owner, _, repo = src.partition("/")
     try:
-        data = http_json(f"{SKILLS_SH}/api/download/{owner}/{repo}/{urllib.parse.quote(slug)}", tries=1)
-    except urllib.error.HTTPError as e:
-        if e.code == 429:
-            _skillssh_blocked.set()
-        return ""
-    except Exception:  # noqa: BLE001
+        data = _skillssh_json(f"{SKILLS_SH}/api/download/{owner}/{repo}/{urllib.parse.quote(slug)}")
+    except Exception as e:  # noqa: BLE001  (logged: a silent miss is what hid the 429s)
+        print(f"skills.sh download {item.get('id')}: {e}")
         return ""
     return next((x["contents"] for x in data.get("files", []) if x.get("path", "").endswith("SKILL.md")), "")
 

@@ -18,6 +18,7 @@ LEAN = ["--setting-sources", "", "--strict-mcp-config", "--tools", "", "--disabl
         "--no-session-persistence", "--system-prompt",
         "You do exactly what the request asks and reply only in the requested format."]
 THINK_TOKENS = "16000"  # verification needs it: without, skills written for someone else's repo get through
+FAILED = "verification failed"
 DOC_CHARS = 15000       # how much of a SKILL.md / README the verifier reads (almost always all of it)
 
 
@@ -134,10 +135,11 @@ VERIFY_PROMPT = (
     "does with standard command-line tools (gh, git, curl, the filesystem); it does not actually do the TASK, or "
     "covers only a narrow special case of it (e.g. only invoices when the TASK is organizing any files); it does "
     "the same job as a skill the developer already uses or has installed (judge by what the closest installed "
-    "skills DO, not by similar names). Otherwise keep it. Reply with ONLY a JSON object: {\"keep\": true or "
-    "false, \"reason\": \"one short sentence\", \"use\": \"if kept: one short sentence saying what it does in "
-    "this work, addressed to the developer\", \"tools\": for an MCP server the number of tools it exposes (best "
-    "estimate from the README), else 0}.")
+    "skills DO, not by similar names); for an MCP server, it can run arbitrary commands, code or scripts (shell, "
+    "AppleScript, eval), or read and write files anywhere rather than in folders the developer chooses. Otherwise "
+    "keep it. Reply with ONLY a JSON object: {\"keep\": true or false, \"reason\": \"one short sentence\", "
+    "\"use\": \"if kept: one short sentence saying what it does in this work, addressed to the developer\", "
+    "\"fit\": if kept, how completely it does the TASK, 1 (a small part) to 5 (all of it), else 0}.")
 
 
 def verify(task: str, doc: str, used: list[dict], installed: list[dict]) -> dict:
@@ -145,4 +147,4 @@ def verify(task: str, doc: str, used: list[dict], installed: list[dict]) -> dict
             f"Installed skills closest to this one (read what they do, not just the name):\n"
             f"{skill_lines(closest_installed(doc[:3000], installed, 8))}\n\nDOCUMENT:\n{doc[:DOC_CHARS]}")
     out = ask_json(VERIFY_PROMPT, body, effort="high")
-    return out if isinstance(out, dict) and "keep" in out else {"keep": False, "reason": "verification failed"}
+    return out if isinstance(out, dict) and "keep" in out else {"keep": False, "reason": FAILED}

@@ -9,13 +9,23 @@ Muting goes through `reap mute` (reversible with `reap unmute`), so it works for
 from __future__ import annotations
 
 import curses
+import os
 import subprocess
+from pathlib import Path
 
-MAX_MUTED_PER_SWAP = 3  # an MCP server estimated at thousands of tokens must not mute half the install
+MAX_MUTED_PER_SWAP = 3
+STEP_TIMEOUT = 120  # `skills add` on a repo that is gone clones forever, even with git prompts off
+# Install for Claude Code only: without -a, `skills add` installs for every agent it knows (~20), and exits 0
+# even when one of them fails.
+SKILLS_ADD = ["npx", "-y", "skills", "add"]
+SKILLS_FLAGS = ["-g", "-y", "-a", "claude-code"]
 
 
-def pair(cost: int, pool: list[dict]) -> list[dict]:
-    """REAP skills whose weight adds up to about `cost`: the closest single or pair, else the heaviest few."""
+def pair(cost: int | None, pool: list[dict]) -> list[dict]:
+    """REAP skills whose weight adds up to about `cost`: the closest single or pair, else the heaviest few.
+    Nothing for an unknown weight: muting against a guess is how a 2800-token estimate muted 706 real tokens."""
+    if cost is None:
+        return []
     singles = [[x] for x in pool]
     pairs = [[a, b] for i, a in enumerate(pool) for b in pool[i + 1:] if a["tokens"] + b["tokens"] <= cost * 1.3]
     best = min(singles + pairs, key=lambda xs: (abs(sum(x["tokens"] for x in xs) - cost), len(xs)), default=[])
@@ -30,17 +40,30 @@ def build(picks: list[dict], passing: list[dict], reap_pool: list[dict]) -> list
     pool, swaps = list(reap_pool), []
     for pick in picks:
         mute = pair(pick["cost"], pool)
-        if not mute:
+        if not mute and pick["cost"] is not None:
             continue
         pool = [x for x in pool if x not in mute]
         out = sum(x["tokens"] for x in mute)
-        cands = sorted(passing, key=lambda c: (c["gap"] != pick["gap"], abs(c["cost"] - out)))
+        cands = sorted(passing, key=lambda c: (c["gap"] != pick["gap"], -c["fit"], c["cost"] is None,
+                                               abs((c["cost"] or 0) - out)))
         idx = next((i for i, c in enumerate(cands) if c["name"] == pick["name"]), 0)
         swaps.append({"mute": mute, "out": out, "cands": cands, "idx": idx, "ok": False})
     return swaps
 
 
+def weight(cost: int | None) -> str:
+    return "weight unknown until installed" if cost is None else f"~{cost} tok/session"
+
+
+def mute_text(s: dict) -> str:
+    if not s["mute"]:
+        return "nothing · the weight of what it installs is unknown, so nothing is traded for it"
+    return f"{names(s['mute'])}   ~{s['out']} tok/session · never used"
+
+
 def names(mute: list[dict]) -> str:
+    if not mute:
+        return "nothing"
     shown = " + ".join(x["name"] for x in mute[:3])
     return shown + (f" + {len(mute) - 3} more" if len(mute) > 3 else "")
 
@@ -62,10 +85,10 @@ def _draw(scr, swaps: list[dict], cur: int):
     for i, s in enumerate(swaps):
         c, sel = s["cands"][s["idx"]], i == cur
         taken = any(o["ok"] and o is not s and o["cands"][o["idx"]]["name"] == c["name"] for o in swaps)
-        put(y, 2, f"{'✓' if s['ok'] else ' '}  mute     {names(s['mute'])}   ~{s['out']} tok/session · never used",
+        put(y, 2, f"{'✓' if s['ok'] else ' '}  mute     {mute_text(s)}",
             curses.A_REVERSE if sel else 0)
         pick = f"◂ {c['name']} ▸" if len(s["cands"]) > 1 else c["name"]
-        put(y + 1, 5, f"install  {pick}   ~{c['cost']} tok/session · {c['kind']}   {s['idx'] + 1}/{len(s['cands'])}"
+        put(y + 1, 5, f"install  {pick}   {weight(c['cost'])} · {c['kind']}   {s['idx'] + 1}/{len(s['cands'])}"
             + ("   (already picked above)" if taken else ""), curses.A_BOLD if sel else 0)
         put(y + 2, 14, f"for {c['gap']}")
         if sel:
@@ -73,10 +96,10 @@ def _draw(scr, swaps: list[dict], cur: int):
             y += 1
         y += 4
     chosen = [s for s in swaps if s["ok"]]
-    added = sum(s["cands"][s["idx"]]["cost"] for s in chosen)
+    costs = [s["cands"][s["idx"]]["cost"] for s in chosen]
     freed = sum(s["out"] for s in chosen)
-    put(h - 2, 2, f"{len(chosen)} accepted · +{added} installed · −{freed} muted · net {added - freed:+} tok/session",
-        curses.A_BOLD)
+    net = "unknown (an MCP weight is unknown)" if None in costs else f"{sum(costs) - freed:+} tok/session"
+    put(h - 2, 2, f"{len(chosen)} accepted · −{freed} muted · net {net}", curses.A_BOLD)
     scr.refresh()
 
 
@@ -125,13 +148,15 @@ def pick(swaps: list[dict]) -> list[dict]:
 # Apply
 # ---------------------------------------------------------------------------
 
+def mcp_name(c: dict) -> str:
+    return (c.get("server") or {}).get("name", c["name"]).split("/")[-1]
+
+
 def install_command(c: dict) -> list[str] | None:
     """The command that installs a candidate, or None when it needs manual setup (keys, env vars)."""
     if c["kind"] == "skill":
-        return ["npx", "-y", "skills", "add", c["source"], "-s", c["slug"], "-g", "-y"] \
-            if c.get("source") and c.get("slug") else None
-    server = c.get("server") or {}
-    name = server.get("name", c["name"]).split("/")[-1]
+        return [*SKILLS_ADD, c["source"], "-s", c["slug"], *SKILLS_FLAGS] if c.get("source") and c.get("slug") else None
+    server, name = c.get("server") or {}, mcp_name(c)
     for pkg in server.get("packages") or []:
         if pkg.get("environmentVariables"):
             return None
@@ -145,22 +170,62 @@ def install_command(c: dict) -> list[str] | None:
     return None
 
 
+def uninstall_command(c: dict) -> list[str]:
+    if c["kind"] == "skill":
+        return ["npx", "-y", "skills", "remove", c["slug"], *SKILLS_FLAGS]
+    return ["claude", "mcp", "remove", "-s", "user", mcp_name(c)]
+
+
+def installed(c: dict) -> bool:
+    """`skills add` exits 0 when some target failed; the skill must actually be where Claude Code reads it."""
+    if c["kind"] != "skill":
+        return True  # `claude mcp add` exits 1 on failure
+    return (Path.home() / ".claude" / "skills" / c["slug"] / "SKILL.md").is_file()
+
+
+def run(cmd: list[str]) -> str | None:
+    """Run one step; None on success, else why it failed."""
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=STEP_TIMEOUT,
+                             env={**os.environ, "GIT_TERMINAL_PROMPT": "0"}, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        return f"no answer in {STEP_TIMEOUT} s"
+    except OSError as e:
+        return str(e)
+    return None if res.returncode == 0 else (res.stderr.strip() or res.stdout.strip())[-200:] or f"exit {res.returncode}"
+
+
+def apply_one(s: dict) -> list[str]:
+    """Install, then mute. All or nothing: a failed mute unmutes what this swap muted and uninstalls."""
+    c = s["cands"][s["idx"]]
+    install = install_command(c)
+    if install is None:
+        return [f"  ✗  {c['name']}: needs manual setup, nothing muted · {c.get('id', '')}"]
+    err = run(install) or (None if installed(c) else "installed, but not for Claude Code")
+    if err:
+        return [f"  ✗  {c['name']}: {err} · nothing muted"]
+    log, muted = [f"  ✓  installed {c['name']}"], []
+    for x in s["mute"]:
+        err = run(["reap", "mute", x["name"]])
+        if err is None:
+            muted.append(x["name"])
+            continue
+        undone = [n for n in muted if run(["reap", "unmute", n]) is None]
+        removed = run(uninstall_command(c)) is None
+        left = [n for n in muted if n not in undone] + ([] if removed else [c["name"] + " (installed)"])
+        return log + [f"  ✗  reap mute {x['name']}: {err}",
+                      "  ↺  rolled back" + (f", but still changed: {', '.join(left)}" if left else ": nothing changed")]
+    return log + [f"  ✓  muted {name} (reap unmute {name} undoes)" for name in muted]
+
+
 def apply(chosen: list[dict], dry_run: bool) -> list[str]:
-    """Install each pick, then mute what it replaces. Nothing is muted if the install fails."""
     log = []
     for s in chosen:
-        c = s["cands"][s["idx"]]
-        steps = [install_command(c)] + [["reap", "mute", x["name"]] for x in s["mute"]]
-        if steps[0] is None:
-            log.append(f"  ✗  {c['name']}: needs manual setup, nothing muted · {c.get('id', '')}")
+        if not dry_run:
+            log += apply_one(s)
             continue
-        for cmd in steps:
-            if dry_run:
-                log.append("  ·  " + " ".join(cmd))
-                continue
-            res = subprocess.run(cmd, capture_output=True, text=True)
-            if res.returncode != 0:
-                log.append(f"  ✗  {' '.join(cmd[:4])}: {res.stderr.strip()[:200]}")
-                break  # a failed install leaves everything else untouched
-            log.append(f"  ✓  {' '.join(cmd)}")
+        c = s["cands"][s["idx"]]
+        cmd = install_command(c)
+        log += ([f"  ✗  {c['name']}: needs manual setup, nothing muted · {c.get('id', '')}"] if cmd is None else
+                ["  ·  " + " ".join(cmd)] + [f"  ·  reap mute {x['name']}" for x in s["mute"]])
     return log

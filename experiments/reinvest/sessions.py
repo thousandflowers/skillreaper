@@ -60,6 +60,16 @@ def is_automated(entries: list[dict]) -> bool:
     return bool(cwd) and Path(cwd).resolve().is_relative_to(TOOL_DIR)
 
 
+def last_activity(entries: list[dict]) -> datetime | None:
+    """When the session was last used: its newest timestamped entry."""
+    for e in reversed(entries):
+        try:
+            return datetime.fromisoformat(e["timestamp"].replace("Z", "+00:00"))
+        except (KeyError, AttributeError, ValueError):
+            continue
+    return None
+
+
 def read_transcripts(days: int):
     now = datetime.now(timezone.utc)
     oldest, newest = now - timedelta(days=days), now - timedelta(minutes=LIVE_MINUTES)
@@ -67,8 +77,9 @@ def read_transcripts(days: int):
         if "subagents" in path.parts:  # subagent transcripts hold no user prompts
             continue
         try:
-            mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-            if not oldest <= mtime <= newest:
+            # mtime only rules out old files: Claude Code later appends untimestamped metadata lines
+            # ("atis-latch", "pr-link") to old transcripts in batches, so mtime says nothing about activity.
+            if datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc) < oldest:
                 continue
             entries = []
             with path.open(encoding="utf-8", errors="replace") as f:
@@ -79,7 +90,8 @@ def read_transcripts(days: int):
                         continue
         except OSError:
             continue
-        if not is_automated(entries):
+        last = last_activity(entries)
+        if last and oldest <= last <= newest and not is_automated(entries):
             yield path, entries
 
 

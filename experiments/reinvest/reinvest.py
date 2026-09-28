@@ -14,6 +14,7 @@ Usage:  python3 reinvest.py [--dry-run] [--regroup] [--no-mcp] [--days N]
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import statistics
@@ -33,14 +34,28 @@ MIN_SESSIONS = 3      # a kind of work seen fewer times is not recurring
 MAX_GAPS = 6
 CANDIDATES_PER_GAP = 10
 MIN_INSTALLS = 20     # skills.sh: fewer installs than this is too little signal to trust
-MCP_TOOL_TOKENS = 200  # rough weight of one MCP tool definition; the real figure is only known once installed
+VERDICTS_TTL = 7 * 86400  # a verdict is keyed by everything it read, so it only goes stale with the candidate
+VERIFY_RUNS = 2       # a candidate is kept only if every run keeps it: borderline ones flipped between runs
 TERM = sys.__stdout__  # progress lines and the result go here; everything else goes to the run log
 LOG = sources.CACHE / "run.log"
 REPORT = sources.CACHE / "report.md"
 
 
-def tokens(text: str) -> int:
-    return max(1, len(text) // 4)
+def reap_tokens(slug: str, doc: str) -> int:
+    """What reap will report for this skill once installed, computed the way reap does (internal/scan/skills.go,
+    internal/cost/cost.go): bytes of the directory name plus the one-line frontmatter description, / 3.7 rounded
+    up. The description is the last `description:` line of the header, as reap reads it (block scalars included)."""
+    desc, lines = "", doc.splitlines()
+    if lines and lines[0].strip() == "---":
+        for line in lines[1:]:
+            t = line.strip()
+            if t == "---":
+                break
+            if t.startswith("description:"):
+                desc = t[len("description:"):].strip()
+                desc = desc[1:-1] if len(desc) >= 2 and desc[0] == desc[-1] == '"' else desc.strip("\"'")
+    chars = len((slug + desc).encode("utf-8"))
+    return (chars * 10 + 36) // 37
 
 
 def step(msg: str, done: bool = False):
@@ -122,29 +137,60 @@ def candidates_for(gap: dict, found: list[dict], no_mcp: bool) -> list[dict]:
     for c, doc in zip(ranked, docs):
         desc = sources.frontmatter(doc).get("description", "")
         if len(desc) >= 40 and not sources.risks(doc):
-            out.append({**c, "doc": doc, "desc": desc, "cost": tokens(c["name"] + desc)})
+            out.append({**c, "doc": doc, "desc": desc, "cost": reap_tokens(c["slug"], doc)})
     if not no_mcp:
-        out += [{**m, "cost": 0} for m in sources.search_mcp(gap["mcp_queries"]) if not sources.risks(m["doc"])]
+        # cost None: an MCP server's weight is its tool schemas, known only once it runs (reap reports it as unknown
+        # too); running an unreviewed server to measure it is not acceptable before the user said yes
+        out += [{**m, "cost": None} for m in sources.search_mcp(gap["mcp_queries"])
+                if not sources.risks(m["doc"], mcp=True)]
     return [{**c, "gap": f"{gap['name']} ({gap['sessions']} sessions)", "task": gap["task"]} for c in out]
 
 
+def combine(runs: list[dict]) -> dict:
+    """Several verdicts on one candidate -> one: kept only if every run kept it, with the lowest fit."""
+    no = next((v for v in runs if not v.get("keep")), None)
+    if no:
+        return {"keep": False, "reason": no.get("reason", "")}
+    return {**runs[0], "fit": min(int(v.get("fit") or 1) for v in runs)}
+
+
 def verify_all(cands: list[dict], state: dict) -> tuple[list[dict], list[tuple[str, str]]]:
+    """Each candidate verified VERIFY_RUNS times; verdicts cached by everything the verifier read."""
+    cache_file = sources.CACHE / "verdicts.json"
+    try:
+        cache = json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    context = "\n".join(sorted(s["name"] for s in state["installed"])) + "\n" + \
+              "\n".join(sorted(s["name"] for s in state["used"]))
+    keys = [hashlib.sha256("\0".join((c["task"], c["id"], c["doc"], context)).encode()).hexdigest() for c in cands]
+    verdicts = {k: cache[k] for k in keys if k in cache and time.time() - cache[k]["at"] < VERDICTS_TTL}
+    todo = list({k: c for k, c in zip(keys, cands) if k not in verdicts}.items())
     with ThreadPoolExecutor(8) as ex:
-        verdicts = list(ex.map(lambda c: llm.verify(c["task"], c["doc"], state["used"], state["installed"]), cands))
+        runs = list(ex.map(lambda kc: llm.verify(kc[1]["task"], kc[1]["doc"], state["used"], state["installed"]),
+                           [kc for kc in todo for _ in range(VERIFY_RUNS)]))
+    for i, (k, _) in enumerate(todo):
+        verdicts[k] = {**combine(runs[i * VERIFY_RUNS:(i + 1) * VERIFY_RUNS]), "at": time.time()}
+        if verdicts[k].get("reason") != llm.FAILED:  # a call that never answered is not a verdict: not cached
+            cache[k] = verdicts[k]
+    cache_file.write_text(json.dumps({k: v for k, v in cache.items() if time.time() - v["at"] < VERDICTS_TTL}),
+                          encoding="utf-8")
     passing, rejected = [], {}
-    for c, v in zip(cands, verdicts):
+    for k, c in zip(keys, cands):
+        v = verdicts[k]
         if not v.get("keep"):
             rejected[c["name"]] = v.get("reason", "")
             continue
-        cost = max(1, int(v.get("tools") or 1)) * MCP_TOOL_TOKENS if c["kind"] == "mcp" else c["cost"]
-        kind = "MCP server, estimated" if c["kind"] == "mcp" else "skill"
-        passing.append({**c, "cost": cost, "kind": kind, "why": v.get("use") or v.get("reason", "")})
+        kind = f"MCP server, {sources.mcp_where(c['server'])}" if c["kind"] == "mcp" else "skill"
+        passing.append({**c, "kind": kind, "fit": int(v.get("fit") or 1), "why": v.get("use") or v.get("reason", "")})
     return passing, list(rejected.items())
 
 
-def first_per_gap(passing: list[dict], limit: int) -> list[dict]:
+def best_per_gap(passing: list[dict], limit: int) -> list[dict]:
+    """The best fit for each gap; on a tie the lighter one (an unknown MCP weight ranks after any known one)."""
+    ranked = sorted(passing, key=lambda c: (-c["fit"], c["cost"] is None, c["cost"] or 0))
     picks, gaps, names = [], set(), set()
-    for c in passing:
+    for c in ranked:
         if c["gap"] not in gaps and c["name"] not in names and len(picks) < limit:
             gaps.add(c["gap"])
             names.add(c["name"])
@@ -161,8 +207,8 @@ def summary(swap_list: list[dict], gaps: list[dict], dead: int) -> str:
     lines = [f"  reinvest · ~{dead:,} dead tok/session per reap · swaps for work you do with no skill", ""]
     for s in swap_list:
         c = s["cands"][s["idx"]]
-        lines += [f"  mute     {swaps.names(s['mute'])}   ~{s['out']} tok/session · never used",
-                  f"  install  {c['name']}   ~{c['cost']} tok/session · {c['kind']}",
+        lines += [f"  mute     {swaps.mute_text(s)}",
+                  f"  install  {c['name']}   {swaps.weight(c['cost'])} · {c['kind']}",
                   f"           for {c['gap']}", f"           {c['why']}", ""]
     solved = {s["cands"][s["idx"]]["gap"] for s in swap_list}
     missing = [g["name"] for g in gaps if f"{g['name']} ({g['sessions']} sessions)" not in solved]
@@ -176,8 +222,9 @@ def write_report(kinds: list[dict], gaps: list[dict], passing: list[dict], rejec
     lines += [f"- {k['name']}: {k['sessions']} sessions, {k['weeks']} weeks"
               + (f", covered by {k['covered_by']}" if k["covered_by"] else "") for k in kinds]
     lines += ["", "## Gaps", ""] + [f"- {g['name']}: {g['task']}" for g in gaps]
-    lines += ["", "## Verified candidates", ""] + [f"- {c['name']} ({c['kind']}, ~{c['cost']} tok) for {c['gap']}: "
-                                                   f"{c['why']}" for c in passing]
+    lines += ["", "## Verified candidates", ""] + [
+        f"- {c['name']} ({c['kind']}, {swaps.weight(c['cost'])}, fit {c['fit']}/5) for {c['gap']}: {c['why']}"
+        for c in passing]
     lines += ["", "## Rejected", ""] + [f"- {n}: {r}" for n, r in rejected]
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -232,7 +279,7 @@ def main():
     step(f"{len(passing)} fit", done=True)
 
     write_report(kinds, gaps, passing, rejected)
-    swap_list = swaps.build(first_per_gap(passing, args.max), passing, state["reap"])
+    swap_list = swaps.build(best_per_gap(passing, args.max), passing, state["reap"])
     sys.stdout.close()
     sys.stdout = sys.__stdout__
     print()

@@ -436,7 +436,8 @@ def http_json(url: str, tries: int = 4):
             raise
 
 
-def fetch_skillssh(queries: list[str], per_query: int, skip_names: set[str] = frozenset()) -> list[dict]:
+def fetch_skillssh(queries: list[str], per_query: int, skip_names: set[str] = frozenset(),
+                   with_desc: bool = True) -> list[dict]:
     """Cerca su skills.sh e scarica la descrizione di ogni skill trovata (con cache)."""
     found = {}
     cdir = CACHE / "skillssh"
@@ -459,6 +460,8 @@ def fetch_skillssh(queries: list[str], per_query: int, skip_names: set[str] = fr
             it["hits"][q] = rank  # posizione nei risultati di ogni ricerca che l'ha trovata
     before = len(found)
     found = {k: v for k, v in found.items() if canon(v["name"]) not in skip_names}
+    if not with_desc:  # solo i risultati di ricerca: chi li usa scarica poi il SKILL.md delle poche che legge
+        return [{**it, "desc": "", "path": f"skills.sh/{it['id']}"} for it in found.values()]
     print(f"skills.sh: {before} skill trovate con {len(queries)} ricerche, {before - len(found)} già installate. "
           f"Scarico {len(found)} descrizioni (quelle già scaricate restano in cache)…", flush=True)
     import threading

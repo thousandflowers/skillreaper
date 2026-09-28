@@ -38,6 +38,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import laya_prove_mac as base
+import scambi
 from laya_prove_mac import (OUT, CACHE, GITHUB_CATALOGS, RAW_GUESSES, SKILLS_SH, Emb, blocks, canon, clean, cut,
                             fetch_github, fetch_skillssh, http_json, is_noise, parse_frontmatter, read_installed,
                             read_local_catalog, read_sessions, unique_by_name, user_text, CMD_RE, NEG_WORDS)
@@ -59,6 +60,38 @@ RISKY = [
     (r"rm\s+-rf\s+(/|~)(\s|$)", "comando distruttivo"),
     (r"xattr\s+-c", "aggira la quarantena di macOS"),
 ]
+
+
+MAX_SWAP_OUT = 3  # un server MCP stimato a migliaia di token non deve svuotare ~/.claude/skills
+TERM = sys.__stdout__  # il terminale: una riga per fase e il risultato; il resto va in prove_laya/reinvest.log
+
+
+def step_start(msg: str):
+    if TERM.isatty():
+        TERM.write(f"⠋ {msg}…")
+        TERM.flush()
+
+
+def step_done(msg: str):
+    TERM.write(("\r\033[K" if TERM.isatty() else "") + f"✓ {msg}\n")
+    TERM.flush()
+
+
+def swap_for(cost: int, pool: list[tuple]) -> list[tuple]:
+    """Skill mai usate che insieme costano quanto la proposta: 1 o 2 se bastano, altrimenti le più pesanti
+    finché il costo è coperto (un server MCP può valere decine di skill)."""
+    singles = [[x] for x in pool]
+    pairs = [[a, b] for i, a in enumerate(pool) for b in pool[i + 1:] if a[1] + b[1] <= cost * 1.3]
+    best = min(singles + pairs, key=lambda xs: (abs(sum(x[1] for x in xs) - cost), len(xs)), default=[])
+    if sum(x[1] for x in best) >= cost * 0.7:
+        return best
+    greedy, total = [], 0
+    for x in pool:  # pool è ordinato dal più pesante
+        if total >= cost or len(greedy) == MAX_SWAP_OUT:
+            break  # mai più di MAX_SWAP_OUT skill tolte per uno scambio: il resto lo dice il netto
+        greedy.append(x)
+        total += x[1]
+    return greedy
 
 
 def log(msg: str):
@@ -182,15 +215,17 @@ def full_md(item: dict) -> str:
 
 
 VERIFY_PROMPT = (
-    "You check ONE agent skill proposed to a developer who uses Claude Code, for the TASK below. Read the whole "
-    "SKILL.md. Reject it if ANY of these is true: it is written for one specific other project or codebase (its "
+    "You check ONE agent skill or MCP server proposed to a developer who uses Claude Code, for the TASK below. "
+    "Read the whole SKILL.md or README. Reject it if ANY of these is true: it is written for one specific other project or codebase (its "
     "own file names, commands, CI job names, internal tools); it is written for another AI agent (Codex, Cursor, "
     "OpenAI tools) or relies on skills/tools it does not include; it needs an account or a paid third-party "
     "service, or advertises a product or paid upgrade; it targets a different platform than the TASK; it is thin "
-    "or generic advice an assistant would follow anyway; it does not actually do the TASK, or covers only a narrow special case of it (e.g. only invoices when the TASK is organizing any files); it does the same job as a skill the developer already uses or already has installed (judge by what the closest installed skills DO, not by similar names). Otherwise keep it. "
+    "or generic advice an assistant would follow anyway; it only wraps what the assistant already does with "
+    "standard command-line tools (gh, git, curl, the filesystem); it does not actually do the TASK, or covers only a narrow special case of it (e.g. only invoices when the TASK is organizing any files); it does the same job as a skill the developer already uses or already has installed (judge by what the closest installed skills DO, not by similar names). Otherwise keep it. "
     "Reply with ONLY a JSON object: {\"keep\": true or false, \"reason\": \"one short sentence in ITALIAN "
-    "on why\", \"use\": \"if kept: one short sentence in ITALIAN saying what the skill does in this work, "
-    "addressed to the developer, no em-dash\"}.")
+    "on why\", \"use\": \"if kept: one short sentence in ITALIAN saying what it does in this work, "
+    "addressed to the developer, no em-dash\", \"tools\": for an MCP server the number of tools it exposes "
+    "(best estimate from the README), else 0}.")
 
 
 def words(text: str) -> set[str]:
@@ -210,6 +245,46 @@ def verify(task: str, md: str, used_txt: str = "", installed: list[dict] | None 
                                      f"Installed skills closest to this one (read what they do, not just the name):\n"
                                      f"{near or 'none'}\n\nSKILL.md:\n{md[:MD_VERIFY_CHARS]}", effort="high")
     return out if isinstance(out, dict) and "keep" in out else {"keep": False, "reason": "verifica non riuscita"}
+
+
+MCP_REGISTRY = "https://registry.modelcontextprotocol.io/v0/servers"
+MCP_PER_TASK = 5
+MCP_TOOL_TOKENS = 200  # ponytail: stima per tool (nome+descrizione+schema); il costo vero si misura solo installato
+
+
+def readme(repo_url: str) -> str:
+    m = re.match(r"https?://github\.com/([^/]+/[^/#?]+)", repo_url or "")
+    if not m:
+        return ""
+    for name in ("README.md", "readme.md", "README.MD"):
+        try:
+            url = f"https://raw.githubusercontent.com/{m.group(1).removesuffix('.git')}/HEAD/{name}"
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "reinvest/1.0"}),
+                                        timeout=10) as r:
+                return r.read().decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
+def mcp_candidates(words_: list[str]) -> list[dict]:
+    """Server MCP dal registro ufficiale: una ricerca per parola (la ricerca è letterale), README da GitHub."""
+    found = {}
+    for w in words_:
+        try:
+            data = http_json(f"{MCP_REGISTRY}?" + urllib.parse.urlencode({"search": w, "limit": 20}), tries=2)
+        except Exception:  # noqa: BLE001
+            continue
+        for x in data.get("servers", []):
+            sv = x.get("server", {})
+            found.setdefault(sv.get("name"), sv)  # il registro elenca ogni versione: tengo la prima
+    servers = [sv for n, sv in found.items() if n][: MCP_PER_TASK * 2]
+    with ThreadPoolExecutor(8) as ex:
+        mds = list(ex.map(lambda sv: readme((sv.get("repository") or {}).get("url", "")), servers))
+    return [{"name": sv.get("title") or sv["name"].split("/")[-1], "id": sv["name"], "tipo": "mcp", "server": sv,
+             "desc": clean(sv.get("description", "")), "path": f"MCP {sv['name']}", "installs": 0,
+             "md": md, "rischi": risks(md), "vicina": None}
+            for sv, md in zip(servers, mds) if md][:MCP_PER_TASK]
 
 
 def risks(md: str) -> list[str]:
@@ -237,15 +312,40 @@ WORK_PROMPT = (
     "(inputs, steps, output), general: no names of the user's OWN projects, but KEEP names of public platforms, "
     "stores, languages and tools the work targets (Raycast Store, Chrome Web Store, Homebrew, Figma, Swift); "
     "'queries': 5 short search queries (1-3 words) phrased like the NAME a skill for this work would have "
-    "(e.g. 'file organizer', 'bug triage', 'release notes'), from specific to broad. Reply with ONLY a JSON array: "
-    "[{\"name\": \"...\", \"sessions\": [0, 4], \"delegable\": true, \"task\": \"...\", \"queries\": [\"...\"]}].")
+    "(e.g. 'file organizer', 'bug triage', 'release notes'), from specific to broad; 'mcp_queries': 3 single "
+    "words naming the app, platform or resource an MCP server for this work would connect to (e.g. 'figma', "
+    "'filesystem', 'wifi'). Reply with ONLY a JSON array: "
+    "[{\"name\": \"...\", \"sessions\": [0, 4], \"delegable\": true, \"task\": \"...\", \"queries\": [\"...\"], "
+    "\"mcp_queries\": [\"...\"]}].")
+
+
+COVER_PROMPT = (
+    "For each numbered kind of work below, the developer's installed skills that look closest are listed with what "
+    "they do. Answer with the name of the installed skill that ALREADY does this kind of work well enough to be "
+    "used for it, or null if none does (a skill for a different platform, a narrow part, or only similar wording "
+    "does not count). Reply with ONLY a JSON object mapping each number to a name or null.")
+
+
+def covered_installed(themes: list[dict], installed: list[dict], n: int = 12) -> list[str | None]:
+    """Una chiamata piccola: per ogni tipo di lavoro solo le installate più vicine, con la descrizione."""
+    if not themes:
+        return []
+    parts = []
+    for i, t in enumerate(themes):
+        tw = words(t["task"] + " " + " ".join(t["esempi"]))
+        near = sorted(installed, key=lambda s: -len(tw & words(s["name"] + " " + s["desc"])))[:n]
+        parts.append(f"[{i}] {t['task']}\n" + "\n".join(f"   - {s['name']}: {cut(s['desc'], 160)}" for s in near))
+    out = claude_json(COVER_PROMPT, "\n\n".join(parts), think=False, effort=GROUP_EFFORT)
+    names = {canon(s["name"]): s["name"] for s in installed}
+    out = out if isinstance(out, dict) else {}
+    return [names.get(canon(str(out.get(str(i)) or ""))) for i in range(len(themes))]
 
 
 def session_text(s: dict) -> str:
     return cut(" | ".join(s["prompts"][:3]), 500)
 
 
-def work_groups(sessions: list[dict], model: str | None = None) -> list[dict]:
+def work_groups(sessions: list[dict], installed: list[dict], model: str | None = None) -> list[dict]:
     body = "\n".join(f"[{i}] {session_text(s)}" for i, s in enumerate(sessions))
     # ponytail: senza ragionamento esteso 235 s -> ~20 s; la qualità dei gruppi regge, quella della scelta finale no
     out = claude_json(WORK_PROMPT, body, model=model, think=False, effort=GROUP_EFFORT)
@@ -270,6 +370,66 @@ def week(ts: str) -> str:
         return "?"
 
 
+def terminal_summary(picks: list, tasks: list[dict], unused: list[dict], report: Path) -> str:
+    """Scambi: ogni proposta al posto di 1-2 skill mai usate che costano uguale; poi i buchi senza soluzione."""
+    pool = sorted(((s["name"], tokens(s["name"] + s["desc"]), s["path"]) for s in unused if scambi.removable(s)),
+                  key=lambda x: -x[1])
+    out = ["Scambi consigliati" if picks else "Nessuno scambio consigliato", ""]
+    for s, why, _origin, cost, _task, ti in picks:
+        swap = swap_for(cost, pool)
+        pool = [x for x in pool if x not in swap]
+        ev = tasks[ti]["evidenza"]
+        kind = "server MCP, stima" if s.get("tipo") == "mcp" else "skill"
+        out += [f"  {s['name']}  ~{cost} token ({kind})", f"  {why}",
+                f"  per: {ev['nome']} ({ev['n_sessioni']} sessioni)"]
+        if swap:
+            shown = " + ".join(x[0] for x in swap[:3]) + (f" + altre {len(swap) - 3}" if len(swap) > 3 else "")
+            out.append(f"  al posto di: {shown} (mai {'usate' if len(swap) > 1 else 'usata'}, ~{sum(x[1] for x in swap)})")
+        out.append("")
+    solved = {pk[5] for pk in picks}
+    missing = [t["evidenza"]["nome"] for ti, t in enumerate(tasks) if ti not in solved]
+    if missing:
+        out += ["Nessuna soluzione per: " + ", ".join(missing), ""]
+    return "\n".join(out + [f"dettagli: {report}"])
+
+
+def build_rows(picks: list, passing: list[dict], unused: list[dict]) -> list[dict]:
+    """Una riga per proposta: sopra le skill personali mai usate che costano uguale, sotto le candidate."""
+    pool = sorted(((s["name"], tokens(s["name"] + s["desc"]), s["path"]) for s in unused if scambi.removable(s)),
+                  key=lambda x: -x[1])
+    rows = []
+    for s, *_rest, cost, _task, ti in picks:
+        remove = swap_for(cost, pool)
+        if not remove:
+            continue  # nessuna skill personale da togliere al suo posto
+        pool = [x for x in pool if x not in remove]
+        out_cost = sum(x[1] for x in remove)
+        cands = scambi.order_candidates(ti, out_cost, passing)
+        idx = next((i for i, c in enumerate(cands) if c["name"] == s["name"]), 0)
+        rows.append({"remove": remove, "out_cost": out_cost, "cands": cands, "idx": idx, "ok": False})
+    return rows
+
+
+def choose_and_run(picks: list, passing: list[dict], unused: list[dict], dry_run: bool):
+    rows = build_rows(picks, passing, unused)
+    if not rows:
+        print("\nNessuno scambio possibile: nessuna skill personale mai usata da togliere.")
+        return
+    chosen = scambi.choose(rows)
+    if not chosen:
+        print("Nessuno scambio scelto: non ho toccato niente.")
+        return
+    print(f"Scambi scelti: {len(chosen)}")
+    for r in chosen:
+        print(f"  {r['cands'][r['idx']]['name']}  al posto di  {', '.join(x[0] for x in r['remove'])}")
+    if not dry_run and input("Eseguo? Le skill tolte vanno in ~/.claude/skills-archive/ [s/N] ").strip().lower() != "s":
+        print("Non ho toccato niente.")
+        return
+    print("\n".join(scambi.execute(chosen, dry_run)))
+    if dry_run:
+        print("(prova: niente è stato installato o spostato)")
+
+
 def main():
     global MODEL
     ap = argparse.ArgumentParser()
@@ -288,11 +448,16 @@ def main():
                     help="file JSON dei gruppi: riusato per un giorno (stabilità), poi rifatto; '' = sempre nuovi")
     ap.add_argument("--rifai-gruppi", action="store_true", help="rifai i gruppi anche se la cache è recente")
     ap.add_argument("--max-cand", type=int, default=MAX_CAND, help="candidate per compito lette per intero")
+    ap.add_argument("--no-mcp", action="store_true", help="non cercare server MCP")
+    ap.add_argument("--prova", action="store_true", help="scegli gli scambi ma non eseguirli: mostra solo cosa farebbe")
     ap.add_argument("--tag", default="", help="suffisso dei file di uscita, per confrontare versioni")
     ap.add_argument("--min-sessioni", type=int, default=3, help="un tipo di lavoro con meno sessioni non diventa un compito")
     args = ap.parse_args()
     MODEL = args.modello or None
     OUT.mkdir(exist_ok=True)
+    logf = (OUT / f"reinvest{args.tag}.log").open("w", encoding="utf-8")
+    sys.stdout = logf  # i messaggi di lavoro (anche quelli di laya_prove_mac) vanno nel log
+    step_start("leggo le sessioni")
     t0 = time.time()
     tlast = [t0]
 
@@ -315,19 +480,21 @@ def main():
 
     emb = Emb() if args.catalogo == "tutto" else None
     lap("sessioni e modello")
+    step_done(f"{len(sessions)} sessioni lette")
+    step_start("raggruppo il tuo lavoro per tipo")
 
     # ---- 1. Tipi di lavoro (Claude) + copertura ----
     by_id = {x["id"]: x for x in sessions}
     themes = []
     gcache = Path(args.gruppi_cache) if args.gruppi_cache else None
     fresh = gcache and gcache.exists() and time.time() - gcache.stat().st_mtime < GROUPS_TTL \
-        and all("sid" in g for g in json.loads(gcache.read_text()))  # cache vecchia (con posizioni): rifalla
+        and all("sid" in g and "mcp_queries" in g for g in json.loads(gcache.read_text()))  # formato vecchio: rifalla
     if fresh and not args.rifai_gruppi:
         log(f"Gruppi dalla cache {gcache} (di meno di un giorno; --rifai-gruppi per rifarli)")
         wg = json.loads(gcache.read_text())
     else:
         log(f"Claude raggruppa {len(sessions)} sessioni per tipo di lavoro…")
-        wg = work_groups(sessions, args.gruppi_modello)
+        wg = work_groups(sessions, installed, args.gruppi_modello)
         if gcache:
             gcache.write_text(json.dumps(wg, ensure_ascii=False))
     for g in wg:
@@ -343,15 +510,21 @@ def main():
                        "costo_mediano": int(statistics.median([x["tokens"] for x in ss])),
                        "attrito": sum(x["errors"] + 2 * x["fixes"] + 3 * x["interrupts"] for x in ss),
                        "coperto_da": covered_by if cov_n / len(ss) >= 0.5 else None,
+                       "mcp_queries": g.get("mcp_queries") or [],
                        "esempi": [cut(x["prompts"][0], 200) for x in ss[:6]]})
     for t in themes:
         t["punteggio"] = t["n_sessioni"] * (1 + t["attrito"] / max(1, t["n_sessioni"])) * (1 + t["costo_mediano"] / 200_000)
         t["stato"] = ("troppo raro" if t["n_sessioni"] < args.min_sessioni
                       else "coperto da " + t["coperto_da"] if t["coperto_da"]
                       else "non delegabile" if not t["delegabile"] or not t["task"] else "compito")
+    # coperto anche da una skill installata e mai usata: quel caso è "reap reuse", non questo comando
+    for t, name in zip(cand_t := [t for t in themes if t["stato"] == "compito"], covered_installed(cand_t, installed)):
+        if name:
+            t["coperto_da"], t["stato"] = name, "coperto da " + name + " (installata)"
     covered = [t for t in themes if t["stato"].startswith("coperto")]
     open_themes = sorted([t for t in themes if t["stato"] == "compito"], key=lambda t: -t["punteggio"])
-    tasks = [{"task": t["task"], "queries": t["queries"], "evidenza": t} for t in open_themes[: args.temi]]
+    tasks = [{"task": t["task"], "queries": t["queries"], "mcp_queries": t["mcp_queries"], "evidenza": t}
+             for t in open_themes[: args.temi]]
     grouped = sum(t["n_sessioni"] for t in themes)
     area_report = ["| tipo di lavoro | sessioni | settimane diverse | token | stato |", "|---|---|---|---|---|"]
     area_report += [f"| {t['nome']} | {t['n_sessioni']} | {t['settimane']} | {t['token']:,} | {t['stato']} |"
@@ -359,18 +532,21 @@ def main():
     area_report.append(f"| (senza un tipo ricorrente) | {len(sessions) - grouped} | | | escluse |")
     log(f"Tipi di lavoro: {len(themes)} ({len(covered)} già coperti da skill che usi), compiti delegabili: {len(tasks)}")
     lap("tipi di lavoro (Claude)")
+    step_done(f"{len(themes)} tipi di lavoro, {len(open_themes)} senza copertura")
+    step_start("cerco skill e server MCP")
 
     # ---- 4. Candidati ----
     queries = sorted({q for t in tasks for q in t.get("queries", [])})
     extra = OUT / "ricerche.txt"
     stack_q = [q.strip() for q in extra.read_text().splitlines() if q.strip()] if extra.exists() else []
-    raw = fetch_skillssh(queries + stack_q, 12, names)
+    # ponytail: le descrizioni di tutte le ~330 trovate costavano ~80 s (e i 429); si leggono solo le candidate
+    raw = fetch_skillssh(queries + stack_q, 12, names, with_desc=args.catalogo == "tutto")
     n_sh = len(raw)
     if args.catalogo == "tutto":
         raw += read_local_catalog(fetch_github(GITHUB_CATALOGS))
     seen, cat = set(), []
     for s in unique_by_name(raw):
-        k = s["desc"][:120].lower()
+        k = s["desc"][:120].lower() or s["id"]
         if canon(s["name"]) not in names and k not in seen:
             seen.add(k)
             cat.append(s)
@@ -380,8 +556,7 @@ def main():
     iv = emb.enc([f"{s['name']}: {cut(s['desc'], 300)}" for s in installed]) if emb and installed else None
 
     # ---- 5. Filtri ----
-    finalists = {}
-    for ti, t in enumerate(tasks):
+    def build(ti: int, t: dict) -> list[dict]:  # un compito: candidate skills.sh + MCP, in parallelo agli altri
         if emb:
             sims = cv @ emb.enc([t["task"]])[0]
             order = [(int(j), float(sims[j])) for j in sims.argsort()[::-1][:25]]
@@ -394,7 +569,7 @@ def main():
         cand = []
         for j, sim in order:
             s = cat[j]
-            if len(s["desc"]) < 40:
+            if s["desc"] and len(s["desc"]) < 40:
                 continue
             if s.get("path", "").startswith("skills.sh/") and s.get("installs", 0) < args.min_installs:
                 continue  # troppo poco usata per fidarsi
@@ -409,18 +584,29 @@ def main():
             cand.append({**s, "sim": sim, "vicina": near})
             if len(cand) == args.max_cand:
                 break
-        with ThreadPoolExecutor(6) as ex:
+        with ThreadPoolExecutor(10) as ex:
             mds = list(ex.map(full_md, cand))
         keep = []
         for c, md in zip(cand, mds):
             c["rischi"] = risks(md)
             c["md"] = md
+            c["desc"] = c["desc"] or clean(parse_frontmatter(md).get("description", ""))
             c["costo"] = tokens(c["name"] + c["desc"])
-            if c["rischi"] or not md:
+            if c["rischi"] or len(c["desc"]) < 40:
                 continue
             keep.append(c)
-        finalists[ti] = keep
-    lap("filtri e SKILL.md")
+        mcp = [] if args.no_mcp else [c for c in mcp_candidates(t.get("mcp_queries", [])) if not c["rischi"]]
+        for c in mcp:
+            c["costo"] = 0  # si stima dopo la verifica, dal numero di tool
+        return keep + mcp
+
+    with ThreadPoolExecutor(max(1, len(tasks))) as ex:
+        finalists = dict(enumerate(ex.map(lambda it: build(*it), enumerate(tasks))))
+
+    lap("filtri, SKILL.md e MCP")
+    n_cand = sum(len(v) for v in finalists.values())
+    step_done(f"{n_cand} candidate (skill e MCP)")
+    step_start(f"verifico {n_cand} candidate")
     peers = sorted([s for s in cat if s.get("installs")], key=lambda s: -s["installs"])[:8]
     log(f"Finaliste: {sum(len(v) for v in finalists.values())} per {len(tasks)} compiti, "
         f"più {len(peers)} tra le più installate nel tuo stack")
@@ -486,8 +672,15 @@ def main():
         checks_ = list(ex.map(lambda pk: verify(pk[4], pk[0].get("md", ""), used_txt, installed), picks))
     rejected = list({pk[0]["name"]: (pk[0]["name"], v.get("reason", ""))
                      for pk, v in zip(picks, checks_) if not v.get("keep")}.values())  # una riga per skill
-    picks = [pk if pk[1] else (pk[0], v.get("use") or v.get("reason", ""), *pk[2:])
+    for pk, v in zip(picks, checks_):
+        if pk[0].get("tipo") == "mcp" and v.get("keep"):
+            pk[0]["costo"] = max(1, int(v.get("tools") or 1)) * MCP_TOOL_TOKENS
+    picks = [pk if pk[1] else (pk[0], v.get("use") or v.get("reason", ""), pk[2], pk[0]["costo"], *pk[4:])
              for pk, v in zip(picks, checks_) if v.get("keep")]
+    passing = [{**pk[0], "cost": pk[3], "why": pk[1], "task": pk[5], "kind": "server MCP, stima"
+                if pk[0].get("tipo") == "mcp" else "skill",
+                "gap": f"{tasks[pk[5]]['evidenza']['nome']} ({tasks[pk[5]]['evidenza']['n_sessioni']} sessioni)"}
+               for pk in picks]
     if args.selezione == "verifica":  # una per compito, al massimo --max
         seen_t, seen_n, best = set(), set(), []
         for pk in picks:
@@ -498,6 +691,7 @@ def main():
         picks = best
     log(f"Verifica: {len(picks)} tenute, {len(rejected)} scartate")
     lap("verifica (Claude)")
+    step_done(f"{len(picks)} adatte")
     lines += ["## Proposte", ""]
     if not picks:
         lines += ["Nessuna proposta abbastanza buona. Meglio niente che una skill inutile.", ""]
@@ -532,7 +726,12 @@ def main():
                                                         "vicina": (c.get("vicina") or {}).get("name")} for c in v]
                                                    for k, v in finalists.items()},
                                      "scelta": choice})
-    print("\n" + text)
+    sys.stdout = sys.__stdout__
+    logf.close()
+    if not (sys.stdin.isatty() and TERM.isatty() and picks):
+        print("\n" + terminal_summary(picks, tasks, unused, OUT / f"reinvest{args.tag}.md"))
+        return
+    choose_and_run(picks, passing, unused, args.prova)
 
 
 if __name__ == "__main__":

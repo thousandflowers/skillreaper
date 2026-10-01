@@ -17,7 +17,7 @@ python3 -m unittest test_reinvest   # offline checks, no network, no Claude call
 ```
 
 Needs `reap` and `claude` on PATH. Takes about 1–2 minutes (Claude does the grouping and the verification).
-Cache, report and log live in `~/.cache/skillreaper/reinvest/`; nothing is written in the repo.
+Cache, report and log live in `skillreaper/reinvest/` under the user cache directory reap uses (`~/Library/Caches` on macOS, `~/.cache` on Linux); nothing is written in the repo. The last proposals go to `swaps.json` there, and reap's text report points at them in one line; applying stays in reinvest's picker.
 
 ## Picker
 
@@ -96,6 +96,5 @@ Measured on one real install (~70 human sessions, 327 skills, 7 ever used), over
 
 ## Open questions before porting
 
-- An appendix in the plain `reap` report showing the last cached swaps (fast), vs only this command (slow).
 - How long to cache groups.
 - `reap reuse`: kinds of work covered by an installed skill you never invoke.

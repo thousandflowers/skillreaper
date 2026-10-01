@@ -136,8 +136,8 @@ func RenderGap(w io.Writer, r *Report, color bool) {
 	add := func(label string, gc GapCat, mcp bool) {
 		pct, utilStr := utilPct(gc.Fired, gc.Loaded, r.Sessions)
 		cats = append(cats, label)
-		loaded = append(loaded, humanNum(gc.Loaded))
-		fired = append(fired, humanNum(gc.Fired))
+		loaded = append(loaded, HumanNum(gc.Loaded))
+		fired = append(fired, HumanNum(gc.Fired))
 		util = append(util, utilStr)
 		bars = append(bars, utilBar(pct))
 		if mcp {
@@ -147,8 +147,8 @@ func RenderGap(w io.Writer, r *Report, color bool) {
 			tokUsed = append(tokUsed, "?")
 			return
 		}
-		tokLoaded = append(tokLoaded, "~"+humanNum(gc.LoadedTok))
-		tokUsed = append(tokUsed, humanNum(gc.FiredTok))
+		tokLoaded = append(tokLoaded, "~"+HumanNum(gc.LoadedTok))
+		tokUsed = append(tokUsed, HumanNum(gc.FiredTok))
 	}
 	for _, gc := range g.PerCat {
 		if gc.Loaded == 0 {
@@ -203,7 +203,7 @@ func renderMuteSavings(w io.Writer, r *Report, width int, paint func(code, s str
 	}
 	fmt.Fprintln(w)
 	for _, l := range wrap(fmt.Sprintf("MUTE — %d heavy low-use %s, ~%s tok/session recoverable with reap mute",
-		r.MuteCount, Plural(r.MuteCount, "skill"), humanNum(r.MuteTokensPerSession)),
+		r.MuteCount, Plural(r.MuteCount, "skill"), HumanNum(r.MuteTokensPerSession)),
 		width, "  "+mark(VerdictMute)+"  ", "     ") {
 		fmt.Fprintln(w, paint(cBold, l))
 	}
@@ -217,7 +217,7 @@ func renderBrokenSkills(w io.Writer, r *Report, width int, paint func(code, s st
 	for _, row := range r.Rows {
 		if row.Reason == ReasonBroken {
 			names = append(names, row.Name)
-			errs = append(errs, humanNum(row.ErrorCount))
+			errs = append(errs, HumanNum(row.ErrorCount))
 		}
 	}
 	if len(names) == 0 {

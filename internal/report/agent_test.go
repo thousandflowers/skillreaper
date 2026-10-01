@@ -386,8 +386,8 @@ func TestPctOf(t *testing.T) {
 		{50, 100, "50%"},
 	}
 	for _, c := range cases {
-		if got := pctOf(c.part, c.whole); got != c.want {
-			t.Errorf("pctOf(%d, %d) = %q, want %q", c.part, c.whole, got, c.want)
+		if got := PctOf(c.part, c.whole); got != c.want {
+			t.Errorf("PctOf(%d, %d) = %q, want %q", c.part, c.whole, got, c.want)
 		}
 	}
 }

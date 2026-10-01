@@ -116,7 +116,7 @@ func everyTextView() []struct {
 					dead = append(dead, row)
 				}
 			}
-			RenderSourceTotals(w, SourceTotals(dead), len(dead), func(n int) string { return humanNum(n) })
+			RenderSourceTotals(w, SourceTotals(dead), len(dead))
 		}},
 	}
 }
@@ -323,8 +323,8 @@ func TestHumanNumGroupsThousands(t *testing.T) {
 		in   int
 		want string
 	}{{0, "0"}, {999, "999"}, {1000, "1,000"}, {19755, "19,755"}, {-4200, "-4,200"}} {
-		if got := humanNum(c.in); got != c.want {
-			t.Errorf("humanNum(%d) = %q, want %q", c.in, got, c.want)
+		if got := HumanNum(c.in); got != c.want {
+			t.Errorf("HumanNum(%d) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

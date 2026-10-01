@@ -62,7 +62,7 @@ func RenderByProject(w io.Writer, r *Report, color bool) {
 			// grepped or pasted out of context.
 			skills = append(skills, sr.skill)
 			projects = append(projects, prettyProject(pc.name))
-			counts = append(counts, humanNum(pc.count))
+			counts = append(counts, HumanNum(pc.count))
 			notes = append(notes, note)
 		}
 	}

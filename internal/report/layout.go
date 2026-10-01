@@ -126,7 +126,8 @@ func wrap(s string, width int, indent, hang string) []string {
 // one of them is read at a glance, and five- and six-digit token counts are
 // the numbers this report exists to show. Text output only — every
 // machine-readable format keeps the bare integer.
-func humanNum(n int) string {
+// HumanNum groups thousands with commas: 19760 -> "19,760".
+func HumanNum(n int) string {
 	s := strconv.Itoa(n)
 	neg := strings.HasPrefix(s, "-")
 	s = strings.TrimPrefix(s, "-")
@@ -388,5 +389,5 @@ func tokens(t int, unknown bool) string {
 	if unknown {
 		return "?"
 	}
-	return humanNum(t)
+	return HumanNum(t)
 }

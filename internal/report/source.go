@@ -78,7 +78,7 @@ func SourceTotals(rows []Row) []SourceTotal {
 // source is the flexible column now and gives way to the measure, because a
 // truncated plugin coordinate is still recognisable while a wrapped note is
 // not readable at all.
-func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int, humanTok func(int) string) {
+func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int) {
 	if len(totals) < 2 {
 		return
 	}
@@ -86,7 +86,7 @@ func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int, humanT
 	for _, t := range totals {
 		srcs = append(srcs, t.Source)
 		items = append(items, fmt.Sprintf("%d %s", t.Items, Plural(t.Items, "item")))
-		toks = append(toks, "~"+humanTok(t.Tokens)+" tok")
+		toks = append(toks, "~"+HumanCount(t.Tokens)+" tok")
 		if t.Removable == 0 {
 			// reap can see these and cannot touch them: they are registered by
 			// a plugin, and the host agent owns that registration.

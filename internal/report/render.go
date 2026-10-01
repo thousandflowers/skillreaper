@@ -138,15 +138,11 @@ func RenderShareJSON(w io.Writer, tokensPerSession int) {
 // When no data is available (0), it falls back to a generic message.
 func shareMessage(tokensPerSession int) string {
 	if tokensPerSession > 0 {
-		tokStr := fmt.Sprintf("%d", tokensPerSession)
-		if tokensPerSession >= 1000 {
-			tokStr = fmt.Sprintf("%.1fk", float64(tokensPerSession)/1000)
-		}
 		return fmt.Sprintf(`Just cut ~%s tokens/session of dead context from my AI agent with skillreaper.
 One read-only command, 100%% local:
 
   brew install thousandflowers/tap/skillreaper
-  github.com/thousandflowers/skillreaper`, tokStr)
+  github.com/thousandflowers/skillreaper`, HumanCount(tokensPerSession))
 	}
 	return `Check your AI agent's context diet with skillreaper.
 One read-only command, 100% local:
@@ -252,7 +248,7 @@ func renderHeadline(w io.Writer, r *Report, width int, paint func(code, s string
 	deadVal, deadUnit := head.Figure()
 	figs := []struct{ val, unit string }{
 		{deadVal, deadUnit},
-		{"~" + humanNum(r.DeadTokensPerSession), "dead tokens per session"},
+		{"~" + HumanNum(r.DeadTokensPerSession), "dead tokens per session"},
 		{fmt.Sprintf("~$%.2f", r.MoneyPerMonth), "per month at your usage"},
 	}
 	vw := 0
@@ -376,7 +372,7 @@ func renderGroups(w io.Writer, rows []Row, width int, paint func(code, s string)
 		}
 		head := fmt.Sprintf("%s  %-22s %d %s", mark(v), label, len(items), Plural(len(items), "item"))
 		if total > 0 {
-			head += fmt.Sprintf(" · ~%s tok/session", humanNum(total))
+			head += fmt.Sprintf(" · ~%s tok/session", HumanNum(total))
 		}
 		// Bold on the two groups that carry an action, dim on the rest. Weight
 		// is the only emphasis a terminal has that a monochrome reader also
@@ -407,7 +403,7 @@ func renderGroups(w io.Writer, rows []Row, width int, paint func(code, s string)
 			}
 			more := fmt.Sprintf("… %d more", rest)
 			if restTok > 0 {
-				more += fmt.Sprintf(" · ~%s tok/session", humanNum(restTok))
+				more += fmt.Sprintf(" · ~%s tok/session", HumanNum(restTok))
 			}
 			more += " · full list: reap --md"
 			fmt.Fprintf(w, "    %s\n", paint(cDim, truncate(more, width-4)))
@@ -519,11 +515,11 @@ func renderActions(w io.Writer, r *Report, width int, paint func(code, s string)
 		var acts []action
 		if r.DeadCount > 0 {
 			acts = append(acts, action{"reap prune", fmt.Sprintf("%d %s · ~%s tok/session reclaimed",
-				r.DeadCount, Plural(r.DeadCount, "item"), humanNum(r.DeadTokensPerSession))})
+				r.DeadCount, Plural(r.DeadCount, "item"), HumanNum(r.DeadTokensPerSession))})
 		}
 		if len(muteNames) > 0 {
 			acts = append(acts, action{"reap mute", fmt.Sprintf("%d %s · ~%s tok · %s",
-				len(muteNames), Plural(len(muteNames), "skill"), humanNum(muteTokens),
+				len(muteNames), Plural(len(muteNames), "skill"), HumanNum(muteTokens),
 				strings.Join(muteNames, ", "))})
 		}
 		cw := 0

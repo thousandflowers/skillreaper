@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thousandflowers/skillreaper/internal/cost"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/usage"
 )
@@ -561,5 +562,33 @@ func TestMCPWeightIsReportedAsUnknownNotZero(t *testing.T) {
 		if strings.Contains(line, "deadserver") && !strings.Contains(line, "?") {
 			t.Errorf("--agent line publishes a numeric weight for an unmeasured server: %q", line)
 		}
+	}
+}
+
+// An MCP server Claude Code recorded injecting gets that weight, found under
+// its plugin alias too; one never seen in a session stays unknown and out of
+// the dead-token total.
+func TestMCPWeightFromTranscripts(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 40
+	st.MCPWeight["plugin_ecc_exa"] = usage.MCPWeight{Chars: 400, At: time.Now()}
+	items := []scan.Item{
+		{Category: scan.CatMCP, Name: "exa", Source: "plugin:ecc@ecc"},
+		{Category: scan.CatMCP, Name: "never-loaded", Source: "user-config", Removable: true},
+	}
+	r := Build(items, st, nil, Opts{MinSessions: 10, Cutoff: time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)})
+	byName := map[string]Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+	exa := byName["exa"]
+	if exa.WeightUnknown || exa.Tokens != cost.TokensFor("", 400) {
+		t.Errorf("exa: WeightUnknown=%v Tokens=%d, want measured %d", exa.WeightUnknown, exa.Tokens, cost.TokensFor("", 400))
+	}
+	if !byName["never-loaded"].WeightUnknown {
+		t.Error("never-loaded: weight should stay unknown")
+	}
+	if r.DeadTokensPerSession != exa.Tokens || r.DeadUnknownWeight != 1 {
+		t.Errorf("dead = %d tok, %d unknown; want %d tok, 1 unknown", r.DeadTokensPerSession, r.DeadUnknownWeight, exa.Tokens)
 	}
 }

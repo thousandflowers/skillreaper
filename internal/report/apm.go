@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -349,9 +348,7 @@ func bareSuffix(name string) string {
 // coordLastSegment returns the final path segment of a coordinate, with any
 // "#version" pin removed: "anthropics/skills/skills/frontend-design#v1" → "frontend-design".
 func coordLastSegment(coord string) string {
-	if i := strings.IndexByte(coord, '#'); i >= 0 {
-		coord = coord[:i]
-	}
+	coord, _, _ = strings.Cut(coord, "#")
 	coord = strings.TrimRight(coord, "/")
 	if i := strings.LastIndexByte(coord, '/'); i >= 0 {
 		return coord[i+1:]
@@ -432,9 +429,7 @@ func renderAPMDiffComments(w io.Writer, m APMReport) {
 
 // RenderAPMJSON writes the report as indented JSON.
 func RenderAPMJSON(w io.Writer, m APMReport) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(m)
+	return WriteJSON(w, m)
 }
 
 // RenderAPMMarkdown writes the report as Markdown.

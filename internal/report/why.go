@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -236,9 +235,7 @@ func dateOrUnknown(t time.Time) string {
 
 // RenderWhyJSON writes the explanation as indented JSON (never colored).
 func RenderWhyJSON(w io.Writer, e Explanation) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(e)
+	return WriteJSON(w, e)
 }
 
 // RenderWhy writes the human-readable explanation block. The verdict line is

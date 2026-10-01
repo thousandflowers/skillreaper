@@ -1,18 +1,17 @@
 package snapshot
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
+
+	"github.com/thousandflowers/skillreaper/internal/report"
 )
 
 // RenderJSON writes the diff as JSON.
 func RenderJSON(w io.Writer, d Diff) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(d)
+	return report.WriteJSON(w, d)
 }
 
 func signed(n int) string {
@@ -33,7 +32,7 @@ func RenderText(w io.Writer, d Diff) {
 		strings.TrimSuffix(filepath.Base(d.ToPath), ".json"))
 
 	if back := d.Returned(); len(back) > 0 {
-		fmt.Fprintf(w, "  !  %d %s back after a prune\n", len(back), plural(len(back), "item"))
+		fmt.Fprintf(w, "  !  %d %s back after a prune\n", len(back), report.Plural(len(back), "item"))
 		for _, c := range back {
 			fmt.Fprintf(w, "       %-6s %s\n", c.Category, c.Name)
 		}
@@ -75,11 +74,4 @@ func section(w io.Writer, title string, cs []Change, detail func(Change) string)
 		fmt.Fprintf(w, "       %-6s %-28s %s\n", c.Category, c.Name, detail(c))
 	}
 	fmt.Fprintln(w)
-}
-
-func plural(n int, word string) string {
-	if n == 1 {
-		return word
-	}
-	return word + "s"
 }

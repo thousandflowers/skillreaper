@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -112,9 +111,7 @@ func manifestTime(t time.Time) string {
 
 // RenderManifestJSON writes the manifest as indented JSON.
 func RenderManifestJSON(w io.Writer, m Manifest) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(m)
+	return WriteJSON(w, m)
 }
 
 // RenderManifestMarkdown writes the manifest as a release-ready Markdown block.

@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -231,10 +230,10 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 	}
 
 	routeGroup(w, width, paint, "EXPOSED", "stay top-level",
-		humanChars(plan.ExposedTok)+" tok resident", plan.Exposed, "(none)", true)
+		HumanCount(plan.ExposedTok)+" tok resident", plan.Exposed, "(none)", true)
 
 	fmt.Fprintf(w, "\n  %s  %s\n", paint(cBold, "ROUTED"),
-		paint(cDim, fmt.Sprintf("loaded on demand · ~%s tok deferred", humanChars(plan.RoutedTok))))
+		paint(cDim, fmt.Sprintf("loaded on demand · ~%s tok deferred", HumanCount(plan.RoutedTok))))
 	if len(plan.Categories) == 0 {
 		for _, l := range wrap("(none — every surviving skill fires often enough to stay exposed)",
 			width, "     ", "     ") {
@@ -261,7 +260,7 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 		at := 1
 		for _, c := range plan.Categories {
 			fmt.Fprintf(w, "\n     %s  %s\n", paint(cBold, routeCatLabel(c)),
-				paint(cDim, fmt.Sprintf("~%s tok", humanChars(c.RoutedTok))))
+				paint(cDim, fmt.Sprintf("~%s tok", HumanCount(c.RoutedTok))))
 			for range c.Skills {
 				fmt.Fprintln(w, tbl[at])
 				at++
@@ -271,7 +270,7 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 
 	fmt.Fprintln(w)
 	for _, l := range wrap(fmt.Sprintf("Net: ~%s tok/session moved out of resident context.",
-		humanChars(plan.RoutedTok)), width, "  ", "  ") {
+		HumanCount(plan.RoutedTok)), width, "  ", "  ") {
 		fmt.Fprintln(w, paint(cBold, l))
 	}
 	for _, l := range wrap("A plan only — nothing is applied. Pair with reap mute to strip the "+
@@ -301,7 +300,7 @@ func routeRows(width, indent int, skills []RouteSkill, reason bool) []string {
 	var names, uses, rates, reasons []string
 	for _, s := range skills {
 		names = append(names, s.Name)
-		uses = append(uses, humanNum(s.Uses))
+		uses = append(uses, HumanNum(s.Uses))
 		rates = append(rates, ratePct(s.Rate))
 		if reason {
 			reasons = append(reasons, s.Reason)
@@ -339,9 +338,7 @@ func ratePct(rate float64) string {
 
 // RenderRoutePlanJSON writes the plan as indented JSON.
 func RenderRoutePlanJSON(w io.Writer, plan *RoutePlan) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(plan)
+	return WriteJSON(w, plan)
 }
 
 // RenderRoutePlanMarkdown writes the plan as Markdown.
@@ -357,16 +354,16 @@ func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 		fmt.Fprintf(w, "> ⓘ %d skills is below ~%d — native skill loading is usually enough. Prune first; route only if context is tight.\n\n", plan.TotalSkills, RouteAdviceFloor)
 	}
 
-	fmt.Fprintf(w, "## Exposed (stay top-level) — ~%s tok resident\n\n", humanChars(plan.ExposedTok))
+	fmt.Fprintf(w, "## Exposed (stay top-level) — ~%s tok resident\n\n", HumanCount(plan.ExposedTok))
 	fmt.Fprintln(w, "| Skill | Uses | Rate | Reason |")
 	fmt.Fprintln(w, "|---|---|---|---|")
 	for _, s := range plan.Exposed {
 		fmt.Fprintf(w, "| %s | %d | %s | %s |\n", s.Name, s.Uses, ratePct(s.Rate), s.Reason)
 	}
 
-	fmt.Fprintf(w, "\n## Routed (loaded on demand) — ~%s tok deferred\n\n", humanChars(plan.RoutedTok))
+	fmt.Fprintf(w, "\n## Routed (loaded on demand) — ~%s tok deferred\n\n", HumanCount(plan.RoutedTok))
 	for _, c := range plan.Categories {
-		fmt.Fprintf(w, "### ▸ %s — ~%s tok\n\n", routeCatLabel(c), humanChars(c.RoutedTok))
+		fmt.Fprintf(w, "### ▸ %s — ~%s tok\n\n", routeCatLabel(c), HumanCount(c.RoutedTok))
 		fmt.Fprintln(w, "| Skill | Uses | Rate |")
 		fmt.Fprintln(w, "|---|---|---|")
 		for _, s := range c.Skills {
@@ -374,5 +371,5 @@ func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 		}
 		fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, "**Net: ~%s tok/session moved out of resident context.** Pair with `reap mute` to strip routed skills' descriptions.\n", humanChars(plan.RoutedTok))
+	fmt.Fprintf(w, "**Net: ~%s tok/session moved out of resident context.** Pair with `reap mute` to strip routed skills' descriptions.\n", HumanCount(plan.RoutedTok))
 }

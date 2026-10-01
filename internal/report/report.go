@@ -366,10 +366,7 @@ func sourcePluginName(source string) (string, bool) {
 	if !strings.HasPrefix(source, prefix) {
 		return "", false
 	}
-	full := source[len(prefix):]
-	if i := strings.IndexByte(full, '@'); i >= 0 {
-		full = full[:i]
-	}
+	full, _, _ := strings.Cut(source[len(prefix):], "@")
 	return full, full != ""
 }
 

@@ -125,9 +125,7 @@ func RenderShareJSON(w io.Writer, tokensPerSession int) {
 		Install               string `json:"install"`
 	}
 	msg := shareMessage(tokensPerSession)
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(shareJSON{
+	_ = WriteJSON(w, shareJSON{
 		Message:               msg,
 		TokensSavedPerSession: tokensPerSession,
 		URL:                   "https://github.com/thousandflowers/skillreaper",
@@ -140,15 +138,11 @@ func RenderShareJSON(w io.Writer, tokensPerSession int) {
 // When no data is available (0), it falls back to a generic message.
 func shareMessage(tokensPerSession int) string {
 	if tokensPerSession > 0 {
-		tokStr := fmt.Sprintf("%d", tokensPerSession)
-		if tokensPerSession >= 1000 {
-			tokStr = fmt.Sprintf("%.1fk", float64(tokensPerSession)/1000)
-		}
 		return fmt.Sprintf(`Just cut ~%s tokens/session of dead context from my AI agent with skillreaper.
 One read-only command, 100%% local:
 
   brew install thousandflowers/tap/skillreaper
-  github.com/thousandflowers/skillreaper`, tokStr)
+  github.com/thousandflowers/skillreaper`, HumanCount(tokensPerSession))
 	}
 	return `Check your AI agent's context diet with skillreaper.
 One read-only command, 100% local:
@@ -182,9 +176,14 @@ var sectionTitles = []struct {
 
 // RenderJSON writes the report as indented JSON.
 func RenderJSON(w io.Writer, r *Report) error {
+	return WriteJSON(w, r)
+}
+
+// WriteJSON writes v as indented JSON, the one shape every --json view uses.
+func WriteJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(r)
+	return enc.Encode(v)
 }
 
 // RenderText writes the human-readable report. color toggles ANSI codes.
@@ -211,7 +210,7 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		head += " · " + MalformedSummary(r)
 	}
 	if n := len(r.Warnings); n > 0 {
-		head += fmt.Sprintf(" · %d %s below", n, plural(n, "warning"))
+		head += fmt.Sprintf(" · %d %s below", n, Plural(n, "warning"))
 	}
 	fmt.Fprintf(w, "\n  %s\n", paint(cBold, truncate(head, width-2)))
 
@@ -249,7 +248,7 @@ func renderHeadline(w io.Writer, r *Report, width int, paint func(code, s string
 	deadVal, deadUnit := head.Figure()
 	figs := []struct{ val, unit string }{
 		{deadVal, deadUnit},
-		{"~" + humanNum(r.DeadTokensPerSession), "dead tokens per session"},
+		{"~" + HumanNum(r.DeadTokensPerSession), "dead tokens per session"},
 		{fmt.Sprintf("~$%.2f", r.MoneyPerMonth), "per month at your usage"},
 	}
 	vw := 0
@@ -300,7 +299,7 @@ func headlineNotes(r *Report) []string {
 	if r.DeadUnknownWeight > 0 {
 		out = append(out, fmt.Sprintf(
 			"a floor, not a total: %d unused %s (MCP servers, hooks) carry weight that was never measured",
-			r.DeadUnknownWeight, plural(r.DeadUnknownWeight, "item")))
+			r.DeadUnknownWeight, Plural(r.DeadUnknownWeight, "item")))
 	}
 	if r.DeadToolChars > 0 {
 		// DeadToolChars is a total summed across every session; divide to show
@@ -371,9 +370,9 @@ func renderGroups(w io.Writer, rows []Row, width int, paint func(code, s string)
 		for _, it := range items {
 			total += it.Tokens
 		}
-		head := fmt.Sprintf("%s  %-22s %d %s", mark(v), label, len(items), plural(len(items), "item"))
+		head := fmt.Sprintf("%s  %-22s %d %s", mark(v), label, len(items), Plural(len(items), "item"))
 		if total > 0 {
-			head += fmt.Sprintf(" · ~%s tok/session", humanNum(total))
+			head += fmt.Sprintf(" · ~%s tok/session", HumanNum(total))
 		}
 		// Bold on the two groups that carry an action, dim on the rest. Weight
 		// is the only emphasis a terminal has that a monochrome reader also
@@ -404,7 +403,7 @@ func renderGroups(w io.Writer, rows []Row, width int, paint func(code, s string)
 			}
 			more := fmt.Sprintf("… %d more", rest)
 			if restTok > 0 {
-				more += fmt.Sprintf(" · ~%s tok/session", humanNum(restTok))
+				more += fmt.Sprintf(" · ~%s tok/session", HumanNum(restTok))
 			}
 			more += " · full list: reap --md"
 			fmt.Fprintf(w, "    %s\n", paint(cDim, truncate(more, width-4)))
@@ -484,7 +483,7 @@ func renderWarnings(w io.Writer, r *Report, width int, paint func(code, s string
 	if len(r.Warnings) == 0 {
 		return
 	}
-	title := fmt.Sprintf("%d %s", len(r.Warnings), plural(len(r.Warnings), "warning"))
+	title := fmt.Sprintf("%d %s", len(r.Warnings), Plural(len(r.Warnings), "warning"))
 	fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule(title, width-2)))
 	for _, warn := range r.Warnings {
 		for _, l := range wrap(warn.Path+": "+warn.Msg, width, "    ", "      ") {
@@ -516,11 +515,11 @@ func renderActions(w io.Writer, r *Report, width int, paint func(code, s string)
 		var acts []action
 		if r.DeadCount > 0 {
 			acts = append(acts, action{"reap prune", fmt.Sprintf("%d %s · ~%s tok/session reclaimed",
-				r.DeadCount, plural(r.DeadCount, "item"), humanNum(r.DeadTokensPerSession))})
+				r.DeadCount, Plural(r.DeadCount, "item"), HumanNum(r.DeadTokensPerSession))})
 		}
 		if len(muteNames) > 0 {
 			acts = append(acts, action{"reap mute", fmt.Sprintf("%d %s · ~%s tok · %s",
-				len(muteNames), plural(len(muteNames), "skill"), humanNum(muteTokens),
+				len(muteNames), Plural(len(muteNames), "skill"), HumanNum(muteTokens),
 				strings.Join(muteNames, ", "))})
 		}
 		cw := 0
@@ -758,7 +757,8 @@ func MalformedSummary(r *Report) string {
 // needed here, and a count of one is not a rare edge: a single held-back item
 // produces exactly one warning, which is the moment the tool is asking to be
 // trusted about evidence.
-func plural(n int, word string) string {
+// Plural returns word, with an "s" unless n is 1.
+func Plural(n int, word string) string {
 	if n == 1 {
 		return word
 	}

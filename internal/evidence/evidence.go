@@ -219,24 +219,3 @@ func (d *Digest) Lookup(cat, name string) (Record, bool) {
 	r, ok := byName[name]
 	return r, ok
 }
-
-// SpanDays is how many days separate the earliest and latest observation held.
-// This is the number that can exceed the retention horizon, and the whole
-// reason the digest exists.
-func (d *Digest) SpanDays() int {
-	var first, last time.Time
-	for _, byName := range d.Items {
-		for _, r := range byName {
-			if !r.First.IsZero() && (first.IsZero() || r.First.Before(first)) {
-				first = r.First
-			}
-			if r.Last.After(last) {
-				last = r.Last
-			}
-		}
-	}
-	if first.IsZero() || last.IsZero() {
-		return 0
-	}
-	return int(last.Sub(first).Hours() / 24)
-}

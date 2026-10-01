@@ -53,9 +53,9 @@ func NewHeadline(r *Report) Headline {
 // so the verdict count is named as what it is instead.
 func (h Headline) Figure() (val, unit string) {
 	if !h.KnowsFired {
-		return humanNum(h.Reaped), "items marked REAP"
+		return HumanNum(h.Reaped), "items marked REAP"
 	}
-	return humanNum(h.NeverFired), fmt.Sprintf("items never fired, of %s loaded", humanNum(h.Loaded))
+	return HumanNum(h.NeverFired), fmt.Sprintf("items never fired, of %s loaded", HumanNum(h.Loaded))
 }
 
 // Verdict is the line under the figures: how many of the never-fired reap will
@@ -64,7 +64,7 @@ func (h Headline) Verdict() string {
 	if !h.KnowsFired {
 		return ""
 	}
-	s := fmt.Sprintf("%s of them marked REAP", humanNum(h.Reaped))
+	s := fmt.Sprintf("%s of them marked REAP", HumanNum(h.Reaped))
 	if h.HeldBack > 0 {
 		s += fmt.Sprintf(", %d held back rather than condemned", h.HeldBack)
 	}

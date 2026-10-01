@@ -5,7 +5,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -793,62 +792,20 @@ func observationFrom(one *usage.Stats) evidence.Observation {
 func mergeStats(dst, src *usage.Stats) {
 	dst.Sessions += src.Sessions
 	dst.FilesScanned += src.FilesScanned
-	dst.MalformedLines += src.MalformedLines
 	dst.UnreadableFiles += src.UnreadableFiles
 	dst.TruncatedReads += src.TruncatedReads
 	dst.OversizedLines += src.OversizedLines
 	dst.UnparsableLines += src.UnparsableLines
-	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
 	dst.SkippedByCutoff += src.SkippedByCutoff
-	// Unlike the corpus bracket below, the measured totals do merge: they are
-	// sums over messages, and a message belongs to exactly one transcript.
-	dst.Measured.Merge(src.Measured)
+	// Counts, evidence flags and measured totals merge in usage.MergeInto: they
+	// are sums over messages, and a message belongs to exactly one transcript.
 	// The corpus bracket is deliberately NOT merged. It is only ever compared
 	// against a per-platform setting (cleanupPeriodDays is Claude Code's), and a
 	// merged span reads like one platform's while describing all of them — which
 	// is the bug this warning shipped with in its first draft: an 81-day corpus
 	// belonging to another agent, measured against Claude Code's 30-day horizon.
 	// Callers needing a span must take it from the per-platform Stats.
-	for cat, uses := range src.Uses {
-		for key, count := range uses {
-			dst.Uses[cat][key] += count
-		}
-	}
-	for cat, lasts := range src.Last {
-		for key, ts := range lasts {
-			if ts.After(dst.Last[cat][key]) {
-				dst.Last[cat][key] = ts
-			}
-		}
-	}
-	for cat, errs := range src.Errors {
-		for key, count := range errs {
-			dst.Errors[cat][key] += count
-		}
-	}
-	for cat, lasts := range src.LastAttempt {
-		for key, ts := range lasts {
-			if ts.After(dst.LastAttempt[cat][key]) {
-				dst.LastAttempt[cat][key] = ts
-			}
-		}
-	}
-	for key, projs := range src.SkillProjects {
-		if dst.SkillProjects[key] == nil {
-			dst.SkillProjects[key] = map[string]int{}
-		}
-		for proj, count := range projs {
-			dst.SkillProjects[key][proj] += count
-		}
-	}
-	for key, p := range src.MCPPayload {
-		d := dst.MCPPayload[key]
-		d.Calls += p.Calls
-		d.TotalChars += p.TotalChars
-		d.NoiseChars += p.NoiseChars
-		dst.MCPPayload[key] = d
-	}
-	dst.MergeMCPWeight(src)
+	usage.MergeInto(dst, src)
 }
 
 func cmdReport(opts options, stdout, stderr io.Writer) int {
@@ -1073,14 +1030,14 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if !machine {
-		fmt.Fprintf(stdout, "\n🧹  %d items unused · reclaim ~%s tok/session\n\n", len(candidates), humanTok(totalTok))
+		fmt.Fprintf(stdout, "\n🧹  %d items unused · reclaim ~%s tok/session\n\n", len(candidates), report.HumanCount(totalTok))
 		// A list of N dead items reads as N decisions. Grouped by where they
 		// came from it usually is not: one plugin tends to account for most of
 		// the weight, so the real choice is between a handful of sources.
 		// Printed only when there is more than one, and only when the run is
 		// not already scoped to a single source.
 		if opts.source == "" {
-			report.RenderSourceTotals(stdout, report.SourceTotals(dead), len(dead), humanTok)
+			report.RenderSourceTotals(stdout, report.SourceTotals(dead), len(dead))
 		}
 		for _, row := range candidates {
 			weight := fmt.Sprintf("~%d tok", row.Tokens)
@@ -1232,9 +1189,7 @@ func writePruneJSON(w, stderr io.Writer, candidates []report.Row, totalTok, skip
 		}
 		out.Pruned = append(out.Pruned, entry{ID: e.ID, Name: name, Category: cat})
 	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(out); err != nil {
+	if err := report.WriteJSON(w, out); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
@@ -1377,7 +1332,7 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		muted++
 		totalTok += row.Tokens
 	}
-	fmt.Fprintf(stdout, "\nmuted %d items · ~%s tok/session reclaimed\n", muted, humanTok(totalTok))
+	fmt.Fprintf(stdout, "\nmuted %d items · ~%s tok/session reclaimed\n", muted, report.HumanCount(totalTok))
 	col := colorEnabled(opts, stdout)
 	report.RenderValueFeedback(stdout, "muted", muted, totalTok, r.SessionsPerMonth, opts.price, col)
 	tryShowShareHint(opts, stdout, col)
@@ -1735,15 +1690,6 @@ func tryShowShareHint(opts options, stdout io.Writer, color bool) {
 	st.LastShareHintAt = now
 	st.ShareHintCount++
 	_ = hook.SaveNudgeState(opts.claudeDir, st)
-}
-
-func humanTok(n int) string {
-	switch {
-	case n >= 1000:
-		return fmt.Sprintf("%.1fk", float64(n)/1000)
-	default:
-		return fmt.Sprintf("%d", n)
-	}
 }
 
 // isNudgeDisabled checks whether the user has opted out of the star-CTA

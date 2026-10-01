@@ -83,7 +83,7 @@ func LoadManifest(claudeDir string) ([]Entry, error) {
 }
 
 func saveManifest(claudeDir string, entries []Entry) error {
-	if err := parentWithinForWrite(claudeDir, manifestPath(claudeDir)); err != nil {
+	if err := safepath.ParentWithinForWrite(claudeDir, manifestPath(claudeDir)); err != nil {
 		return err
 	}
 	m := Manifest{
@@ -138,7 +138,7 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		}
 		return Entry{}, err
 	}
-	if err := existingPathWithin(root, src); err != nil {
+	if _, err := safepath.ExistingPathWithin(root, src); err != nil {
 		if os.IsNotExist(err) {
 			return Entry{}, fmt.Errorf("%w: %s", ErrAlreadyGone, src)
 		}
@@ -154,7 +154,7 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 	if _, err := os.Stat(dest); err == nil {
 		dest = fmt.Sprintf("%s.%d", dest, time.Now().Unix())
 	}
-	if err := parentWithinForWrite(claudeDir, dest); err != nil {
+	if err := safepath.ParentWithinForWrite(claudeDir, dest); err != nil {
 		return Entry{}, err
 	}
 	if err := os.Rename(src, dest); err != nil {
@@ -193,7 +193,7 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 // the manifest for restore. scope "" targets the top-level mcpServers;
 // otherwise it names a project path under "projects".
 func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
-	if err := existingRegularFileWithin(filepath.Dir(claudeDir), configPath); err != nil {
+	if _, err := safepath.ExistingRegularFileWithin(filepath.Dir(claudeDir), configPath); err != nil {
 		return Entry{}, err
 	}
 	b, err := safepath.ReadRegularFileWithin(filepath.Dir(claudeDir), configPath, maxConfigFileSize)
@@ -375,20 +375,6 @@ func Restore(claudeDir, id string) error {
 	return fmt.Errorf("no manifest entry with id %s", id)
 }
 
-func existingPathWithin(root, target string) error {
-	_, err := safepath.ExistingPathWithin(root, target)
-	return err
-}
-
-func existingRegularFileWithin(root, target string) error {
-	_, err := safepath.ExistingRegularFileWithin(root, target)
-	return err
-}
-
-func parentWithinForWrite(root, target string) error {
-	return safepath.ParentWithinForWrite(root, target)
-}
-
 // RestoreAll undoes every non-restored prune action.
 func RestoreAll(claudeDir string) (int, error) {
 	entries, err := LoadManifest(claudeDir)
@@ -415,7 +401,7 @@ func restoreEntry(claudeDir string, e *Entry) error {
 		// Bound the config write to the install tree (covers ~/.claude.json and
 		// plugin .mcp.json under the home dir) so a tampered manifest cannot
 		// redirect the write to an arbitrary file.
-		if err := existingPathWithin(filepath.Dir(claudeDir), e.ConfigPath); err != nil {
+		if _, err := safepath.ExistingPathWithin(filepath.Dir(claudeDir), e.ConfigPath); err != nil {
 			return err
 		}
 		b, err := safepath.ReadRegularFileWithin(filepath.Dir(claudeDir), e.ConfigPath, maxConfigFileSize)
@@ -446,14 +432,14 @@ func restoreEntry(claudeDir string, e *Entry) error {
 	// another platform does not belong under the Claude directory and pinning
 	// it there is what made multi-platform prune impossible. Entries written
 	// before Root existed fall back to the old bound.
-	if err := existingPathWithin(claudeDir, e.To); err != nil {
+	if _, err := safepath.ExistingPathWithin(claudeDir, e.To); err != nil {
 		return err
 	}
 	restoreRoot := e.Root
 	if restoreRoot == "" {
 		restoreRoot = claudeDir
 	}
-	if err := parentWithinForWrite(restoreRoot, e.From); err != nil {
+	if err := safepath.ParentWithinForWrite(restoreRoot, e.From); err != nil {
 		return err
 	}
 	if err := os.Rename(e.To, e.From); err != nil {

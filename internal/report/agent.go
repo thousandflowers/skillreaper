@@ -24,7 +24,8 @@ const agentSignature = "measured by skillreaper · github.com/thousandflowers/sk
 // denominator. A zero denominator is not an error: MCP items carry their weight
 // in tool schemas rather than in an injected description, so their token counts
 // are genuinely 0 and must not be reported as 0%.
-func pctOf(part, whole int) string {
+// PctOf is part/whole as a whole percent, "<1%" for a sliver, "n/a" for none.
+func PctOf(part, whole int) string {
 	if whole == 0 {
 		return "n/a"
 	}
@@ -54,7 +55,7 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 
 	if r.Gap != nil && r.Gap.Loaded > 0 {
 		fmt.Fprintf(w, "%d/%d items fired · %s utilization\n",
-			r.Gap.Fired, r.Gap.Loaded, pctOf(r.Gap.Fired, r.Gap.Loaded))
+			r.Gap.Fired, r.Gap.Loaded, PctOf(r.Gap.Fired, r.Gap.Loaded))
 	} else {
 		fmt.Fprintln(w, "no items loaded")
 	}
@@ -99,7 +100,7 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 
 	if len(r.Warnings) > 0 {
 		fmt.Fprintf(w, "\n%d %s — some evidence was incomplete; those items were held back from a REAP verdict.\n",
-			len(r.Warnings), plural(len(r.Warnings), "warning"))
+			len(r.Warnings), Plural(len(r.Warnings), "warning"))
 	}
 
 	fmt.Fprintf(w, "\n%s\n", agentSignature)
@@ -135,8 +136,8 @@ func RenderGapAgent(w io.Writer, r *Report) {
 	}
 
 	g := r.Gap
-	fmt.Fprintf(w, "%d/%d items fired · %s utilization\n", g.Fired, g.Loaded, pctOf(g.Fired, g.Loaded))
-	fmt.Fprintf(w, "%d/%d tokens touched · %s token reach\n", g.FiredTok, g.LoadedTok, pctOf(g.FiredTok, g.LoadedTok))
+	fmt.Fprintf(w, "%d/%d items fired · %s utilization\n", g.Fired, g.Loaded, PctOf(g.Fired, g.Loaded))
+	fmt.Fprintf(w, "%d/%d tokens touched · %s token reach\n", g.FiredTok, g.LoadedTok, PctOf(g.FiredTok, g.LoadedTok))
 
 	fmt.Fprintln(w)
 	tw := newTable(w)
@@ -150,10 +151,10 @@ func RenderGapAgent(w io.Writer, r *Report) {
 			string(c.Category),
 			fmt.Sprintf("%d", c.Loaded),
 			fmt.Sprintf("%d", c.Fired),
-			pctOf(c.Fired, c.Loaded),
+			PctOf(c.Fired, c.Loaded),
 			fmt.Sprintf("%d", c.LoadedTok),
 			fmt.Sprintf("%d", c.FiredTok),
-			pctOf(c.FiredTok, c.LoadedTok),
+			PctOf(c.FiredTok, c.LoadedTok),
 		)
 	}
 	tw.flush()

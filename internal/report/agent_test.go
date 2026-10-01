@@ -69,8 +69,8 @@ func TestPlural(t *testing.T) {
 		n    int
 		want string
 	}{{0, "warnings"}, {1, "warning"}, {2, "warnings"}} {
-		if got := plural(c.n, "warning"); got != c.want {
-			t.Errorf("plural(%d) = %q, want %q", c.n, got, c.want)
+		if got := Plural(c.n, "warning"); got != c.want {
+			t.Errorf("Plural(%d) = %q, want %q", c.n, got, c.want)
 		}
 	}
 }
@@ -386,8 +386,8 @@ func TestPctOf(t *testing.T) {
 		{50, 100, "50%"},
 	}
 	for _, c := range cases {
-		if got := pctOf(c.part, c.whole); got != c.want {
-			t.Errorf("pctOf(%d, %d) = %q, want %q", c.part, c.whole, got, c.want)
+		if got := PctOf(c.part, c.whole); got != c.want {
+			t.Errorf("PctOf(%d, %d) = %q, want %q", c.part, c.whole, got, c.want)
 		}
 	}
 }

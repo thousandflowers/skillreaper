@@ -9,9 +9,12 @@ Muting goes through `reap mute` (reversible with `reap unmute`), so it works for
 from __future__ import annotations
 
 import curses
+import json
 import os
 import subprocess
 from pathlib import Path
+
+import sources
 
 MAX_MUTED_PER_SWAP = 3
 STEP_TIMEOUT = 120  # `skills add` on a repo that is gone clones forever, even with git prompts off
@@ -19,6 +22,9 @@ STEP_TIMEOUT = 120  # `skills add` on a repo that is gone clones forever, even w
 # even when one of them fails.
 SKILLS_ADD = ["npx", "-y", "skills", "add"]
 SKILLS_FLAGS = ["-g", "-y", "-a", "claude-code"]
+# MCP servers installed with nothing muted, because their weight was unknown. Once reap has seen one load, the next
+# run offers the mute that should have gone with it.
+WEIGH_LATER = sources.CACHE / "weigh_later.json"
 
 
 def pair(cost: int | None, pool: list[dict]) -> list[dict]:
@@ -51,8 +57,57 @@ def build(picks: list[dict], passing: list[dict], reap_pool: list[dict]) -> list
     return swaps
 
 
-def weight(cost: int | None) -> str:
-    return "weight unknown until installed" if cost is None else f"~{cost} tok/session"
+def weight(cost: int | None, measured: bool = False) -> str:
+    if cost is None:
+        return "weight unknown until installed"
+    return f"~{cost} tok/session" + (" · measured" if measured else "")
+
+
+def verb(c: dict) -> str:
+    return "installed" if c.get("installed") else "install"
+
+
+# ---------------------------------------------------------------------------
+# MCP servers weighed after install
+# ---------------------------------------------------------------------------
+
+def _waiting() -> dict:
+    try:
+        return json.loads(WEIGH_LATER.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_waiting(waiting: dict):
+    WEIGH_LATER.parent.mkdir(parents=True, exist_ok=True)
+    WEIGH_LATER.write_text(json.dumps(waiting, ensure_ascii=False), encoding="utf-8")
+
+
+def remember(c: dict):
+    _save_waiting({**_waiting(), mcp_name(c): {"name": c["name"], "gap": c.get("gap", ""), "why": c.get("why", ""),
+                                               "fit": c.get("fit", 1)}})
+
+
+def forget(c: dict):
+    _save_waiting({k: v for k, v in _waiting().items() if k != mcp_name(c)})
+
+
+def settle(mcp_weights: dict[str, int | None], pool: list[dict]) -> list[dict]:
+    """Swaps for MCP servers installed earlier with nothing muted, now that reap has weighed them.
+    `mcp_weights` is reap's MCP rows by name (None: not weighed yet). A server reap no longer lists was removed:
+    it is forgotten. One not weighed yet waits for a later run."""
+    waiting = {k: v for k, v in _waiting().items() if k in mcp_weights}
+    _save_waiting(waiting)
+    out, pool = [], list(pool)
+    for key, w in waiting.items():
+        cost = mcp_weights[key]
+        mute = pair(cost, pool)
+        if not mute:
+            continue
+        pool = [x for x in pool if x not in mute]
+        c = {**w, "kind": "mcp", "cost": cost, "installed": True, "server": {"name": key}}
+        out.append({"mute": mute, "out": sum(x["tokens"] for x in mute), "cands": [c], "idx": 0, "ok": False})
+    return out
 
 
 def mute_text(s: dict) -> str:
@@ -85,14 +140,15 @@ def _draw(scr, swaps: list[dict], cur: int):
     for i, s in enumerate(swaps):
         c, sel = s["cands"][s["idx"]], i == cur
         taken = any(o["ok"] and o is not s and o["cands"][o["idx"]]["name"] == c["name"] for o in swaps)
-        put(y, 2, f"{'✓' if s['ok'] else ' '}  mute     {mute_text(s)}",
+        put(y, 2, f"{'✓' if s['ok'] else ' '}  mute      {mute_text(s)}",
             curses.A_REVERSE if sel else 0)
         pick = f"◂ {c['name']} ▸" if len(s["cands"]) > 1 else c["name"]
-        put(y + 1, 5, f"install  {pick}   {weight(c['cost'])} · {c['kind']}   {s['idx'] + 1}/{len(s['cands'])}"
+        put(y + 1, 5, f"{verb(c):<9} {pick}   {weight(c['cost'], c.get('installed', False))} · {c['kind']}"
+            f"   {s['idx'] + 1}/{len(s['cands'])}"
             + ("   (already picked above)" if taken else ""), curses.A_BOLD if sel else 0)
-        put(y + 2, 14, f"for {c['gap']}")
+        put(y + 2, 15, f"for {c['gap']}")
         if sel:
-            put(y + 3, 14, c["why"], curses.A_DIM)
+            put(y + 3, 15, c["why"], curses.A_DIM)
             y += 1
         y += 4
     chosen = [s for s in swaps if s["ok"]]
@@ -196,25 +252,33 @@ def run(cmd: list[str]) -> str | None:
 
 
 def apply_one(s: dict) -> list[str]:
-    """Install, then mute. All or nothing: a failed mute unmutes what this swap muted and uninstalls."""
+    """Install, then mute. All or nothing: a failed mute unmutes what this swap muted and uninstalls (a server
+    installed by an earlier run stays: only this run's mutes are undone)."""
     c = s["cands"][s["idx"]]
-    install = install_command(c)
-    if install is None:
-        return [f"  ✗  {c['name']}: needs manual setup, nothing muted · {c.get('id', '')}"]
-    err = run(install) or (None if installed(c) else "installed, but not for Claude Code")
-    if err:
-        return [f"  ✗  {c['name']}: {err} · nothing muted"]
-    log, muted = [f"  ✓  installed {c['name']}"], []
+    log, muted = [], []
+    if not c.get("installed"):
+        install = install_command(c)
+        if install is None:
+            return [f"  ✗  {c['name']}: needs manual setup, nothing muted · {c.get('id', '')}"]
+        err = run(install) or (None if installed(c) else "installed, but not for Claude Code")
+        if err:
+            return [f"  ✗  {c['name']}: {err} · nothing muted"]
+        log.append(f"  ✓  installed {c['name']}")
+        if c["kind"] == "mcp" and not s["mute"]:
+            remember(c)
+            return log + ["  ·  nothing muted yet: reinvest offers the mute once reap has weighed it"]
     for x in s["mute"]:
         err = run(["reap", "mute", x["name"]])
         if err is None:
             muted.append(x["name"])
             continue
         undone = [n for n in muted if run(["reap", "unmute", n]) is None]
-        removed = run(uninstall_command(c)) is None
+        removed = c.get("installed") or run(uninstall_command(c)) is None
         left = [n for n in muted if n not in undone] + ([] if removed else [c["name"] + " (installed)"])
         return log + [f"  ✗  reap mute {x['name']}: {err}",
                       "  ↺  rolled back" + (f", but still changed: {', '.join(left)}" if left else ": nothing changed")]
+    if c.get("installed"):
+        forget(c)
     return log + [f"  ✓  muted {name} (reap unmute {name} undoes)" for name in muted]
 
 
@@ -225,7 +289,7 @@ def apply(chosen: list[dict], dry_run: bool) -> list[str]:
             log += apply_one(s)
             continue
         c = s["cands"][s["idx"]]
-        cmd = install_command(c)
+        cmd = [] if c.get("installed") else install_command(c)
         log += ([f"  ✗  {c['name']}: needs manual setup, nothing muted · {c.get('id', '')}"] if cmd is None else
-                ["  ·  " + " ".join(cmd)] + [f"  ·  reap mute {x['name']}" for x in s["mute"]])
+                (["  ·  " + " ".join(cmd)] if cmd else []) + [f"  ·  reap mute {x['name']}" for x in s["mute"]])
     return log

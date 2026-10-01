@@ -58,7 +58,10 @@ the new one. Tested for real (skill and MCP, success and rollback) with `HOME` p
    by everything the verifier read, so the same inputs give the same answer.
 5. **Swaps** — the best fit per gap (the verifier's 1–5 fit, then the lighter), max 3, paired with 1–3 REAP
    skills of about the same weight. Skill weight uses reap's own formula (matches reap on all 301 installed
-   skills). MCP weight is shown as unknown, as reap shows it: an MCP swap mutes nothing.
+   skills). An MCP server's weight is unknown until it runs, so an MCP swap installs and mutes nothing; the
+   server is remembered (`weigh_later.json`), and once reap has weighed it from the transcripts (its tool names
+   and instructions, as Claude Code injected them) the next run offers the mute as an `installed` swap.
+   A server no longer installed is forgotten. Needs reap with MCP weights (branch `feat/mcp-weight`).
 
 ## What the experiments showed
 
@@ -89,8 +92,6 @@ Measured on one real install (~70 human sessions, 327 skills, 7 ever used), over
 
 ## Known issues
 
-- An MCP swap mutes nothing, because its weight is unknown until the server runs. Measuring it would mean
-  running an unreviewed server before the user agreed.
 - reap reads only a one-line `description:`, so a skill whose description is a YAML block scalar (`>`) is
   weighted at a few tokens by reap, and therefore by reinvest too.
 

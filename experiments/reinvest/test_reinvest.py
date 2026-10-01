@@ -117,6 +117,62 @@ class Apply(unittest.TestCase):
         self.assertIn("claude-code", swaps.install_command(self.swap()["cands"][0]))
 
 
+class WeighLater(unittest.TestCase):
+    """An MCP swap mutes nothing at install; once reap has weighed the server, the next run offers the mute."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.patch = mock.patch.object(swaps, "WEIGH_LATER", Path(self.tmp.name, "weigh_later.json"))
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+        self.tmp.cleanup()
+
+    def mcp_swap(self):
+        c = {"kind": "mcp", "name": "io.github.x/docs", "gap": "g", "why": "w",
+             "server": {"name": "io.github.x/docs", "remotes": [{"type": "streamable-http", "url": "https://x"}]}}
+        return {"cands": [c], "idx": 0, "mute": []}
+
+    def test_installed_mcp_is_remembered_then_offered_once_weighed(self):
+        with mock.patch.object(swaps, "run", return_value=None):
+            swaps.apply_one(self.mcp_swap())
+        pool = [{"name": "old", "tokens": 120}]
+        self.assertEqual(swaps.settle({"docs": None}, pool), [])  # not weighed yet: nothing to offer, kept
+        settled = swaps.settle({"docs": 118}, pool)
+        self.assertEqual([x["name"] for x in settled[0]["mute"]], ["old"])
+        self.assertTrue(settled[0]["cands"][0]["installed"])
+
+    def test_uninstalled_server_is_forgotten(self):
+        with mock.patch.object(swaps, "run", return_value=None):
+            swaps.apply_one(self.mcp_swap())
+        self.assertEqual(swaps.settle({}, [{"name": "old", "tokens": 120}]), [])
+        self.assertEqual(swaps.settle({"docs": 118}, [{"name": "old", "tokens": 120}]), [])
+
+    def test_accepting_mutes_without_installing_then_forgets(self):
+        with mock.patch.object(swaps, "run", return_value=None):
+            swaps.apply_one(self.mcp_swap())
+        s = swaps.settle({"docs": 118}, [{"name": "old", "tokens": 120}])[0]
+        calls = []
+        with mock.patch.object(swaps, "run", lambda cmd: calls.append(cmd)):
+            swaps.apply_one(s)
+        self.assertEqual(calls, [["reap", "mute", "old"]])
+        self.assertEqual(swaps.settle({"docs": 118}, [{"name": "old", "tokens": 120}]), [])
+
+    def test_failed_mute_of_settled_swap_keeps_server(self):
+        with mock.patch.object(swaps, "run", return_value=None):
+            swaps.apply_one(self.mcp_swap())
+        s = swaps.settle({"docs": 300}, [{"name": "a", "tokens": 150}, {"name": "b", "tokens": 150}])[0]
+        calls = []
+        def fake(cmd):
+            calls.append(cmd)
+            return "boom" if cmd == ["reap", "mute", "b"] else None
+        with mock.patch.object(swaps, "run", fake):
+            swaps.apply_one(s)
+        self.assertNotIn("remove", [w for cmd in calls for w in cmd])
+        self.assertEqual(len(swaps.settle({"docs": 300}, [{"name": "a", "tokens": 150}])), 1)
+
+
 class SkillsShRateLimit(unittest.TestCase):
     """Known issue 8: a 429 waits and retries instead of disabling skills.sh for the rest of the run."""
 

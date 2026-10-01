@@ -71,14 +71,16 @@ def step(msg: str, done: bool = False):
 # ---------------------------------------------------------------------------
 
 def reap_state() -> dict:
-    """Installed skills, which ones fired, and the REAP pool, straight from `reap --json`."""
+    """Installed skills, which ones fired, the REAP pool and MCP weights, straight from `reap --json`."""
     if not shutil.which("reap"):
         sys.exit("reinvest needs `reap` on PATH (brew install thousandflowers/tap/skillreaper).")
     data = json.loads(subprocess.run(["reap", "--json", "--no-nudge"], capture_output=True, text=True).stdout)
     skills = [{"name": r["Name"], "desc": r.get("Description", ""), "tokens": r.get("Tokens", 0),
                "uses": r.get("Uses", 0), "verdict": r.get("Verdict", "")}
               for r in data.get("Rows", []) if r.get("Category") == "skill"]
-    return {"installed": skills, "used": [s for s in skills if s["uses"] > 0],
+    mcp = {r["Name"]: None if r.get("WeightUnknown") else r.get("Tokens", 0)
+           for r in data.get("Rows", []) if r.get("Category") == "mcp"}
+    return {"installed": skills, "used": [s for s in skills if s["uses"] > 0], "mcp": mcp,
             "reap": [s for s in skills if s["verdict"] == "REAP"], "dead": data.get("DeadTokensPerSession", 0)}
 
 
@@ -207,9 +209,9 @@ def summary(swap_list: list[dict], gaps: list[dict], dead: int) -> str:
     lines = [f"  reinvest · ~{dead:,} dead tok/session per reap · swaps for work you do with no skill", ""]
     for s in swap_list:
         c = s["cands"][s["idx"]]
-        lines += [f"  mute     {swaps.mute_text(s)}",
-                  f"  install  {c['name']}   {swaps.weight(c['cost'])} · {c['kind']}",
-                  f"           for {c['gap']}", f"           {c['why']}", ""]
+        lines += [f"  mute      {swaps.mute_text(s)}",
+                  f"  {swaps.verb(c):<9} {c['name']}   {swaps.weight(c['cost'], c.get('installed', False))} · {c['kind']}",
+                  f"            for {c['gap']}", f"            {c['why']}", ""]
     solved = {s["cands"][s["idx"]]["gap"] for s in swap_list}
     missing = [g["name"] for g in gaps if f"{g['name']} ({g['sessions']} sessions)" not in solved]
     if missing:
@@ -279,7 +281,9 @@ def main():
     step(f"{len(passing)} fit", done=True)
 
     write_report(kinds, gaps, passing, rejected)
-    swap_list = swaps.build(best_per_gap(passing, args.max), passing, state["reap"])
+    settled = swaps.settle(state["mcp"], state["reap"])
+    pool = [x for x in state["reap"] if not any(x in s["mute"] for s in settled)]
+    swap_list = settled + swaps.build(best_per_gap(passing, args.max), passing, pool)
     sys.stdout.close()
     sys.stdout = sys.__stdout__
     print()

@@ -85,7 +85,7 @@ func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int, humanT
 	var srcs, items, toks, notes []string
 	for _, t := range totals {
 		srcs = append(srcs, t.Source)
-		items = append(items, fmt.Sprintf("%d %s", t.Items, plural(t.Items, "item")))
+		items = append(items, fmt.Sprintf("%d %s", t.Items, Plural(t.Items, "item")))
 		toks = append(toks, "~"+humanTok(t.Tokens)+" tok")
 		if t.Removable == 0 {
 			// reap can see these and cannot touch them: they are registered by
@@ -96,7 +96,7 @@ func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int, humanT
 		notes = append(notes, fmt.Sprintf("%d prunable here", t.Removable))
 	}
 	fmt.Fprintf(w, "  by source — %d unused %s came from %d places:\n",
-		deadItems, plural(deadItems, "item"), len(totals))
+		deadItems, Plural(deadItems, "item"), len(totals))
 	for _, l := range layout([]col{
 		{head: "SOURCE", flex: true, cells: srcs},
 		{head: "ITEMS", right: true, cells: items},

@@ -214,7 +214,7 @@ func RenderText(w io.Writer, r *Report, color bool) {
 		head += " · " + MalformedSummary(r)
 	}
 	if n := len(r.Warnings); n > 0 {
-		head += fmt.Sprintf(" · %d %s below", n, plural(n, "warning"))
+		head += fmt.Sprintf(" · %d %s below", n, Plural(n, "warning"))
 	}
 	fmt.Fprintf(w, "\n  %s\n", paint(cBold, truncate(head, width-2)))
 
@@ -303,7 +303,7 @@ func headlineNotes(r *Report) []string {
 	if r.DeadUnknownWeight > 0 {
 		out = append(out, fmt.Sprintf(
 			"a floor, not a total: %d unused %s (MCP servers, hooks) carry weight that was never measured",
-			r.DeadUnknownWeight, plural(r.DeadUnknownWeight, "item")))
+			r.DeadUnknownWeight, Plural(r.DeadUnknownWeight, "item")))
 	}
 	if r.DeadToolChars > 0 {
 		// DeadToolChars is a total summed across every session; divide to show
@@ -374,7 +374,7 @@ func renderGroups(w io.Writer, rows []Row, width int, paint func(code, s string)
 		for _, it := range items {
 			total += it.Tokens
 		}
-		head := fmt.Sprintf("%s  %-22s %d %s", mark(v), label, len(items), plural(len(items), "item"))
+		head := fmt.Sprintf("%s  %-22s %d %s", mark(v), label, len(items), Plural(len(items), "item"))
 		if total > 0 {
 			head += fmt.Sprintf(" · ~%s tok/session", humanNum(total))
 		}
@@ -487,7 +487,7 @@ func renderWarnings(w io.Writer, r *Report, width int, paint func(code, s string
 	if len(r.Warnings) == 0 {
 		return
 	}
-	title := fmt.Sprintf("%d %s", len(r.Warnings), plural(len(r.Warnings), "warning"))
+	title := fmt.Sprintf("%d %s", len(r.Warnings), Plural(len(r.Warnings), "warning"))
 	fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule(title, width-2)))
 	for _, warn := range r.Warnings {
 		for _, l := range wrap(warn.Path+": "+warn.Msg, width, "    ", "      ") {
@@ -519,11 +519,11 @@ func renderActions(w io.Writer, r *Report, width int, paint func(code, s string)
 		var acts []action
 		if r.DeadCount > 0 {
 			acts = append(acts, action{"reap prune", fmt.Sprintf("%d %s · ~%s tok/session reclaimed",
-				r.DeadCount, plural(r.DeadCount, "item"), humanNum(r.DeadTokensPerSession))})
+				r.DeadCount, Plural(r.DeadCount, "item"), humanNum(r.DeadTokensPerSession))})
 		}
 		if len(muteNames) > 0 {
 			acts = append(acts, action{"reap mute", fmt.Sprintf("%d %s · ~%s tok · %s",
-				len(muteNames), plural(len(muteNames), "skill"), humanNum(muteTokens),
+				len(muteNames), Plural(len(muteNames), "skill"), humanNum(muteTokens),
 				strings.Join(muteNames, ", "))})
 		}
 		cw := 0
@@ -761,7 +761,8 @@ func MalformedSummary(r *Report) string {
 // needed here, and a count of one is not a rare edge: a single held-back item
 // produces exactly one warning, which is the moment the tool is asking to be
 // trusted about evidence.
-func plural(n int, word string) string {
+// Plural returns word, with an "s" unless n is 1.
+func Plural(n int, word string) string {
 	if n == 1 {
 		return word
 	}

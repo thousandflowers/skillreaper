@@ -99,7 +99,7 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 
 	if len(r.Warnings) > 0 {
 		fmt.Fprintf(w, "\n%d %s — some evidence was incomplete; those items were held back from a REAP verdict.\n",
-			len(r.Warnings), plural(len(r.Warnings), "warning"))
+			len(r.Warnings), Plural(len(r.Warnings), "warning"))
 	}
 
 	fmt.Fprintf(w, "\n%s\n", agentSignature)

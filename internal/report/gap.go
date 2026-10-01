@@ -203,7 +203,7 @@ func renderMuteSavings(w io.Writer, r *Report, width int, paint func(code, s str
 	}
 	fmt.Fprintln(w)
 	for _, l := range wrap(fmt.Sprintf("MUTE — %d heavy low-use %s, ~%s tok/session recoverable with reap mute",
-		r.MuteCount, plural(r.MuteCount, "skill"), humanNum(r.MuteTokensPerSession)),
+		r.MuteCount, Plural(r.MuteCount, "skill"), humanNum(r.MuteTokensPerSession)),
 		width, "  "+mark(VerdictMute)+"  ", "     ") {
 		fmt.Fprintln(w, paint(cBold, l))
 	}
@@ -225,7 +225,7 @@ func renderBrokenSkills(w io.Writer, r *Report, width int, paint func(code, s st
 	}
 	fmt.Fprintf(w, "\n  %s\n", paint(cBold, truncate(
 		fmt.Sprintf("%s  BROKEN — %d %s invoked that only ever errored",
-			mark(VerdictReap), len(names), plural(len(names), "skill")), width-2)))
+			mark(VerdictReap), len(names), Plural(len(names), "skill")), width-2)))
 	for _, l := range layout([]col{
 		{head: "NAME", flex: true, cells: names},
 		{head: "ERRORS", right: true, cells: errs},

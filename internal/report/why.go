@@ -251,7 +251,12 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 	field("reason", e.Summary)
 
 	weight := "? (weight unknown)"
-	if e.DescChars > 0 || e.TokenWeight > 0 {
+	switch {
+	case e.Category == string(scan.CatMCP) && e.TokenWeight > 0:
+		weight = fmt.Sprintf("~%d tok  (tool names + instructions, last session that loaded it)", e.TokenWeight)
+	case e.Category == string(scan.CatMCP):
+		weight = "? (never seen loading in a session, so never measured)"
+	case e.DescChars > 0 || e.TokenWeight > 0:
 		weight = fmt.Sprintf("~%d tok  (description: %d chars)", e.TokenWeight, e.DescChars)
 	}
 	field("token weight", weight)

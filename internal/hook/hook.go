@@ -226,30 +226,12 @@ func nudgeStatePath(claudeDir string) string {
 // LoadNudgeState returns the saved nudge state, or a zero state when none
 // exists yet (which makes the first run eligible to nudge).
 func LoadNudgeState(claudeDir string) (NudgeState, error) {
-	b, err := os.ReadFile(nudgeStatePath(claudeDir))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return NudgeState{}, nil
-		}
-		return NudgeState{}, err
-	}
-	var s NudgeState
-	if err := json.Unmarshal(b, &s); err != nil {
-		return NudgeState{}, err
-	}
-	return s, nil
+	return atomicfile.LoadJSON[NudgeState](nudgeStatePath(claudeDir))
 }
 
 // SaveNudgeState writes the nudge state, creating the reaped/ directory.
 func SaveNudgeState(claudeDir string, s NudgeState) error {
-	if err := os.MkdirAll(filepath.Dir(nudgeStatePath(claudeDir)), 0o755); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return atomicfile.Write(nudgeStatePath(claudeDir), b, 0o600)
+	return atomicfile.SaveJSON(nudgeStatePath(claudeDir), s)
 }
 
 // ShouldNudge reports whether a passive nudge should print now: at least

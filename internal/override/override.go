@@ -1,12 +1,10 @@
 package override
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
+	"slices"
 	"strings"
-	"sync"
 
 	"github.com/thousandflowers/skillreaper/internal/atomicfile"
 )
@@ -27,10 +25,8 @@ func AddKeep(claudeDir, key string) error {
 	if err != nil {
 		return err
 	}
-	for _, k := range f.Keep {
-		if k == key {
-			return nil
-		}
+	if slices.Contains(f.Keep, key) {
+		return nil
 	}
 	f.Keep = append(f.Keep, key)
 	return save(path(claudeDir), f)
@@ -41,16 +37,10 @@ func RemoveKeep(claudeDir, key string) error {
 	if err != nil {
 		return err
 	}
-	var updated []string
-	for _, k := range f.Keep {
-		if k != key {
-			updated = append(updated, k)
-		}
-	}
-	if len(updated) == len(f.Keep) {
+	if !slices.Contains(f.Keep, key) {
 		return fmt.Errorf("not found: %s", key)
 	}
-	f.Keep = updated
+	f.Keep = slices.DeleteFunc(slices.Clone(f.Keep), func(k string) bool { return k == key })
 	return save(path(claudeDir), f)
 }
 
@@ -78,34 +68,10 @@ func ItemKey(category, name string) string {
 	return strings.ToLower(category + ":" + name)
 }
 
-var mu sync.Mutex
-
-func load(p string) (*File, error) {
-	mu.Lock()
-	defer mu.Unlock()
-	data, err := os.ReadFile(p)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &File{}, nil
-		}
-		return nil, err
-	}
-	var f File
-	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, err
-	}
-	return &f, nil
+func load(p string) (File, error) {
+	return atomicfile.LoadJSON[File](p)
 }
 
-func save(p string, f *File) error {
-	mu.Lock()
-	defer mu.Unlock()
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(f, "", "  ")
-	if err != nil {
-		return err
-	}
-	return atomicfile.Write(p, data, 0o600)
+func save(p string, f File) error {
+	return atomicfile.SaveJSON(p, f)
 }

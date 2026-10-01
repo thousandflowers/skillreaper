@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -112,7 +111,5 @@ func prettyProject(dir string) string {
 
 // RenderByProjectJSON writes the skill→project firing map as indented JSON.
 func RenderByProjectJSON(w io.Writer, r *Report) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(r.SkillProjects)
+	return WriteJSON(w, r.SkillProjects)
 }

@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -339,9 +338,7 @@ func ratePct(rate float64) string {
 
 // RenderRoutePlanJSON writes the plan as indented JSON.
 func RenderRoutePlanJSON(w io.Writer, plan *RoutePlan) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(plan)
+	return WriteJSON(w, plan)
 }
 
 // RenderRoutePlanMarkdown writes the plan as Markdown.

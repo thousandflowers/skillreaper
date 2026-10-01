@@ -125,9 +125,7 @@ func RenderShareJSON(w io.Writer, tokensPerSession int) {
 		Install               string `json:"install"`
 	}
 	msg := shareMessage(tokensPerSession)
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(shareJSON{
+	_ = WriteJSON(w, shareJSON{
 		Message:               msg,
 		TokensSavedPerSession: tokensPerSession,
 		URL:                   "https://github.com/thousandflowers/skillreaper",
@@ -182,9 +180,14 @@ var sectionTitles = []struct {
 
 // RenderJSON writes the report as indented JSON.
 func RenderJSON(w io.Writer, r *Report) error {
+	return WriteJSON(w, r)
+}
+
+// WriteJSON writes v as indented JSON, the one shape every --json view uses.
+func WriteJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(r)
+	return enc.Encode(v)
 }
 
 // RenderText writes the human-readable report. color toggles ANSI codes.

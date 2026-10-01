@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -268,15 +267,13 @@ func RenderGapMarkdown(w io.Writer, r *Report) {
 
 // RenderGapJSON writes only the Gap snapshot as indented JSON.
 func RenderGapJSON(w io.Writer, r *Report) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
 	// Embed *Gap so its fields stay top-level (backwards compatible) and add the
 	// payload-quality axis alongside it.
 	out := struct {
 		*Gap
 		Payload []PayloadRow `json:"payload,omitempty"`
 	}{Gap: r.Gap, Payload: r.MCPPayload}
-	return enc.Encode(out)
+	return WriteJSON(w, out)
 }
 
 // computeGap derives the loaded-vs-fired snapshot from joined rows.

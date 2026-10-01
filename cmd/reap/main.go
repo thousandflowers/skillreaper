@@ -5,7 +5,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -1190,9 +1189,7 @@ func writePruneJSON(w, stderr io.Writer, candidates []report.Row, totalTok, skip
 		}
 		out.Pruned = append(out.Pruned, entry{ID: e.ID, Name: name, Category: cat})
 	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(out); err != nil {
+	if err := report.WriteJSON(w, out); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}

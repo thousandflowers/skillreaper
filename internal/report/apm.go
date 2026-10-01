@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -432,9 +431,7 @@ func renderAPMDiffComments(w io.Writer, m APMReport) {
 
 // RenderAPMJSON writes the report as indented JSON.
 func RenderAPMJSON(w io.Writer, m APMReport) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(m)
+	return WriteJSON(w, m)
 }
 
 // RenderAPMMarkdown writes the report as Markdown.

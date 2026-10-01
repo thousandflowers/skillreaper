@@ -9,7 +9,7 @@ Python, standard library only. Not part of the Go build: kept here to decide whe
 ## Run
 
 ```bash
-python3 reinvest.py --dry-run   # pick swaps, print what would run, change nothing
+python3 reinvest.py --dry-run   # pick swaps, print what would run; installs and mutes nothing
 python3 reinvest.py             # same, then asks before installing and muting
 python3 reinvest.py --regroup   # group every session from scratch now, instead of weekly
 python3 token_cost.py           # tokens per request per kind of work, with vs without each skill you used
@@ -17,6 +17,8 @@ python3 -m unittest test_reinvest   # offline checks, no network, no Claude call
 ```
 
 Needs `reap` and `claude` on PATH. Takes about 1–2 minutes (Claude does the grouping and the verification).
+A dry run still asks Claude through `claude -p`, which updates Claude Code's own `~/.claude.json` as any session does (no transcript is kept: `--no-session-persistence`).
+
 Cache, report and log live in `skillreaper/reinvest/` under the user cache directory reap uses (`~/Library/Caches` on macOS, `~/.cache` on Linux); nothing is written in the repo. The last proposals go to `swaps.json` there, and reap's text report points at them in one line; applying stays in reinvest's picker.
 
 ## Picker

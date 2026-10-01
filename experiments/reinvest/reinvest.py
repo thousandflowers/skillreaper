@@ -320,7 +320,7 @@ def main():
     ap.add_argument("--max", type=int, default=3, help="swaps proposed at most")
     ap.add_argument("--regroup", action="store_true", help="group every session from scratch now, instead of weekly")
     ap.add_argument("--no-mcp", action="store_true", help="skills only")
-    ap.add_argument("--dry-run", action="store_true", help="pick swaps but only print what would run")
+    ap.add_argument("--dry-run", action="store_true", help="pick swaps but only print what would run: installs and mutes nothing")
     args = ap.parse_args()
     sources.CACHE.mkdir(parents=True, exist_ok=True)
     sys.stdout = LOG.open("w", encoding="utf-8")  # library chatter goes to the log; the terminal gets steps

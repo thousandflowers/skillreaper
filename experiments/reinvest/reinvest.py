@@ -54,6 +54,9 @@ def reap_tokens(slug: str, doc: str) -> int:
         if line.strip() == "---":
             break
         header.append(line)
+    if any(l.split(":", 1)[0] == "disable-model-invocation" and l.split(":", 1)[1].strip().lower() == "true"
+           for l in header if ":" in l):
+        return 0  # run only by hand: Claude Code never lists it, as reap counts it
     chars = len((slug + description(header)).encode("utf-8"))
     return (chars * 10 + 36) // 37
 

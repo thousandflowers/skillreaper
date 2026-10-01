@@ -89,3 +89,22 @@ func TestParseFrontmatterUnknownEscapeFallsBack(t *testing.T) {
 		t.Errorf("desc = %q, want the raw text back", desc)
 	}
 }
+
+// A description written as a YAML block or across lines is injected whole by
+// Claude Code, so it must be read whole: reading only the "description:" line
+// weighed a 400-character skill at the 1-2 characters of its indicator.
+func TestParseFrontmatterMultilineDescription(t *testing.T) {
+	cases := map[string]struct{ src, want string }{
+		"folded":             {"---\nname: a\ndescription: >\n  one two\n  three\n\n  four\nother: x\n---\nbody", "one two three\nfour\n"},
+		"literal":            {"---\ndescription: |\n  line one\n  line two\n---\n", "line one\nline two\n"},
+		"strip":              {"---\ndescription: >-\n  folded\n  text\n---\n", "folded text"},
+		"plain continued":    {"---\ndescription: starts here\n  and goes on\nname: a\n---\n", "starts here and goes on"},
+		"nested key ignored": {"---\ndescription: top\nmetadata:\n  description: nested\n---\n", "top"},
+		"single line":        {"---\ndescription: \"quoted: yes\"\n---\n", "quoted: yes"},
+	}
+	for name, c := range cases {
+		if _, got, _ := parseFrontmatter([]byte(c.src)); got != c.want {
+			t.Errorf("%s: description = %q, want %q", name, got, c.want)
+		}
+	}
+}

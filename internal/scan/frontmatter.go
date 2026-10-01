@@ -22,25 +22,22 @@ func parseFrontmatter(b []byte) (name, description string, bodyChars int) {
 
 	headerLen := len(sc.Text()) + 1
 	inHeader := true
+	var header []string
 	for inHeader && sc.Scan() {
 		line := sc.Text()
 		headerLen += len(line) + 1
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "---" {
+		if strings.TrimSpace(line) == "---" {
 			inHeader = false
 			break
 		}
-		if v, ok := yamlValue(trimmed, "name"); ok {
-			name = v
-		}
-		if v, ok := yamlValue(trimmed, "description"); ok {
-			description = v
-		}
+		header = append(header, line)
 	}
 	if inHeader {
 		// Unterminated frontmatter: treat whole file as body.
 		return "", "", len(b)
 	}
+	name, _ = topLevelValue(header, "name")
+	description, _ = topLevelValue(header, "description")
 	bodyChars = len(b) - headerLen
 	if bodyChars < 0 {
 		bodyChars = 0
@@ -117,4 +114,130 @@ func yamlValue(line, key string) (string, bool) {
 	}
 	v = strings.Trim(v, `"'`)
 	return v, true
+}
+
+// topLevelValue reads an unindented key's value from frontmatter lines the way
+// YAML does for the forms skill headers use: a one-line scalar, a plain scalar
+// continued on indented lines, and a block scalar ("|" literal, ">" folded,
+// with an optional chomping indicator). An indented key belongs to a nested
+// map ("metadata:\n  description: ...") and is not the skill's own.
+func topLevelValue(lines []string, key string) (string, bool) {
+	for i, line := range lines {
+		if strings.TrimLeft(line, " \t") != line {
+			continue
+		}
+		line = strings.TrimRight(line, " \t\r")
+		v, ok := yamlValue(line, key)
+		if !ok {
+			continue
+		}
+		raw := strings.TrimSpace(strings.TrimPrefix(line, key+":"))
+		cont := continuation(lines[i+1:])
+		if style, chomp, ok := blockHeader(raw); ok {
+			return blockScalar(cont, style, chomp), true
+		}
+		if raw == "" || raw[0] == '"' || raw[0] == '\'' {
+			return v, true
+		}
+		parts := []string{v}
+		for _, c := range cont {
+			if t := strings.TrimSpace(c); t != "" {
+				parts = append(parts, t)
+			}
+		}
+		return strings.Join(parts, " "), true
+	}
+	return "", false
+}
+
+// continuation returns the lines after a key that still belong to its value:
+// blank or indented ones, up to the next unindented line.
+func continuation(lines []string) []string {
+	for i, l := range lines {
+		if strings.TrimSpace(l) != "" && strings.TrimLeft(l, " \t") == l {
+			return lines[:i]
+		}
+	}
+	return lines
+}
+
+// blockHeader recognises a block scalar indicator: "|" or ">", then an
+// optional chomping sign and indentation digit, in either order.
+func blockHeader(raw string) (style, chomp byte, ok bool) {
+	if i := strings.Index(raw, " #"); i >= 0 {
+		raw = strings.TrimSpace(raw[:i])
+	}
+	if raw == "" || (raw[0] != '|' && raw[0] != '>') {
+		return 0, 0, false
+	}
+	for _, c := range raw[1:] {
+		switch {
+		case c == '-' || c == '+':
+			chomp = byte(c)
+		case c < '0' || c > '9':
+			return 0, 0, false
+		}
+	}
+	return raw[0], chomp, true
+}
+
+// blockScalar renders a block scalar's lines: dedented, joined with newlines
+// (literal) or folded into spaces with blank lines kept as breaks (folded),
+// then chomped: clip keeps one final newline, "-" none, "+" all.
+func blockScalar(lines []string, style, chomp byte) string {
+	indent := -1
+	for _, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			indent = len(l) - len(strings.TrimLeft(l, " \t"))
+			break
+		}
+	}
+	if indent < 0 {
+		return ""
+	}
+	body := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			body = append(body, "")
+		} else if len(l) >= indent {
+			body = append(body, strings.TrimRight(l[indent:], "\r"))
+		} else {
+			body = append(body, strings.TrimSpace(l))
+		}
+	}
+	trailing := 0
+	for len(body) > 0 && body[len(body)-1] == "" {
+		body = body[:len(body)-1]
+		trailing++
+	}
+
+	var out strings.Builder
+	if style == '|' {
+		out.WriteString(strings.Join(body, "\n"))
+	} else {
+		breaks := 0
+		for i, l := range body {
+			if l == "" {
+				breaks++
+				continue
+			}
+			if i > 0 {
+				if breaks > 0 {
+					out.WriteString(strings.Repeat("\n", breaks))
+				} else {
+					out.WriteByte(' ')
+				}
+			}
+			out.WriteString(l)
+			breaks = 0
+		}
+	}
+	switch chomp {
+	case '-':
+	case '+':
+		out.WriteString(strings.Repeat("\n", trailing+1))
+	default:
+		out.WriteByte('\n')
+	}
+	return out.String()
 }

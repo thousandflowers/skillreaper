@@ -33,7 +33,8 @@ def ask_json(prompt: str, body: str, think: bool = True, effort: str | None = No
     for _ in range(2):
         out = subprocess.run(cmd, input=body, capture_output=True, text=True, timeout=900,
                              cwd=tempfile.gettempdir(), env=env).stdout
-        for open_, close in (("[", "]"), ("{", "}")):
+        # the outermost bracket first: an object holding a list must not be cut down to the list
+        for open_, close in sorted((("[", "]"), ("{", "}")), key=lambda p: out.find(p[0]) % (len(out) + 1)):
             i, j = out.find(open_), out.rfind(close)
             if i >= 0 and j > i:
                 try:  # fast models sometimes leave a trailing comma
@@ -81,19 +82,54 @@ GROUP_PROMPT = (
     "\"delegable\": true, \"task\": \"...\", \"queries\": [\"...\"], \"mcp_queries\": [\"...\"]}].")
 
 
-def group_sessions(sessions: list[dict]) -> list[dict]:
-    body = "\n".join(f"[{i}] {cut(' | '.join(s['prompts'][:3]), 500)}" for i, s in enumerate(sessions))
-    # without extended thinking: 235 s -> ~20 s, same groups
-    out = ask_json(GROUP_PROMPT, body, think=False, effort="medium")
-    groups, taken = [], set()
+ASSIGN_PROMPT = (
+    "Below are the KINDS of work a developer already does with an AI coding assistant (G0, G1...), then new "
+    "conversations, each with its id. Put each new conversation in the existing kind of work it asks for. When "
+    "several new conversations share a kind of work no existing one covers, make a new group for them. Group "
+    "them " + GROUP_PROMPT.split("Reply with ONLY")[0].split("Group the conversations ")[1] +
+    "Reply with ONLY a JSON object: {\"assign\": {\"<conversation id>\": <G number without the G>}, "
+    "\"new\": [{\"name\": \"...\", \"sessions\": [3], \"delegable\": true, \"task\": \"...\", "
+    "\"queries\": [\"...\"], \"mcp_queries\": [\"...\"]}]}.")
+
+
+def numbered(sessions: list[dict]) -> str:
+    return "\n".join(f"[{i}] {cut(' | '.join(s['prompts'][:3]), 500)}" for i, s in enumerate(sessions))
+
+
+def new_groups(out, sessions: list[dict], taken: set[int]) -> list[dict]:
+    """Groups from the model's answer, by session id, not position: new sessions shift positions."""
+    groups = []
     for g in out if isinstance(out, list) else []:
         if not isinstance(g, dict):
             continue
         ids = sorted({int(i) for i in g.get("sessions", []) if str(i).isdigit() and int(i) < len(sessions)} - taken)
         taken |= set(ids)
-        if ids:  # cache by session id, not position: new sessions shift positions
-            groups.append({**g, "session_ids": [sessions[i]["id"] for i in ids]})
+        if ids:
+            groups.append({**{k: v for k, v in g.items() if k != "sessions"},
+                           "session_ids": [sessions[i]["id"] for i in ids]})
     return groups
+
+
+def group_sessions(sessions: list[dict]) -> list[dict]:
+    # without extended thinking: 235 s -> ~20 s, same groups
+    return new_groups(ask_json(GROUP_PROMPT, numbered(sessions), think=False, effort="medium"), sessions, set())
+
+
+def assign_sessions(groups: list[dict], new: list[dict]) -> list[dict] | None:
+    """`groups` with `new` sessions placed in them, or in new groups. None if the call never answered, so the
+    caller can retry those sessions next run; a session placed nowhere was judged and is not sent again."""
+    kinds = "\n".join(f"[G{i}] {g.get('name', '')}: {g.get('task', '')}" for i, g in enumerate(groups))
+    out = ask_json(ASSIGN_PROMPT, f"Kinds of work:\n{kinds}\n\nNew conversations:\n{numbered(new)}",
+                   think=False, effort="medium")
+    if not isinstance(out, dict):
+        return None
+    placed, taken = [{**g, "session_ids": list(g["session_ids"])} for g in groups], set()
+    for k, gi in (out.get("assign") or {}).items():
+        if str(k).isdigit() and int(k) < len(new) and isinstance(gi, int) and 0 <= gi < len(placed) \
+                and int(k) not in taken:
+            taken.add(int(k))
+            placed[gi]["session_ids"].append(new[int(k)]["id"])
+    return placed + new_groups(out.get("new"), new, taken)
 
 
 # ---------------------------------------------------------------------------

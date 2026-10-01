@@ -29,7 +29,8 @@ import sources
 import swaps
 from sessions import canon, cut, read_sessions, week
 
-GROUPS_TTL = 86400    # regrouping every run made proposals change run to run (0-18% overlap vs 100% cached)
+REGROUP_EVERY = 7 * 86400  # a full regroup changes the groups (0-18% overlap run to run), so it runs weekly;
+                           # in between, only new sessions are placed into the groups that exist
 MIN_SESSIONS = 3      # a kind of work seen fewer times is not recurring
 MAX_GAPS = 6
 CANDIDATES_PER_GAP = 10
@@ -135,10 +136,21 @@ def reap_state() -> dict:
 
 def load_groups(sessions: list[dict], regroup: bool) -> list[dict]:
     cache = sources.CACHE / "groups.json"
-    if not regroup and cache.exists() and time.time() - cache.stat().st_mtime < GROUPS_TTL:
-        return json.loads(cache.read_text(encoding="utf-8"))
-    groups = llm.group_sessions(sessions)
-    cache.write_text(json.dumps(groups, ensure_ascii=False), encoding="utf-8")
+    try:
+        saved = json.loads(cache.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        saved = None
+    if regroup or not isinstance(saved, dict) or time.time() - saved.get("at", 0) >= REGROUP_EVERY:
+        groups, at, seen = llm.group_sessions(sessions), time.time(), {s["id"] for s in sessions}
+    else:
+        groups, at, seen = saved["groups"], saved["at"], set(saved.get("seen", []))
+        new = [s for s in sessions if s["id"] not in seen]
+        placed = llm.assign_sessions(groups, new) if new else groups
+        if placed is not None:  # a call that never answered leaves the new sessions for the next run
+            groups, seen = placed, seen | {s["id"] for s in new}
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps({"at": at, "groups": groups, "seen": sorted(seen)}, ensure_ascii=False),
+                     encoding="utf-8")
     return groups
 
 
@@ -303,7 +315,7 @@ def main():
     ap.add_argument("--days", type=int, default=120, help="sessions to read (longer than reap's window: "
                                                           "recurring work needs history)")
     ap.add_argument("--max", type=int, default=3, help="swaps proposed at most")
-    ap.add_argument("--regroup", action="store_true", help="regroup sessions even if today's groups are cached")
+    ap.add_argument("--regroup", action="store_true", help="group every session from scratch now, instead of weekly")
     ap.add_argument("--no-mcp", action="store_true", help="skills only")
     ap.add_argument("--dry-run", action="store_true", help="pick swaps but only print what would run")
     args = ap.parse_args()

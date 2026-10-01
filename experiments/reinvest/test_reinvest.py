@@ -194,6 +194,105 @@ class ReapHint(unittest.TestCase):
             self.assertEqual([x["install"] for x in json.loads(swaps.SWAPS.read_text())["swaps"]], ["b"])
 
 
+class IncrementalGroups(unittest.TestCase):
+    """Groups are rebuilt from scratch weekly; in between only new sessions are placed, so proposals stay put."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.patch = mock.patch.object(sources, "CACHE", Path(self.tmp.name))
+        self.patch.start()
+        self.calls = []
+
+    def tearDown(self):
+        self.patch.stop()
+        self.tmp.cleanup()
+
+    def sess(self, *ids):
+        return [{"id": i, "prompts": [f"prompt {i}"]} for i in ids]
+
+    def fake(self, answers):
+        def ask(prompt, body, **kw):
+            self.calls.append(prompt)
+            return answers.pop(0)
+        return mock.patch.object(reinvest.llm, "ask_json", ask)
+
+    def full(self):
+        return [{"name": "releasing", "task": "t", "sessions": [0, 1]}]
+
+    def test_first_run_groups_everything(self):
+        with self.fake([self.full()]):
+            groups = reinvest.load_groups(self.sess("a", "b"), regroup=False)
+        self.assertEqual(groups[0]["session_ids"], ["a", "b"])
+        self.assertEqual(self.calls, [reinvest.llm.GROUP_PROMPT])
+
+    def test_new_session_is_placed_not_regrouped(self):
+        with self.fake([self.full(), {"assign": {"0": 0}, "new": []}]):
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+            groups = reinvest.load_groups(self.sess("a", "b", "c"), regroup=False)
+        self.assertEqual(groups[0]["session_ids"], ["a", "b", "c"])
+        self.assertEqual(self.calls, [reinvest.llm.GROUP_PROMPT, reinvest.llm.ASSIGN_PROMPT])
+
+    def test_new_kind_of_work_becomes_a_group(self):
+        with self.fake([self.full(), {"assign": {}, "new": [{"name": "blender", "task": "t", "sessions": [0, 1]}]}]):
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+            groups = reinvest.load_groups(self.sess("a", "b", "c", "d"), regroup=False)
+        self.assertEqual([g["session_ids"] for g in groups], [["a", "b"], ["c", "d"]])
+
+    def test_nothing_new_asks_nothing(self):
+        with self.fake([self.full()]):
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_left_out_session_not_sent_again(self):
+        with self.fake([self.full(), {"assign": {}, "new": []}]):
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+            reinvest.load_groups(self.sess("a", "b", "chitchat"), regroup=False)
+            reinvest.load_groups(self.sess("a", "b", "chitchat"), regroup=False)
+        self.assertEqual(len(self.calls), 2)
+
+    def test_failed_call_retries_next_run(self):
+        with self.fake([self.full(), None, {"assign": {"0": 0}, "new": []}]):
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+            reinvest.load_groups(self.sess("a", "b", "c"), regroup=False)
+            groups = reinvest.load_groups(self.sess("a", "b", "c"), regroup=False)
+        self.assertEqual(groups[0]["session_ids"], ["a", "b", "c"])
+
+    def test_week_old_or_old_format_regroups(self):
+        Path(self.tmp.name, "groups.json").write_text(json.dumps([{"name": "x", "session_ids": ["a"]}]))
+        with self.fake([self.full()]):
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+        saved = json.loads(Path(self.tmp.name, "groups.json").read_text())
+        saved["at"] -= reinvest.REGROUP_EVERY + 1
+        Path(self.tmp.name, "groups.json").write_text(json.dumps(saved))
+        with self.fake([self.full()]):
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+        self.assertEqual(self.calls, [reinvest.llm.GROUP_PROMPT, reinvest.llm.GROUP_PROMPT])
+
+    def test_regroup_flag_forces_it(self):
+        with self.fake([self.full(), self.full()]):
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+            reinvest.load_groups(self.sess("a", "b"), regroup=True)
+        self.assertEqual(self.calls, [reinvest.llm.GROUP_PROMPT] * 2)
+
+
+class AskJson(unittest.TestCase):
+    """An object answer holding a list was cut down to the inner list, so every placement looked like no answer."""
+
+    def run_with(self, stdout):
+        res = mock.Mock(stdout=stdout)
+        with mock.patch.object(reinvest.llm.subprocess, "run", return_value=res), \
+                mock.patch.object(reinvest.llm.shutil, "which", return_value="claude"):
+            return reinvest.llm.ask_json("p", "b")
+
+    def test_outer_object_wins(self):
+        self.assertEqual(self.run_with('ok: {"assign": {"0": 1}, "new": [{"name": "x"}]}'),
+                         {"assign": {"0": 1}, "new": [{"name": "x"}]})
+
+    def test_outer_list_wins(self):
+        self.assertEqual(self.run_with('[{"name": "x", "sessions": [1]}]'), [{"name": "x", "sessions": [1]}])
+
+
 class SkillsShRateLimit(unittest.TestCase):
     """Known issue 8: a 429 waits and retries instead of disabling skills.sh for the rest of the run."""
 

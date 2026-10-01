@@ -11,7 +11,7 @@ Python, standard library only. Not part of the Go build: kept here to decide whe
 ```bash
 python3 reinvest.py --dry-run   # pick swaps, print what would run, change nothing
 python3 reinvest.py             # same, then asks before installing and muting
-python3 reinvest.py --regroup   # regroup sessions instead of reusing today's groups
+python3 reinvest.py --regroup   # group every session from scratch now, instead of weekly
 python3 token_cost.py           # tokens per request per kind of work, with vs without each skill you used
 python3 -m unittest test_reinvest   # offline checks, no network, no Claude calls
 ```
@@ -43,8 +43,10 @@ the new one. Tested for real (skill and MCP, success and rollback) with `HOME` p
 | `swaps.py` | pairs each fit with REAP skills of similar weight, the picker, applying |
 | `reinvest.py` | runs it all; weights and verdicts come from `reap --json` |
 
-1. **Kinds of work** — one Claude call groups all sessions by kind of work, not by project. Groups are cached
-   for a day by session id.
+1. **Kinds of work** — one Claude call groups all sessions by kind of work, not by project. That full grouping
+   runs weekly (or with `--regroup`); in between, one small call places only the new sessions into the groups
+   that exist, or into new ones, so proposals stay put and new work still counts. A session placed nowhere is
+   not sent again; a call that never answered is retried next run.
 2. **Gaps** — kinds seen in ≥3 sessions, delegable, and covered by no skill: neither one you use in most of
    those sessions nor an installed one (a second, small call judges the 12 closest installed skills by what
    they do). Installed-but-unused coverage is out of scope here: that is a future `reap reuse`.
@@ -96,5 +98,4 @@ Measured on one real install (~70 human sessions, 327 skills, 7 ever used), over
 
 ## Open questions before porting
 
-- How long to cache groups.
 - `reap reuse`: kinds of work covered by an installed skill you never invoke.

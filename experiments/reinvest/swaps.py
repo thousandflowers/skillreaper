@@ -11,7 +11,9 @@ from __future__ import annotations
 import curses
 import json
 import os
+import shlex
 import subprocess
+import time
 from pathlib import Path
 
 import sources
@@ -25,6 +27,9 @@ SKILLS_FLAGS = ["-g", "-y", "-a", "claude-code"]
 # MCP servers installed with nothing muted, because their weight was unknown. Once reap has seen one load, the next
 # run offers the mute that should have gone with it.
 WEIGH_LATER = sources.CACHE / "weigh_later.json"
+# The last proposals, for the one-line pointer in reap's text report. It only points: applying stays in the picker.
+SWAPS = sources.CACHE / "swaps.json"
+RERUN = " ".join(shlex.quote(a) for a in ["python3", str(Path(__file__).resolve().with_name("reinvest.py"))])
 
 
 def pair(cost: int | None, pool: list[dict]) -> list[dict]:
@@ -39,6 +44,27 @@ def pair(cost: int | None, pool: list[dict]) -> list[dict]:
         return best
     heaviest = sorted(pool, key=lambda x: -x["tokens"])[:MAX_MUTED_PER_SWAP]
     return [x for i, x in enumerate(heaviest) if sum(y["tokens"] for y in heaviest[:i]) < cost]
+
+
+def _proposal(s: dict) -> dict:
+    return {"install": s["cands"][s["idx"]]["name"], "mute": [x["name"] for x in s["mute"]]}
+
+
+def save_proposals(swap_list: list[dict]):
+    SWAPS.parent.mkdir(parents=True, exist_ok=True)
+    SWAPS.write_text(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "command": RERUN,
+                                 "swaps": [_proposal(s) for s in swap_list]}, ensure_ascii=False), encoding="utf-8")
+
+
+def drop_proposals(applied: list[dict]):
+    """Swaps the user acted on no longer need pointing at."""
+    try:
+        data = json.loads(SWAPS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    done = [_proposal(s) for s in applied]
+    data["swaps"] = [x for x in data.get("swaps", []) if x not in done]
+    SWAPS.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
 def build(picks: list[dict], passing: list[dict], reap_pool: list[dict]) -> list[dict]:

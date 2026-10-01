@@ -292,6 +292,8 @@ def choose_and_apply(swap_list: list[dict], dry_run: bool):
         print("  nothing changed")
         return
     print("\n".join(swaps.apply(chosen, dry_run)))
+    if not dry_run:
+        swaps.drop_proposals(chosen)
     if dry_run:
         print("  dry run · nothing installed or muted")
 
@@ -335,6 +337,7 @@ def main():
     swap_list = settled + swaps.build(best_per_gap(passing, args.max), passing, pool)
     sys.stdout.close()
     sys.stdout = sys.__stdout__
+    swaps.save_proposals(swap_list)
     print()
     if not swap_list:
         print(f"  no swaps: nothing verified for your gaps · details: {REPORT}")

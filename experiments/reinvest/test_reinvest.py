@@ -174,6 +174,26 @@ class WeighLater(unittest.TestCase):
         self.assertEqual(len(swaps.settle({"docs": 300}, [{"name": "a", "tokens": 150}])), 1)
 
 
+class ReapHint(unittest.TestCase):
+    """reap's text report points at the proposals reinvest leaves in swaps.json."""
+
+    def test_cache_is_where_reap_reads(self):
+        if os.uname().sysname == "Darwin":
+            self.assertEqual(sources.CACHE, Path.home() / "Library" / "Caches" / "skillreaper" / "reinvest")
+
+    def test_proposals_saved_then_applied_ones_dropped(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(swaps, "SWAPS", Path(d, "swaps.json")):
+            mk = lambda n: {"cands": [{"name": n}], "idx": 0, "mute": [{"name": "old-" + n}]}
+            a, b = mk("a"), mk("b")
+            swaps.save_proposals([a, b])
+            saved = json.loads(swaps.SWAPS.read_text())
+            self.assertEqual([x["install"] for x in saved["swaps"]], ["a", "b"])
+            self.assertIn("reinvest.py", saved["command"])
+            self.assertTrue(saved["at"])
+            swaps.drop_proposals([a])
+            self.assertEqual([x["install"] for x in json.loads(swaps.SWAPS.read_text())["swaps"]], ["b"])
+
+
 class SkillsShRateLimit(unittest.TestCase):
     """Known issue 8: a 429 waits and retries instead of disabling skills.sh for the rest of the run."""
 

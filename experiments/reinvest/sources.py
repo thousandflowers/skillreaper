@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import sys
 import threading
 import time
 import urllib.error
@@ -15,7 +17,16 @@ from sessions import canon, clean
 
 SKILLS_SH = "https://skills.sh"
 MCP_REGISTRY = "https://registry.modelcontextprotocol.io/v0/servers"
-CACHE = Path.home() / ".cache" / "skillreaper" / "reinvest"
+def _cache_base() -> Path:
+    """The user cache directory as Go's os.UserCacheDir picks it, so reap reads what reinvest leaves here."""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches"
+    if os.name == "nt":
+        return Path(os.environ.get("LocalAppData") or Path.home() / "AppData" / "Local")
+    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+
+
+CACHE = _cache_base() / "skillreaper" / "reinvest"
 SEARCH_TTL = 86400  # skills.sh rate-limits hard (429): reuse searches for a day
 PER_QUERY = 12
 MCP_PER_TASK = 5

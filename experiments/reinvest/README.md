@@ -90,10 +90,9 @@ Measured on one real install (~70 human sessions, 327 skills, 7 ever used), over
   exits 0 even when one of them fails; a repo that no longer exists makes it clone forever, even with
   `GIT_TERMINAL_PROMPT=0`.
 
-## Known issues
-
-- reap reads only a one-line `description:`, so a skill whose description is a YAML block scalar (`>`) is
-  weighted at a few tokens by reap, and therefore by reinvest too.
+- **Multi-line descriptions** (`description: >`, `|`, or a line continued below) were weighed by their first
+  line only, by reap and so by reinvest: 29 installed skills at 3-8 tokens instead of 140-230. Both now read
+  the description whole (reap branch `feat/mcp-weight`); reinvest matches reap on all 301 installed skills.
 
 ## Open questions before porting
 

@@ -48,7 +48,8 @@ class ReapTokens(unittest.TestCase):
         self.assertEqual(reinvest.reap_tokens("file-organizer", doc), -(-len("file-organizerSorts files") * 10 // 37))
 
     def test_block_scalar_counts_as_reap_reads_it(self):
-        self.assertEqual(reinvest.reap_tokens("ab", "---\ndescription: >\n  long text\n---\n"), 1)
+        # "ab" + "long text\n" = 12 bytes -> 4 tokens: the whole folded description, as reap now reads it
+        self.assertEqual(reinvest.reap_tokens("ab", "---\ndescription: >\n  long text\n---\n"), 4)
 
 
 class Verification(unittest.TestCase):

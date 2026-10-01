@@ -43,19 +43,68 @@ REPORT = sources.CACHE / "report.md"
 
 def reap_tokens(slug: str, doc: str) -> int:
     """What reap will report for this skill once installed, computed the way reap does (internal/scan/skills.go,
-    internal/cost/cost.go): bytes of the directory name plus the one-line frontmatter description, / 3.7 rounded
-    up. The description is the last `description:` line of the header, as reap reads it (block scalars included)."""
-    desc, lines = "", doc.splitlines()
-    if lines and lines[0].strip() == "---":
-        for line in lines[1:]:
-            t = line.strip()
-            if t == "---":
-                break
-            if t.startswith("description:"):
-                desc = t[len("description:"):].strip()
-                desc = desc[1:-1] if len(desc) >= 2 and desc[0] == desc[-1] == '"' else desc.strip("\"'")
-    chars = len((slug + desc).encode("utf-8"))
+    internal/scan/frontmatter.go, internal/cost/cost.go): bytes of the directory name plus the description, / 3.7
+    rounded up. The description is read whole, as Claude Code injects it: block scalars and continued lines too."""
+    lines = doc.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return (len(slug.encode("utf-8")) * 10 + 36) // 37
+    header = []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        header.append(line)
+    chars = len((slug + description(header)).encode("utf-8"))
     return (chars * 10 + 36) // 37
+
+
+def description(header: list[str]) -> str:
+    """The unindented `description:` value, as reap's topLevelValue reads it."""
+    for i, line in enumerate(header):
+        if line != line.lstrip(" \t") or not line.startswith("description:"):
+            continue
+        raw = line.rstrip(" \t\r")[len("description:"):].strip()
+        cont = []
+        for c in header[i + 1:]:
+            if c.strip() and c == c.lstrip(" \t"):
+                break
+            cont.append(c)
+        ind = raw.split(" #")[0].strip()
+        if ind[:1] in ("|", ">") and all(ch in "+-0123456789" for ch in ind[1:]):
+            return block(cont, ind[0], "-" if "-" in ind else "+" if "+" in ind else "")
+        if len(raw) >= 2 and raw[0] == raw[-1] == '"':
+            try:
+                return json.loads(raw)
+            except ValueError:
+                return raw.strip("\"'")
+        if not raw or raw[0] in "\"'":
+            return raw.strip("\"'")
+        return " ".join([raw.strip("\"'")] + [c.strip() for c in cont if c.strip()])
+    return ""
+
+
+def block(lines: list[str], style: str, chomp: str) -> str:
+    first = next((l for l in lines if l.strip()), None)
+    if first is None:
+        return ""
+    indent = len(first) - len(first.lstrip(" \t"))
+    body = ["" if not l.strip() else l[indent:].rstrip("\r") if len(l) >= indent else l.strip() for l in lines]
+    trailing = 0
+    while body and body[-1] == "":
+        body.pop()
+        trailing += 1
+    if style == "|":
+        out = "\n".join(body)
+    else:
+        out, breaks = "", 0
+        for i, l in enumerate(body):
+            if not l:
+                breaks += 1
+                continue
+            if i:
+                out += "\n" * breaks if breaks else " "
+            out += l
+            breaks = 0
+    return out + ("" if chomp == "-" else "\n" * (trailing + 1) if chomp == "+" else "\n")
 
 
 def step(msg: str, done: bool = False):

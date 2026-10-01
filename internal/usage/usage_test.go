@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -421,5 +422,81 @@ func TestMergeIntoCarriesMeasured(t *testing.T) {
 	MergeInto(dst, src)
 	if dst.Measured.CacheRead != 900 || dst.Measured.Messages != 2 {
 		t.Errorf("MergeInto dropped the measured totals: %+v", dst.Measured)
+	}
+}
+
+// An MCP server's per-session weight is what Claude Code recorded injecting:
+// the deferred tool names and the server's instructions. A later session wins,
+// because a server's tool list changes with its version.
+func TestParseMCPWeight(t *testing.T) {
+	dir := t.TempDir()
+	writeTranscript(t, filepath.Join(dir, "p", "old.jsonl"),
+		`{"type":"attachment","timestamp":"2026-06-01T10:00:00Z","attachment":{"type":"deferred_tools_delta","addedNames":["mcp__blender__a","WebFetch"]}}`,
+	)
+	writeTranscript(t, filepath.Join(dir, "p", "new.jsonl"),
+		`{"type":"attachment","timestamp":"2026-06-02T10:00:00Z","attachment":{"type":"deferred_tools_delta","addedNames":["mcp__blender__a","mcp__blender__bb","mcp__claude_ai_Figma__x"]}}`,
+		`{"type":"attachment","timestamp":"2026-06-02T10:00:01Z","attachment":{"type":"mcp_instructions_delta","addedNames":["claude.ai Figma"],"addedBlocks":["0123456789"]}}`,
+	)
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each name is one line of the injected list: name plus newline.
+	want := map[string]int{
+		"blender":         len("mcp__blender__a\n") + len("mcp__blender__bb\n"),
+		"claude_ai_Figma": len("mcp__claude_ai_Figma__x\n") + 10,
+	}
+	if len(st.MCPWeight) != len(want) {
+		t.Fatalf("MCPWeight = %v, want keys %v", st.MCPWeight, want)
+	}
+	for k, chars := range want {
+		if got := st.MCPWeight[k].Chars; got != chars {
+			t.Errorf("MCPWeight[%q] = %d, want %d", k, got, chars)
+		}
+	}
+}
+
+func TestMCPServerKey(t *testing.T) {
+	for in, want := range map[string]string{
+		"claude.ai Figma":     "claude_ai_Figma",
+		"plugin:ecc:context7": "plugin_ecc_context7",
+		"caveman-shrink":      "caveman-shrink",
+	} {
+		if got := mcpServerKey(in); got != want {
+			t.Errorf("mcpServerKey(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A skill's per-session weight is its line in the listing Claude Code
+// injected: past a budget it keeps only the name, so reading the SKILL.md
+// overstated it. A later listing in the session adds skills; a later session
+// replaces the measurement.
+func TestParseSkillWeight(t *testing.T) {
+	dir := t.TempDir()
+	listing := func(ts string, initial bool, content string, names ...string) string {
+		b, _ := json.Marshal(map[string]any{"type": "attachment", "timestamp": ts, "attachment": map[string]any{
+			"type": "skill_listing", "isInitial": initial, "content": content, "names": names}})
+		return string(b)
+	}
+	writeTranscript(t, filepath.Join(dir, "p", "s.jsonl"),
+		listing("2026-06-02T10:00:00Z", true, "- long: does a thing\n  over two lines\n- ecc:plan\n- ecc:x: y",
+			"long", "ecc:plan", "ecc:x"),
+		listing("2026-06-02T10:05:00Z", false, "- late: added", "late"),
+	)
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{
+		"long":     len("- long: does a thing\n  over two lines\n"),
+		"ecc:plan": len("- ecc:plan\n"),
+		"ecc:x":    len("- ecc:x: y\n"),
+		"late":     len("- late: added\n"),
+	}
+	for k, chars := range want {
+		if got := st.SkillWeight[k].Chars; got != chars {
+			t.Errorf("SkillWeight[%q] = %d, want %d", k, got, chars)
+		}
 	}
 }

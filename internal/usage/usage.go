@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -93,7 +94,63 @@ type Stats struct {
 	// noise" axis — a tool that fires often yet returns mostly base64/boilerplate
 	// every call. Only MCP tools are scored (heaviest, noisiest payloads).
 	MCPPayload map[string]PayloadStat
+
+	// MCPWeight is each MCP server's per-session context weight, keyed like
+	// Uses[CatMCP] ("blender", "plugin_ecc_github", "claude_ai_Figma"). It is
+	// what Claude Code recorded injecting: the deferred tool names and the
+	// server's instructions. A server whose schemas went straight into the
+	// system prompt (tool search off) leaves no record and stays unmeasured.
+	MCPWeight map[string]Injected
+
+	// SkillWeight is each skill's per-session weight, keyed by its invocation
+	// name ("graphify", "ecc:plan"): its entry in the skill listing Claude Code
+	// injected. Past a size budget the listing keeps only some descriptions and
+	// names the rest, so the SKILL.md alone overstates most skills.
+	SkillWeight map[string]Injected
 }
+
+// Injected is what one item put into the prompt in the latest session that
+// loaded it. Latest, not average: tool lists and listings change over time.
+type Injected struct {
+	Chars int
+	At    time.Time
+}
+
+// recordInjected keeps the most recent measurement of key in m, which it
+// creates when nil, and returns.
+func recordInjected(m map[string]Injected, key string, w Injected) map[string]Injected {
+	if key == "" || w.Chars == 0 {
+		return m
+	}
+	if old, ok := m[key]; ok && !w.At.After(old.At) {
+		return m
+	}
+	if m == nil {
+		m = map[string]Injected{}
+	}
+	m[key] = w
+	return m
+}
+
+// MergeMCPWeight folds src's injected weights (servers and skills) into s,
+// the newer one winning.
+func (s *Stats) MergeMCPWeight(src *Stats) {
+	for key, w := range src.MCPWeight {
+		s.MCPWeight = recordInjected(s.MCPWeight, key, w)
+	}
+	for key, w := range src.SkillWeight {
+		s.SkillWeight = recordInjected(s.SkillWeight, key, w)
+	}
+}
+
+// mcpServerKey turns a server's display name ("claude.ai Figma",
+// "plugin:ecc:context7") into the key its tool names carry
+// ("claude_ai_Figma", "plugin_ecc_context7").
+func mcpServerKey(name string) string {
+	return mcpKeyUnsafe.ReplaceAllString(name, "_")
+}
+
+var mcpKeyUnsafe = regexp.MustCompile(`[^A-Za-z0-9_-]`)
 
 // PayloadStat is the per-MCP-tool payload-quality accumulator. Calls is the
 // number of tool_result payloads measured; TotalChars/NoiseChars sum bytes
@@ -122,6 +179,8 @@ func NewStats(windowDays int) *Stats {
 		},
 		SkillProjects: map[string]map[string]int{},
 		MCPPayload:    map[string]PayloadStat{},
+		MCPWeight:     map[string]Injected{},
+		SkillWeight:   map[string]Injected{},
 	}
 }
 
@@ -180,7 +239,20 @@ type entry struct {
 		Content json.RawMessage `json:"content"`
 		Usage   *usageBlock     `json:"usage"`
 	} `json:"message"`
-	Init *initPayload `json:"init,omitempty"`
+	Init       *initPayload `json:"init,omitempty"`
+	Attachment *attachment  `json:"attachment,omitempty"`
+}
+
+// attachment is the part of a Claude Code context attachment that says what
+// MCP servers put into the prompt.
+type attachment struct {
+	Type        string   `json:"type"`
+	AddedNames  []string `json:"addedNames"`
+	AddedBlocks []string `json:"addedBlocks"`
+	// skill_listing: the listing text as injected, and the skill names in it.
+	// Names is raw so an unexpected shape loses the listing, not the line.
+	Content string          `json:"content"`
+	Names   json.RawMessage `json:"names"`
 }
 
 type initPayload struct {
@@ -394,6 +466,14 @@ func MergeInto(dst, src *Stats) {
 		}
 	}
 	dst.DeadToolChars += src.DeadToolChars
+	for key, p := range src.MCPPayload {
+		d := dst.MCPPayload[key]
+		d.Calls += p.Calls
+		d.TotalChars += p.TotalChars
+		d.NoiseChars += p.NoiseChars
+		dst.MCPPayload[key] = d
+	}
+	dst.MergeMCPWeight(src)
 }
 
 // parseFile reads one transcript. Unreadable files or lines count as
@@ -437,6 +517,12 @@ func parseFile(path, project string, st *Stats) {
 	pending := map[string]pendingSkill{}
 	mcpPending := map[string]string{}
 	parsedInit := false
+	// Injected MCP context in this session: tool names per server, and the
+	// latest instructions per server (a re-add replaces, never adds).
+	mcpTools := map[string]map[string]bool{}
+	mcpInstr := map[string]int{}
+	skillChars := map[string]int{}
+	var lastTS time.Time
 
 	br := bufio.NewReaderSize(f, 256*1024)
 	for {
@@ -469,6 +555,16 @@ func parseFile(path, project string, st *Stats) {
 			continue
 		}
 		ts, _ := time.Parse(time.RFC3339, e.Timestamp)
+		if ts.After(lastTS) {
+			lastTS = ts
+		}
+		if a := e.Attachment; e.Type == "attachment" && a != nil {
+			recordInjectedMCP(a, mcpTools, mcpInstr)
+			if a.Type == "skill_listing" {
+				recordSkillListing(a, skillChars)
+			}
+			continue
+		}
 
 		// Counted before any type or content check: the accounting is attached
 		// to the message regardless of what the message did, and skipping the
@@ -518,6 +614,78 @@ func parseFile(path, project string, st *Stats) {
 	for name, weight := range declared {
 		if !used[name] {
 			st.DeadToolChars += weight
+		}
+	}
+
+	chars := map[string]int{}
+	for key, names := range mcpTools {
+		for name := range names {
+			chars[key] += len(name) + 1 // one line of the injected list
+		}
+	}
+	for key, n := range mcpInstr {
+		chars[key] += n
+	}
+	for key, n := range chars {
+		st.MCPWeight = recordInjected(st.MCPWeight, key, Injected{Chars: n, At: lastTS})
+	}
+	for key, n := range skillChars {
+		st.SkillWeight = recordInjected(st.SkillWeight, key, Injected{Chars: n, At: lastTS})
+	}
+}
+
+// recordSkillListing measures each skill's entry in one injected listing.
+// An entry starts with "- <name>" and runs until the next entry, so a
+// description written over several lines is counted whole. The name is matched
+// against the listing's own names, longest first, because names contain ':'.
+func recordSkillListing(a *attachment, chars map[string]int) {
+	var names []string
+	if json.Unmarshal(a.Names, &names) != nil || len(names) == 0 {
+		return
+	}
+	sort.Slice(names, func(i, j int) bool { return len(names[i]) > len(names[j]) })
+	var entries []string
+	for _, line := range strings.Split(a.Content, "\n") {
+		if strings.HasPrefix(line, "- ") || len(entries) == 0 {
+			entries = append(entries, line)
+			continue
+		}
+		entries[len(entries)-1] += "\n" + line
+	}
+	for _, e := range entries {
+		rest, ok := strings.CutPrefix(e, "- ")
+		if !ok {
+			continue
+		}
+		for _, n := range names {
+			if after, ok := strings.CutPrefix(rest, n); ok && (after == "" || after[0] == ':') {
+				chars[n] = len(e) + 1
+				break
+			}
+		}
+	}
+}
+
+// recordInjectedMCP notes what one attachment injected for MCP servers.
+func recordInjectedMCP(a *attachment, tools map[string]map[string]bool, instr map[string]int) {
+	switch a.Type {
+	case "deferred_tools_delta":
+		for _, name := range a.AddedNames {
+			rest, ok := strings.CutPrefix(name, "mcp__")
+			if !ok {
+				continue
+			}
+			key, _, _ := strings.Cut(rest, "__")
+			if tools[key] == nil {
+				tools[key] = map[string]bool{}
+			}
+			tools[key][name] = true
+		}
+	case "mcp_instructions_delta":
+		for i, name := range a.AddedNames {
+			if i < len(a.AddedBlocks) {
+				instr[mcpServerKey(name)] = len(a.AddedBlocks[i])
+			}
 		}
 	}
 }

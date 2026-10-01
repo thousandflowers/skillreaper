@@ -848,6 +848,7 @@ func mergeStats(dst, src *usage.Stats) {
 		d.NoiseChars += p.NoiseChars
 		dst.MCPPayload[key] = d
 	}
+	dst.MergeMCPWeight(src)
 }
 
 func cmdReport(opts options, stdout, stderr io.Writer) int {

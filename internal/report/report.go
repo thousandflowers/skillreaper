@@ -146,9 +146,11 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		}
 		// Claude Code's listing keeps only some descriptions; what it injected
 		// is the weight. A skill it never listed keeps the SKILL.md estimate.
+		// The listing is from the last session, so it can predate a mute: the
+		// next injection cannot exceed what the file holds now.
 		if it.Category == scan.CatSkill && it.Platform == string(platform.ClaudeCode) {
 			if w, ok := st.SkillWeight[it.Name]; ok {
-				row.Tokens = cost.TokensFor(opts.Model, w.Chars)
+				row.Tokens = cost.TokensFor(opts.Model, min(w.Chars, it.DescChars))
 			}
 		}
 		switch it.Category {

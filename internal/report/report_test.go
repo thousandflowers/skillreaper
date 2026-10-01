@@ -622,3 +622,17 @@ func TestSkillWeightFromListing(t *testing.T) {
 		t.Errorf("other platform: Tokens=%d, want file estimate %d", row.Tokens, cost.TokensFor("", 1200))
 	}
 }
+
+// The listing is from the last session, so it lags a mute made since: the
+// description is gone from the file but still in the old listing. What is
+// injected next session cannot exceed what the file holds now.
+func TestListedSkillWeightFollowsAMuteMadeSince(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 40
+	st.SkillWeight["muted"] = usage.Injected{Chars: 400, At: time.Now()}
+	items := []scan.Item{{Category: scan.CatSkill, Name: "muted", Platform: "claude-code", Source: "personal", DescChars: 10}}
+	r := Build(items, st, nil, Opts{MinSessions: 10, Cutoff: time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)})
+	if got, want := r.Rows[0].Tokens, cost.TokensFor("", 10); got != want {
+		t.Errorf("Tokens = %d, want the muted file's %d", got, want)
+	}
+}

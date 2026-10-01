@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 func TestComputeGap(t *testing.T) {
@@ -117,5 +119,23 @@ func TestRenderGapJSON(t *testing.T) {
 	}
 	if !strings.Contains(out, `"Fired": 2`) {
 		t.Errorf("gap json missing Fired: %s", out)
+	}
+}
+
+// Measured MCP weight belongs in the gap totals, as it does in the headline;
+// only servers never seen loading stay out, and are counted as unknown.
+func TestComputeGapCountsMeasuredMCPWeight(t *testing.T) {
+	rows := []Row{
+		{Item: scan.Item{Category: scan.CatSkill, Name: "s"}, Tokens: 100},
+		{Item: scan.Item{Category: scan.CatMCP, Name: "measured"}, Tokens: 40, Uses: 1},
+		{Item: scan.Item{Category: scan.CatMCP, Name: "unknown"}, WeightUnknown: true},
+	}
+	g := computeGap(rows)
+	if g.LoadedTok != 140 || g.FiredTok != 40 {
+		t.Errorf("totals = %d loaded / %d fired, want 140 / 40", g.LoadedTok, g.FiredTok)
+	}
+	mcp := g.PerCat[1]
+	if mcp.LoadedTok != 40 || mcp.UnknownWeight != 1 {
+		t.Errorf("mcp = %+v, want LoadedTok 40 and UnknownWeight 1", mcp)
 	}
 }

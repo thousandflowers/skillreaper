@@ -14,8 +14,11 @@ type GapCat struct {
 	Category  scan.Category
 	Loaded    int // inventory items whose description is injected
 	Fired     int // items invoked at least once in the window
-	LoadedTok int // sum of description tokens (0 for MCP — weight unknown)
-	FiredTok  int // tokens of fired items (0 for MCP)
+	LoadedTok int // sum of measured tokens
+	FiredTok  int // tokens of fired items
+	// UnknownWeight counts items whose weight was never measured (an MCP
+	// server never seen loading): they are in Loaded but not in LoadedTok.
+	UnknownWeight int `json:",omitempty"`
 }
 
 // Gap is the loaded-vs-fired snapshot for the window.
@@ -133,33 +136,27 @@ func RenderGap(w io.Writer, r *Report, color bool) {
 	}
 
 	var cats, loaded, fired, util, bars, tokLoaded, tokUsed []string
-	add := func(label string, gc GapCat, mcp bool) {
+	add := func(label string, gc GapCat) {
 		pct, utilStr := utilPct(gc.Fired, gc.Loaded, r.Sessions)
 		cats = append(cats, label)
 		loaded = append(loaded, HumanNum(gc.Loaded))
 		fired = append(fired, HumanNum(gc.Fired))
 		util = append(util, utilStr)
 		bars = append(bars, utilBar(pct))
-		if mcp {
-			// An MCP server's weight is built by the host at runtime. Unknown
-			// is not zero, and must not be rendered as a figure.
-			tokLoaded = append(tokLoaded, "?")
-			tokUsed = append(tokUsed, "?")
-			return
-		}
-		tokLoaded = append(tokLoaded, "~"+HumanNum(gc.LoadedTok))
-		tokUsed = append(tokUsed, HumanNum(gc.FiredTok))
+		// Unknown is not zero, and must not be rendered as a figure.
+		tokLoaded = append(tokLoaded, gapTok("~"+HumanNum(gc.LoadedTok), gc))
+		tokUsed = append(tokUsed, gapTok(HumanNum(gc.FiredTok), gc))
 	}
 	for _, gc := range g.PerCat {
 		if gc.Loaded == 0 {
 			continue
 		}
-		add(gapLabel(gc.Category), gc, gc.Category == scan.CatMCP)
+		add(gapLabel(gc.Category), gc)
 	}
 	// The total belongs to the same table, so its digits line up under the
 	// categories they sum. It is separated by a rule rather than by a second
 	// table, which would align to its own contents and stop comparing.
-	add("total", GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}, false)
+	add("total", g.total())
 
 	tbl := layout([]col{
 		{head: "CATEGORY", flex: true, cells: cats},
@@ -246,12 +243,9 @@ func RenderGapMarkdown(w io.Writer, r *Report) {
 	fmt.Fprintln(w, "| Category | Loaded | Fired | Util | Loaded tok | Fired tok |")
 	fmt.Fprintln(w, "|---|---|---|---|---|---|")
 
-	row := func(label string, gc GapCat, mcp bool) {
+	row := func(label string, gc GapCat) {
 		_, utilStr := utilPct(gc.Fired, gc.Loaded, r.Sessions)
-		lt, ft := fmt.Sprintf("~%d", gc.LoadedTok), fmt.Sprintf("~%d", gc.FiredTok)
-		if mcp {
-			lt, ft = "?", "?"
-		}
+		lt, ft := gapTok(fmt.Sprintf("~%d", gc.LoadedTok), gc), gapTok(fmt.Sprintf("~%d", gc.FiredTok), gc)
 		fmt.Fprintf(w, "| %s | %d | %d | %s | %s | %s |\n",
 			label, gc.Loaded, gc.Fired, utilStr, lt, ft)
 	}
@@ -259,10 +253,32 @@ func RenderGapMarkdown(w io.Writer, r *Report) {
 		if gc.Loaded == 0 {
 			continue
 		}
-		row(gapLabel(gc.Category), gc, gc.Category == scan.CatMCP)
+		row(gapLabel(gc.Category), gc)
 	}
-	row("total", GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}, false)
+	row("total", g.total())
 	renderPayloadMarkdown(w, r)
+}
+
+// total is the gap as one row, unknowns included, for the table's last line.
+func (g *Gap) total() GapCat {
+	t := GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}
+	for _, gc := range g.PerCat {
+		t.UnknownWeight += gc.UnknownWeight
+	}
+	return t
+}
+
+// gapTok shows a token figure, "?" when nothing in the category was measured,
+// and a "+?" suffix when only some of it was.
+func gapTok(measured string, gc GapCat) string {
+	switch {
+	case gc.UnknownWeight == 0:
+		return measured
+	case gc.UnknownWeight == gc.Loaded:
+		return "?"
+	default:
+		return measured + "+?"
+	}
 }
 
 // RenderGapJSON writes only the Gap snapshot as indented JSON.
@@ -277,8 +293,8 @@ func RenderGapJSON(w io.Writer, r *Report) error {
 }
 
 // computeGap derives the loaded-vs-fired snapshot from joined rows.
-// Only skill/agent/mcp participate. MCP token weight is unknown, so its
-// token sums are left at zero and excluded from totals.
+// Only skill/agent/mcp participate. An item whose weight was never measured
+// is counted in UnknownWeight and left out of the token sums.
 func computeGap(rows []Row) *Gap {
 	idx := map[scan.Category]int{}
 	g := &Gap{}
@@ -299,8 +315,9 @@ func computeGap(rows []Row) *Gap {
 			gc.Fired++
 			g.Fired++
 		}
-		if row.Category == scan.CatMCP {
-			continue // token weight unknown without running the server
+		if row.WeightUnknown {
+			gc.UnknownWeight++
+			continue
 		}
 		gc.LoadedTok += row.Tokens
 		g.LoadedTok += row.Tokens

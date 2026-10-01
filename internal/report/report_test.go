@@ -571,7 +571,7 @@ func TestMCPWeightIsReportedAsUnknownNotZero(t *testing.T) {
 func TestMCPWeightFromTranscripts(t *testing.T) {
 	st := usage.NewStats(30)
 	st.Sessions = 40
-	st.MCPWeight["plugin_ecc_exa"] = usage.MCPWeight{Chars: 400, At: time.Now()}
+	st.MCPWeight["plugin_ecc_exa"] = usage.Injected{Chars: 400, At: time.Now()}
 	items := []scan.Item{
 		{Category: scan.CatMCP, Name: "exa", Source: "plugin:ecc@ecc"},
 		{Category: scan.CatMCP, Name: "never-loaded", Source: "user-config", Removable: true},
@@ -590,5 +590,35 @@ func TestMCPWeightFromTranscripts(t *testing.T) {
 	}
 	if r.DeadTokensPerSession != exa.Tokens || r.DeadUnknownWeight != 1 {
 		t.Errorf("dead = %d tok, %d unknown; want %d tok, 1 unknown", r.DeadTokensPerSession, r.DeadUnknownWeight, exa.Tokens)
+	}
+}
+
+// A Claude Code skill seen in an injected listing weighs what it took there;
+// one never seen keeps the SKILL.md estimate. Muting a skill whose description
+// was not injected saves nothing, so it is not proposed for MUTE.
+func TestSkillWeightFromListing(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 40
+	st.SkillWeight["ecc:heavy"] = usage.Injected{Chars: 20, At: time.Now()}
+	st.Uses[scan.CatSkill]["ecc:heavy"] = 1
+	items := []scan.Item{
+		{Category: scan.CatSkill, Name: "ecc:heavy", Platform: "claude-code", Source: "plugin:ecc@ecc", DescChars: 1200},
+		{Category: scan.CatSkill, Name: "fresh", Platform: "claude-code", Source: "personal", DescChars: 370},
+		{Category: scan.CatSkill, Name: "ecc:heavy", Platform: "opencode", Source: "personal", DescChars: 1200},
+	}
+	r := Build(items, st, nil, Opts{MinSessions: 10, MuteThreshold: 0.2, MuteMinTokens: 50,
+		Cutoff: time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)})
+	got := map[string]Row{}
+	for _, row := range r.Rows {
+		got[row.Platform+"/"+row.Name] = row
+	}
+	if row := got["claude-code/ecc:heavy"]; row.Tokens != cost.TokensFor("", 20) || row.Verdict == VerdictMute {
+		t.Errorf("listed skill: Tokens=%d Verdict=%s, want %d and not MUTE", row.Tokens, row.Verdict, cost.TokensFor("", 20))
+	}
+	if row := got["claude-code/fresh"]; row.Tokens != cost.TokensFor("", 370) {
+		t.Errorf("unlisted skill: Tokens=%d, want file estimate %d", row.Tokens, cost.TokensFor("", 370))
+	}
+	if row := got["opencode/ecc:heavy"]; row.Tokens != cost.TokensFor("", 1200) {
+		t.Errorf("other platform: Tokens=%d, want file estimate %d", row.Tokens, cost.TokensFor("", 1200))
 	}
 }

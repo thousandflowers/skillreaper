@@ -168,8 +168,8 @@ var sectionTitles = []struct {
 	short string
 	gloss string
 }{
-	{scan.CatSkill, "SKILLS (description injected every session)",
-		"SKILLS", "description injected every session"},
+	{scan.CatSkill, "SKILLS (listed every session: name, and description while it fits)",
+		"SKILLS", "listed every session: name, and description while it fits"},
 	{scan.CatMCP, "MCP SERVERS (tool names and instructions injected; ? = never seen loading)",
 		"MCP SERVERS", "tool names and instructions injected; ? = never seen loading"},
 	{scan.CatAgent, "AGENTS (description injected every session)",

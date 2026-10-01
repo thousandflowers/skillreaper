@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -99,34 +100,46 @@ type Stats struct {
 	// what Claude Code recorded injecting: the deferred tool names and the
 	// server's instructions. A server whose schemas went straight into the
 	// system prompt (tool search off) leaves no record and stays unmeasured.
-	MCPWeight map[string]MCPWeight
+	MCPWeight map[string]Injected
+
+	// SkillWeight is each skill's per-session weight, keyed by its invocation
+	// name ("graphify", "ecc:plan"): its entry in the skill listing Claude Code
+	// injected. Past a size budget the listing keeps only some descriptions and
+	// names the rest, so the SKILL.md alone overstates most skills.
+	SkillWeight map[string]Injected
 }
 
-// MCPWeight is one server's injected chars in the latest session that loaded
-// it. Latest, not average: the tool list changes with the server's version.
-type MCPWeight struct {
+// Injected is what one item put into the prompt in the latest session that
+// loaded it. Latest, not average: tool lists and listings change over time.
+type Injected struct {
 	Chars int
 	At    time.Time
 }
 
-// recordMCPWeight keeps the most recent measurement of a server.
-func (s *Stats) recordMCPWeight(key string, w MCPWeight) {
+// recordInjected keeps the most recent measurement of key in m, which it
+// creates when nil, and returns.
+func recordInjected(m map[string]Injected, key string, w Injected) map[string]Injected {
 	if key == "" || w.Chars == 0 {
-		return
+		return m
 	}
-	if old, ok := s.MCPWeight[key]; ok && !w.At.After(old.At) {
-		return
+	if old, ok := m[key]; ok && !w.At.After(old.At) {
+		return m
 	}
-	if s.MCPWeight == nil {
-		s.MCPWeight = map[string]MCPWeight{}
+	if m == nil {
+		m = map[string]Injected{}
 	}
-	s.MCPWeight[key] = w
+	m[key] = w
+	return m
 }
 
-// MergeMCPWeight folds src's server weights into s, the newer one winning.
+// MergeMCPWeight folds src's injected weights (servers and skills) into s,
+// the newer one winning.
 func (s *Stats) MergeMCPWeight(src *Stats) {
 	for key, w := range src.MCPWeight {
-		s.recordMCPWeight(key, w)
+		s.MCPWeight = recordInjected(s.MCPWeight, key, w)
+	}
+	for key, w := range src.SkillWeight {
+		s.SkillWeight = recordInjected(s.SkillWeight, key, w)
 	}
 }
 
@@ -166,7 +179,8 @@ func NewStats(windowDays int) *Stats {
 		},
 		SkillProjects: map[string]map[string]int{},
 		MCPPayload:    map[string]PayloadStat{},
-		MCPWeight:     map[string]MCPWeight{},
+		MCPWeight:     map[string]Injected{},
+		SkillWeight:   map[string]Injected{},
 	}
 }
 
@@ -235,6 +249,10 @@ type attachment struct {
 	Type        string   `json:"type"`
 	AddedNames  []string `json:"addedNames"`
 	AddedBlocks []string `json:"addedBlocks"`
+	// skill_listing: the listing text as injected, and the skill names in it.
+	// Names is raw so an unexpected shape loses the listing, not the line.
+	Content string          `json:"content"`
+	Names   json.RawMessage `json:"names"`
 }
 
 type initPayload struct {
@@ -503,6 +521,7 @@ func parseFile(path, project string, st *Stats) {
 	// latest instructions per server (a re-add replaces, never adds).
 	mcpTools := map[string]map[string]bool{}
 	mcpInstr := map[string]int{}
+	skillChars := map[string]int{}
 	var lastTS time.Time
 
 	br := bufio.NewReaderSize(f, 256*1024)
@@ -541,6 +560,9 @@ func parseFile(path, project string, st *Stats) {
 		}
 		if a := e.Attachment; e.Type == "attachment" && a != nil {
 			recordInjectedMCP(a, mcpTools, mcpInstr)
+			if a.Type == "skill_listing" {
+				recordSkillListing(a, skillChars)
+			}
 			continue
 		}
 
@@ -605,7 +627,42 @@ func parseFile(path, project string, st *Stats) {
 		chars[key] += n
 	}
 	for key, n := range chars {
-		st.recordMCPWeight(key, MCPWeight{Chars: n, At: lastTS})
+		st.MCPWeight = recordInjected(st.MCPWeight, key, Injected{Chars: n, At: lastTS})
+	}
+	for key, n := range skillChars {
+		st.SkillWeight = recordInjected(st.SkillWeight, key, Injected{Chars: n, At: lastTS})
+	}
+}
+
+// recordSkillListing measures each skill's entry in one injected listing.
+// An entry starts with "- <name>" and runs until the next entry, so a
+// description written over several lines is counted whole. The name is matched
+// against the listing's own names, longest first, because names contain ':'.
+func recordSkillListing(a *attachment, chars map[string]int) {
+	var names []string
+	if json.Unmarshal(a.Names, &names) != nil || len(names) == 0 {
+		return
+	}
+	sort.Slice(names, func(i, j int) bool { return len(names[i]) > len(names[j]) })
+	var entries []string
+	for _, line := range strings.Split(a.Content, "\n") {
+		if strings.HasPrefix(line, "- ") || len(entries) == 0 {
+			entries = append(entries, line)
+			continue
+		}
+		entries[len(entries)-1] += "\n" + line
+	}
+	for _, e := range entries {
+		rest, ok := strings.CutPrefix(e, "- ")
+		if !ok {
+			continue
+		}
+		for _, n := range names {
+			if after, ok := strings.CutPrefix(rest, n); ok && (after == "" || after[0] == ':') {
+				chars[n] = len(e) + 1
+				break
+			}
+		}
 	}
 }
 

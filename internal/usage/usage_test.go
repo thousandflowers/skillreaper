@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -463,6 +464,39 @@ func TestMCPServerKey(t *testing.T) {
 	} {
 		if got := mcpServerKey(in); got != want {
 			t.Errorf("mcpServerKey(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A skill's per-session weight is its line in the listing Claude Code
+// injected: past a budget it keeps only the name, so reading the SKILL.md
+// overstated it. A later listing in the session adds skills; a later session
+// replaces the measurement.
+func TestParseSkillWeight(t *testing.T) {
+	dir := t.TempDir()
+	listing := func(ts string, initial bool, content string, names ...string) string {
+		b, _ := json.Marshal(map[string]any{"type": "attachment", "timestamp": ts, "attachment": map[string]any{
+			"type": "skill_listing", "isInitial": initial, "content": content, "names": names}})
+		return string(b)
+	}
+	writeTranscript(t, filepath.Join(dir, "p", "s.jsonl"),
+		listing("2026-06-02T10:00:00Z", true, "- long: does a thing\n  over two lines\n- ecc:plan\n- ecc:x: y",
+			"long", "ecc:plan", "ecc:x"),
+		listing("2026-06-02T10:05:00Z", false, "- late: added", "late"),
+	)
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{
+		"long":     len("- long: does a thing\n  over two lines\n"),
+		"ecc:plan": len("- ecc:plan\n"),
+		"ecc:x":    len("- ecc:x: y\n"),
+		"late":     len("- late: added\n"),
+	}
+	for k, chars := range want {
+		if got := st.SkillWeight[k].Chars; got != chars {
+			t.Errorf("SkillWeight[%q] = %d, want %d", k, got, chars)
 		}
 	}
 }

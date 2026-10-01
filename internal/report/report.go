@@ -10,6 +10,7 @@ import (
 
 	"github.com/thousandflowers/skillreaper/internal/clock"
 	"github.com/thousandflowers/skillreaper/internal/cost"
+	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/usage"
 )
@@ -143,6 +144,13 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 			chars, ok := lookupMCPWeight(st, it)
 			row.Tokens, row.WeightUnknown = cost.TokensFor(opts.Model, chars), !ok
 		}
+		// Claude Code's listing keeps only some descriptions; what it injected
+		// is the weight. A skill it never listed keeps the SKILL.md estimate.
+		if it.Category == scan.CatSkill && it.Platform == string(platform.ClaudeCode) {
+			if w, ok := st.SkillWeight[it.Name]; ok {
+				row.Tokens = cost.TokensFor(opts.Model, w.Chars)
+			}
+		}
 		switch it.Category {
 		case scan.CatSkill, scan.CatAgent, scan.CatMCP:
 			row.Uses, row.LastUsed = lookupUses(st, it)
@@ -251,7 +259,7 @@ func lookupUses(st *usage.Stats, it scan.Item) (int, time.Time) {
 // lookupMCPWeight is the server's latest injected weight in chars, under its
 // own name or its plugin alias. False when no session recorded loading it.
 func lookupMCPWeight(st *usage.Stats, it scan.Item) (int, bool) {
-	var best usage.MCPWeight
+	var best usage.Injected
 	for _, key := range append([]string{it.Name}, aliasKeys(it)...) {
 		if w, ok := st.MCPWeight[key]; ok && w.At.After(best.At) {
 			best = w

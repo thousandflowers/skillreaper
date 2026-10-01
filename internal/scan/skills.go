@@ -3,6 +3,7 @@ package scan
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -55,6 +56,11 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 		// name is metadata and intentionally not used as the key.
 		_, desc, bodyChars := parseFrontmatter(b)
 		key := namePrefix + e.Name()
+		descChars := len(key) + len(desc)
+		// Run only by hand: Claude Code leaves it out of the listing it injects.
+		if v, _ := frontmatterValue(b, "disable-model-invocation"); strings.EqualFold(v, "true") {
+			descChars = 0
+		}
 		items = append(items, Item{
 			Category:    CatSkill,
 			Name:        key,
@@ -62,7 +68,7 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			Source:      source,
 			Path:        skillPath,
 			Description: desc,
-			DescChars:   len(key) + len(desc),
+			DescChars:   descChars,
 			BodyChars:   bodyChars,
 			InstalledAt: installedAt,
 			Removable:   removable,

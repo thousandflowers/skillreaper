@@ -1,6 +1,10 @@
 package scan
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseFrontmatter(t *testing.T) {
 	src := []byte("---\nname: my-skill\ndescription: \"Does a thing\"\n---\nbody text here")
@@ -106,5 +110,30 @@ func TestParseFrontmatterMultilineDescription(t *testing.T) {
 		if _, got, _ := parseFrontmatter([]byte(c.src)); got != c.want {
 			t.Errorf("%s: description = %q, want %q", name, got, c.want)
 		}
+	}
+}
+
+// A skill with disable-model-invocation is only run by hand: Claude Code
+// leaves it out of the injected listing, so it weighs nothing per session.
+func TestScanSkillsManualOnlyWeighsNothing(t *testing.T) {
+	dir := t.TempDir()
+	for name, fm := range map[string]string{
+		"manual": "---\nname: manual\ndescription: a long description\ndisable-model-invocation: true\n---\nbody",
+		"auto":   "---\nname: auto\ndescription: a long description\n---\nbody",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, "skills", name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "skills", name, "SKILL.md"), []byte(fm), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, _ := ScanSkills(dir, "claude-code")
+	got := map[string]int{}
+	for _, it := range items {
+		got[it.Name] = it.DescChars
+	}
+	if got["manual"] != 0 || got["auto"] == 0 {
+		t.Errorf("DescChars = %v, want manual 0 and auto > 0", got)
 	}
 }

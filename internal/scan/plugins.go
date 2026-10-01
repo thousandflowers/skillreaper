@@ -68,10 +68,7 @@ func installedPlugins(claudeDir string) ([]pluginInfo, []Warning) {
 			})
 			continue
 		}
-		short := full
-		if i := strings.IndexByte(full, '@'); i >= 0 {
-			short = full[:i]
-		}
+		short, _, _ := strings.Cut(full, "@")
 		ts, _ := time.Parse(time.RFC3339, ins.InstalledAt)
 		out = append(out, pluginInfo{
 			Name:        short,

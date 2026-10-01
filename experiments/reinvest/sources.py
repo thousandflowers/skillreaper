@@ -66,15 +66,19 @@ def http_get(url: str, timeout: int = 15) -> bytes:
         return r.read()
 
 
-def http_json(url: str, tries: int = 3):
+def http_json(url: str, tries: int = 3, retry_on: tuple[int, ...] = (429, 500, 502, 503, 504), max_wait: int = 8):
+    """GET JSON, waiting out the given statuses (Retry-After, else backoff). Raises what the last try raised."""
     for attempt in range(tries):
         try:
             return json.loads(http_get(url).decode("utf-8"))
         except urllib.error.HTTPError as e:
-            if e.code in (429, 500, 502, 503, 504) and attempt < tries - 1:
-                time.sleep(min(int(e.headers.get("Retry-After") or 0) or 2 ** (attempt + 1), 8))
-                continue
-            raise
+            if e.code not in retry_on or attempt == tries - 1:
+                raise
+            try:
+                wait = int(e.headers.get("Retry-After") or 0)
+            except ValueError:  # Retry-After may be an HTTP date
+                wait = 0
+            time.sleep(min(wait or 2 ** (attempt + 1), max_wait))
 
 
 def frontmatter(text: str) -> dict:
@@ -152,19 +156,9 @@ def skill_doc(item: dict) -> str:
 
 
 def _skillssh_json(url: str):
-    """GET skills.sh one request at a time, waiting out 429s. Raises what the last try raised."""
+    """GET skills.sh one request at a time, waiting out 429s."""
     with _skillssh:
-        for attempt in range(SKILLSSH_TRIES):
-            try:
-                return json.loads(http_get(url).decode("utf-8"))
-            except urllib.error.HTTPError as e:
-                if e.code != 429 or attempt == SKILLSSH_TRIES - 1:
-                    raise
-                try:
-                    wait = int(e.headers.get("Retry-After") or 0)
-                except ValueError:  # Retry-After may be an HTTP date
-                    wait = 0
-                time.sleep(min(wait or 2 ** (attempt + 1), SKILLSSH_MAX_WAIT))
+        return http_json(url, SKILLSSH_TRIES, (429,), SKILLSSH_MAX_WAIT)
 
 
 def _fetch_skill_doc(item: dict) -> str:

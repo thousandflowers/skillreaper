@@ -15,7 +15,7 @@ func TestRenderReinvestHint(t *testing.T) {
 	path := filepath.Join(dir, "swaps.json")
 	for name, c := range map[string]struct{ file, want string }{
 		"two swaps": {`{"at":"2026-10-02T10:00:00Z","command":"python3 reinvest.py","swaps":[{},{}]}`,
-			"  reinvest · 2 swaps ready (from 2026-10-02)\n           run `python3 reinvest.py` to review them\n"},
+			"  reinvest · 2 swaps ready (from 2026-10-02)\n           run `python3 reinvest.py` to review them\n\n"},
 		"one swap":        {`{"at":"2026-10-02T10:00:00Z","command":"x","swaps":[{}]}`, "1 swap ready"},
 		"none":            {`{"at":"2026-10-02T10:00:00Z","command":"x","swaps":[]}`, ""},
 		"no command":      {`{"at":"2026-10-02T10:00:00Z","swaps":[{}]}`, ""},

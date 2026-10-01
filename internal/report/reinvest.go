@@ -50,8 +50,8 @@ func RenderReinvestHint(w io.Writer, path string, color bool) {
 		noun = "swap"
 	}
 	paint := painter(color)
-	fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf("reinvest · %d %s ready (from %s)", len(s.Swaps), noun, s.At.Format("2006-01-02"))))
-	fmt.Fprintf(w, "           %s\n", paint(cDim, fmt.Sprintf("run `%s` to review them", printable(s.Command))))
+	fmt.Fprintf(w, "  %s\n", paint(cDim, fmt.Sprintf("reinvest · %d %s ready (from %s)", len(s.Swaps), noun, s.At.Local().Format("2006-01-02"))))
+	fmt.Fprintf(w, "           %s\n\n", paint(cDim, fmt.Sprintf("run `%s` to review them", printable(s.Command))))
 }
 
 // printable drops control characters, so a cache file cannot move the cursor

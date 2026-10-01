@@ -394,6 +394,13 @@ func MergeInto(dst, src *Stats) {
 		}
 	}
 	dst.DeadToolChars += src.DeadToolChars
+	for key, p := range src.MCPPayload {
+		d := dst.MCPPayload[key]
+		d.Calls += p.Calls
+		d.TotalChars += p.TotalChars
+		d.NoiseChars += p.NoiseChars
+		dst.MCPPayload[key] = d
+	}
 }
 
 // parseFile reads one transcript. Unreadable files or lines count as

@@ -793,61 +793,20 @@ func observationFrom(one *usage.Stats) evidence.Observation {
 func mergeStats(dst, src *usage.Stats) {
 	dst.Sessions += src.Sessions
 	dst.FilesScanned += src.FilesScanned
-	dst.MalformedLines += src.MalformedLines
 	dst.UnreadableFiles += src.UnreadableFiles
 	dst.TruncatedReads += src.TruncatedReads
 	dst.OversizedLines += src.OversizedLines
 	dst.UnparsableLines += src.UnparsableLines
-	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
 	dst.SkippedByCutoff += src.SkippedByCutoff
-	// Unlike the corpus bracket below, the measured totals do merge: they are
-	// sums over messages, and a message belongs to exactly one transcript.
-	dst.Measured.Merge(src.Measured)
+	// Counts, evidence flags and measured totals merge in usage.MergeInto: they
+	// are sums over messages, and a message belongs to exactly one transcript.
 	// The corpus bracket is deliberately NOT merged. It is only ever compared
 	// against a per-platform setting (cleanupPeriodDays is Claude Code's), and a
 	// merged span reads like one platform's while describing all of them — which
 	// is the bug this warning shipped with in its first draft: an 81-day corpus
 	// belonging to another agent, measured against Claude Code's 30-day horizon.
 	// Callers needing a span must take it from the per-platform Stats.
-	for cat, uses := range src.Uses {
-		for key, count := range uses {
-			dst.Uses[cat][key] += count
-		}
-	}
-	for cat, lasts := range src.Last {
-		for key, ts := range lasts {
-			if ts.After(dst.Last[cat][key]) {
-				dst.Last[cat][key] = ts
-			}
-		}
-	}
-	for cat, errs := range src.Errors {
-		for key, count := range errs {
-			dst.Errors[cat][key] += count
-		}
-	}
-	for cat, lasts := range src.LastAttempt {
-		for key, ts := range lasts {
-			if ts.After(dst.LastAttempt[cat][key]) {
-				dst.LastAttempt[cat][key] = ts
-			}
-		}
-	}
-	for key, projs := range src.SkillProjects {
-		if dst.SkillProjects[key] == nil {
-			dst.SkillProjects[key] = map[string]int{}
-		}
-		for proj, count := range projs {
-			dst.SkillProjects[key][proj] += count
-		}
-	}
-	for key, p := range src.MCPPayload {
-		d := dst.MCPPayload[key]
-		d.Calls += p.Calls
-		d.TotalChars += p.TotalChars
-		d.NoiseChars += p.NoiseChars
-		dst.MCPPayload[key] = d
-	}
+	usage.MergeInto(dst, src)
 }
 
 func cmdReport(opts options, stdout, stderr io.Writer) int {

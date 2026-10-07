@@ -181,7 +181,8 @@ VERIFY_PROMPT = (
 def verify(task: str, doc: str, used: list[dict], installed: list[dict], own: bool = False) -> dict:
     # a skill written from the developer's own sessions names their own tools and habits on purpose
     origin = ("ORIGIN: written for this developer from their own conversations; naming their own tools, projects "
-              "and conventions is expected, not a reason to reject.\n\n" if own else "")
+              "and conventions is expected. Reject it if any step or rule holds for only ONE of their projects (that "
+              "project's domain, features or files) instead of the whole kind of work.\n\n" if own else "")
     body = (f"{origin}TASK: {task}\n\nSkills the developer already uses:\n{skill_lines(used, 120)}\n\n"
             f"Installed skills closest to this one (read what they do, not just the name):\n"
             f"{skill_lines(closest_installed(doc[:3000], installed, 8))}\n\nDOCUMENT:\n{doc[:DOC_CHARS]}")
@@ -198,8 +199,9 @@ WRITE_PROMPT = (
     "several of those conversations, in order. Write ONE Claude Code skill that takes this work over for THIS "
     "developer. Take from the messages: the steps that repeat, and every correction, preference or rule they had "
     "to say more than once (what not to do without asking, language, format, checks before calling it done); "
-    "those become explicit rules. Keep it general across their projects: no file paths or details that fit only "
-    "one of them. Leave out what Claude Code already does unasked. Do not repeat what the installed skills listed "
+    "those become explicit rules. Keep it general across their projects: every step and rule must hold for ANY "
+    "project of this kind, so drop what came from one of them (its domain, e.g. chess moves in a chess extension; "
+    "its features, file names, paths). Leave out what Claude Code already does unasked. Do not repeat what the installed skills listed "
     "below already do. 'name': lowercase words joined by hyphens, 2-4 words, the kind of work. 'description': "
     "one or two sentences, at most 300 characters (it is loaded in every session): what it does and the "
     "situations that should trigger it, in the developer's own words where possible. 'body': the skill in "

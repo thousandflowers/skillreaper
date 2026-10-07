@@ -215,7 +215,7 @@ def candidates_for(gap: dict, found: list[dict], no_mcp: bool) -> list[dict]:
 
 
 def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict]) -> list[dict]:
-    """One skill written per gap. Cached by the gap and its sessions: rewritten only when the group changes,
+    """One skill written per gap. Cached by the gap, its sessions and the prompt: rewritten only when one changes,
     so its verdicts stay cached too."""
     cache_file = sources.CACHE / "written.json"
     try:
@@ -223,7 +223,8 @@ def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict]) -
     except (OSError, ValueError):
         cache = {}
     by_id = {s["id"]: s for s in sessions}
-    keys = [hashlib.sha256("\0".join([g["name"], g["task"], *sorted(g["ids"])]).encode()).hexdigest() for g in gaps]
+    keys = [hashlib.sha256("\0".join([llm.WRITE_PROMPT, g["name"], g["task"], *sorted(g["ids"])]).encode()).hexdigest()
+            for g in gaps]  # a new prompt rewrites every skill
 
     def write(gap: dict) -> list | None:
         ss = sorted((by_id[i] for i in gap["ids"] if i in by_id), key=lambda s: -len(s["prompts"]))

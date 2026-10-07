@@ -3,13 +3,14 @@
 
   1. sessions   the ones you wrote (no `claude -p`, no subagents, not the open one)
   2. kinds      Claude groups them by kind of work; kinds a skill already covers drop out: what is left are gaps
-  3. search     skills.sh and the official MCP registry, with queries written for each gap
+  3. write      for each gap Claude writes a skill from your own sessions: the steps you repeat, the rules you
+                had to repeat (with --online: search skills.sh and the official MCP registry instead)
   4. verify     every (gap, candidate) read in full by Claude, alone; most are rejected, with a reason
   5. swaps      each fit is paired with REAP skills of about the same weight; pick them with the arrow keys,
                 then reinvest installs the new one and runs `reap mute` on the old ones (reversible)
 
 Weights and verdicts come from `reap --json`, so the numbers match the reap report.
-Usage:  python3 reinvest.py [--dry-run] [--regroup] [--no-mcp] [--days N]
+Usage:  python3 reinvest.py [--dry-run] [--regroup] [--online [--no-mcp]] [--days N]
 """
 from __future__ import annotations
 
@@ -37,6 +38,7 @@ CANDIDATES_PER_GAP = 10
 MIN_INSTALLS = 20     # skills.sh: fewer installs than this is too little signal to trust
 VERDICTS_TTL = 7 * 86400  # a verdict is keyed by everything it read, so it only goes stale with the candidate
 VERIFY_RUNS = 2       # a candidate is kept only if every run keeps it: borderline ones flipped between runs
+WRITE_SESSIONS = 8    # sessions a written skill is drawn from: the longest ones, where corrections pile up
 TERM = sys.__stdout__  # progress lines and the result go here; everything else goes to the run log
 LOG = sources.CACHE / "run.log"
 REPORT = sources.CACHE / "report.md"
@@ -169,7 +171,7 @@ def kinds_of_work(groups: list[dict], sessions: list[dict]) -> list[dict]:
         kinds.append({
             "name": str(g.get("name", "")), "task": str(g.get("task", "")), "delegable": bool(g.get("delegable")),
             "queries": g.get("queries") or [], "mcp_queries": g.get("mcp_queries") or [],
-            "sessions": len(ss), "weeks": len({week(s["ts"]) for s in ss}),
+            "ids": [s["id"] for s in ss], "sessions": len(ss), "weeks": len({week(s["ts"]) for s in ss}),
             "tokens": sum(s["tokens"] for s in ss), "median_tokens": int(statistics.median(s["tokens"] for s in ss)),
             "friction": sum(s["errors"] + 3 * s["interrupts"] for s in ss),
             "covered_by": top if n / len(ss) >= 0.5 else None,  # a skill you use in most of these sessions
@@ -212,6 +214,38 @@ def candidates_for(gap: dict, found: list[dict], no_mcp: bool) -> list[dict]:
     return [{**c, "gap": f"{gap['name']} ({gap['sessions']} sessions)", "task": gap["task"]} for c in out]
 
 
+def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict]) -> list[dict]:
+    """One skill written per gap. Cached by the gap and its sessions: rewritten only when the group changes,
+    so its verdicts stay cached too."""
+    cache_file = sources.CACHE / "written.json"
+    try:
+        cache = json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    by_id = {s["id"]: s for s in sessions}
+    keys = [hashlib.sha256("\0".join([g["name"], g["task"], *sorted(g["ids"])]).encode()).hexdigest() for g in gaps]
+
+    def write(gap: dict) -> list | None:
+        ss = sorted((by_id[i] for i in gap["ids"] if i in by_id), key=lambda s: -len(s["prompts"]))
+        return llm.write_skill(gap, [s["prompts"] for s in ss[:WRITE_SESSIONS]], installed)
+    todo = [(k, g) for k, g in zip(keys, gaps) if k not in cache]
+    with ThreadPoolExecutor(max(1, len(todo))) as ex:
+        for (k, _), out in zip(todo, ex.map(lambda kg: write(kg[1]), todo)):
+            if out:  # an unusable answer is not cached: the next run tries again
+                cache[k] = list(out)
+    cache_file.write_text(json.dumps({k: cache[k] for k in keys if k in cache}, ensure_ascii=False),
+                          encoding="utf-8")
+    out = []
+    for k, g in zip(keys, gaps):
+        if k in cache:
+            slug, doc = cache[k]
+            out.append({"id": f"new:{slug}", "name": slug, "slug": slug, "doc": doc, "kind": "skill",
+                        "created": True, "desc": sources.frontmatter(doc).get("description", ""),
+                        "cost": reap_tokens(slug, doc), "gap": f"{g['name']} ({g['sessions']} sessions)",
+                        "task": g["task"]})
+    return out
+
+
 def combine(runs: list[dict]) -> dict:
     """Several verdicts on one candidate -> one: kept only if every run kept it, with the lowest fit."""
     no = next((v for v in runs if not v.get("keep")), None)
@@ -233,7 +267,8 @@ def verify_all(cands: list[dict], state: dict) -> tuple[list[dict], list[tuple[s
     verdicts = {k: cache[k] for k in keys if k in cache and time.time() - cache[k]["at"] < VERDICTS_TTL}
     todo = list({k: c for k, c in zip(keys, cands) if k not in verdicts}.items())
     with ThreadPoolExecutor(8) as ex:
-        runs = list(ex.map(lambda kc: llm.verify(kc[1]["task"], kc[1]["doc"], state["used"], state["installed"]),
+        runs = list(ex.map(lambda kc: llm.verify(kc[1]["task"], kc[1]["doc"], state["used"], state["installed"],
+                                             own=kc[1].get("created", False)),
                            [kc for kc in todo for _ in range(VERIFY_RUNS)]))
     for i, (k, _) in enumerate(todo):
         verdicts[k] = {**combine(runs[i * VERIFY_RUNS:(i + 1) * VERIFY_RUNS]), "at": time.time()}
@@ -319,7 +354,9 @@ def main():
                                                           "recurring work needs history)")
     ap.add_argument("--max", type=int, default=3, help="swaps proposed at most")
     ap.add_argument("--regroup", action="store_true", help="group every session from scratch now, instead of weekly")
-    ap.add_argument("--no-mcp", action="store_true", help="skills only")
+    ap.add_argument("--online", action="store_true", help="search skills.sh and the MCP registry instead of "
+                                                          "writing skills from your sessions")
+    ap.add_argument("--no-mcp", action="store_true", help="with --online: skills only")
     ap.add_argument("--dry-run", action="store_true", help="pick swaps but only print what would run: installs and mutes nothing")
     args = ap.parse_args()
     sources.CACHE.mkdir(parents=True, exist_ok=True)
@@ -335,12 +372,17 @@ def main():
     gaps = find_gaps(kinds, state["installed"])
     step(f"{len(kinds)} kinds of work · {len(gaps)} with no skill", done=True)
 
-    step("searching skills and MCP servers")
-    queries = sorted({q for g in gaps for q in g["queries"]})
-    found = sources.search_skills(queries, {canon(s["name"]) for s in state["installed"]})
-    with ThreadPoolExecutor(max(1, len(gaps))) as ex:
-        cands = [c for cs in ex.map(lambda g: candidates_for(g, found, args.no_mcp), gaps) for c in cs]
-    step(f"{len(cands)} candidates", done=True)
+    if args.online:
+        step("searching skills and MCP servers")
+        queries = sorted({q for g in gaps for q in g["queries"]})
+        found = sources.search_skills(queries, {canon(s["name"]) for s in state["installed"]})
+        with ThreadPoolExecutor(max(1, len(gaps))) as ex:
+            cands = [c for cs in ex.map(lambda g: candidates_for(g, found, args.no_mcp), gaps) for c in cs]
+        step(f"{len(cands)} candidates", done=True)
+    else:
+        step(f"writing a skill for {len(gaps)} gaps from your sessions")
+        cands = created_for(gaps, sessions, state["installed"])
+        step(f"{len(cands)} skills written", done=True)
 
     step(f"verifying {len(cands)} candidates")
     passing, rejected = verify_all(cands, state)

@@ -1,4 +1,4 @@
-"""The three judgments reinvest asks Claude for: group sessions, check coverage, verify a candidate."""
+"""What reinvest asks Claude for: group sessions, check coverage, verify a candidate, write a skill."""
 from __future__ import annotations
 
 import json
@@ -178,9 +178,48 @@ VERIFY_PROMPT = (
     "\"fit\": if kept, how completely it does the TASK, 1 (a small part) to 5 (all of it), else 0}.")
 
 
-def verify(task: str, doc: str, used: list[dict], installed: list[dict]) -> dict:
-    body = (f"TASK: {task}\n\nSkills the developer already uses:\n{skill_lines(used, 120)}\n\n"
+def verify(task: str, doc: str, used: list[dict], installed: list[dict], own: bool = False) -> dict:
+    # a skill written from the developer's own sessions names their own tools and habits on purpose
+    origin = ("ORIGIN: written for this developer from their own conversations; naming their own tools, projects "
+              "and conventions is expected, not a reason to reject.\n\n" if own else "")
+    body = (f"{origin}TASK: {task}\n\nSkills the developer already uses:\n{skill_lines(used, 120)}\n\n"
             f"Installed skills closest to this one (read what they do, not just the name):\n"
             f"{skill_lines(closest_installed(doc[:3000], installed, 8))}\n\nDOCUMENT:\n{doc[:DOC_CHARS]}")
     out = ask_json(VERIFY_PROMPT, body, effort="high")
     return out if isinstance(out, dict) and "keep" in out else {"keep": False, "reason": FAILED}
+
+
+# ---------------------------------------------------------------------------
+# 4. A skill written from the developer's own sessions
+# ---------------------------------------------------------------------------
+
+WRITE_PROMPT = (
+    "Below is a kind of work a developer does again and again with Claude Code, and the messages they wrote in "
+    "several of those conversations, in order. Write ONE Claude Code skill that takes this work over for THIS "
+    "developer. Take from the messages: the steps that repeat, and every correction, preference or rule they had "
+    "to say more than once (what not to do without asking, language, format, checks before calling it done); "
+    "those become explicit rules. Keep it general across their projects: no file paths or details that fit only "
+    "one of them. Leave out what Claude Code already does unasked. Do not repeat what the installed skills listed "
+    "below already do. 'name': lowercase words joined by hyphens, 2-4 words, the kind of work. 'description': "
+    "one or two sentences, at most 300 characters (it is loaded in every session): what it does and the "
+    "situations that should trigger it, in the developer's own words where possible. 'body': the skill in "
+    "Markdown, at most 60 lines: when to use it, numbered steps, rules, how to check it is done. Reply with ONLY "
+    "a JSON object: {\"name\": \"...\", \"description\": \"...\", \"body\": \"...\"}.")
+SLUG_RE = re.compile(r"[a-z0-9]+(-[a-z0-9]+){0,5}")
+MAX_DESC = 400  # the prompt asks for 300; a little over is fine, a page is not
+
+
+def write_skill(gap: dict, conversations: list[list[str]], installed: list[dict]) -> tuple[str, str] | None:
+    """(slug, SKILL.md) for one gap, or None if the answer is unusable. The frontmatter is built here, not by
+    the model, so it always parses: the description is a JSON string, which is valid YAML."""
+    convs = "\n\n".join(f"Conversation {i + 1}:\n" + "\n".join(f"- {cut(p, 400)}" for p in ps[:10])
+                        for i, ps in enumerate(conversations))
+    body = (f"KIND OF WORK: {gap['name']}\nTASK: {gap['task']}\n\nInstalled skills closest to this work:\n"
+            f"{skill_lines(closest_installed(gap['task'], installed, 8))}\n\n{convs}")
+    out = ask_json(WRITE_PROMPT, body, effort="high")
+    if not isinstance(out, dict):
+        return None
+    slug, desc, text = (str(out.get(k) or "").strip() for k in ("name", "description", "body"))
+    if not SLUG_RE.fullmatch(slug) or not 40 <= len(desc) <= MAX_DESC or len(text) < 200:
+        return None
+    return slug, f"---\nname: {slug}\ndescription: {json.dumps(desc, ensure_ascii=False)}\n---\n\n{text}\n"

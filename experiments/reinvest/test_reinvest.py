@@ -310,3 +310,54 @@ class SkillsShRateLimit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WrittenSkills(unittest.TestCase):
+    """A skill written from the user's own sessions, the default instead of searching online."""
+
+    gap = {"name": "releasing", "task": "cut a release", "ids": ["a", "b"], "sessions": 2}
+    sessions = [{"id": "a", "prompts": ["release it", "do not push without asking"]},
+                {"id": "b", "prompts": ["ship v2"]}]
+    answer = {"name": "ship-release", "description": "Cuts a release: bumps, tags, checks CI. Use when asked to "
+                                                     "release or ship.", "body": "## Steps\n" + "1. step\n" * 60}
+
+    def test_frontmatter_is_built_and_read_back(self):
+        import llm
+        with mock.patch("llm.ask_json", return_value=self.answer):
+            slug, doc = llm.write_skill(self.gap, [["release it"]], [])
+        self.assertEqual(slug, "ship-release")
+        self.assertEqual(sources.frontmatter(doc)["description"], self.answer["description"])
+        self.assertEqual(reinvest.reap_tokens(slug, doc),
+                         -(-len((slug + self.answer["description"]).encode()) * 10 // 37))
+
+    def test_unusable_answer_rejected(self):
+        import llm
+        for bad in ({**self.answer, "name": "Ship Release!"}, {**self.answer, "description": "short"},
+                    {**self.answer, "body": "too thin"}, ["not", "an", "object"]):
+            with mock.patch("llm.ask_json", return_value=bad):
+                self.assertIsNone(llm.write_skill(self.gap, [["x"]], []), bad)
+
+    def test_written_once_until_the_group_changes(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(sources, "CACHE", Path(d)), \
+                mock.patch("llm.ask_json", return_value=self.answer) as ask:
+            first = reinvest.created_for([self.gap], self.sessions, [])
+            reinvest.created_for([self.gap], self.sessions, [])
+            self.assertEqual(ask.call_count, 1)
+            reinvest.created_for([{**self.gap, "ids": ["a", "b", "c"]}], self.sessions, [])
+            self.assertEqual(ask.call_count, 2)
+        self.assertTrue(first[0]["created"])
+        self.assertEqual(first[0]["gap"], "releasing (2 sessions)")
+
+    def test_failed_write_not_cached(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(sources, "CACHE", Path(d)), \
+                mock.patch("llm.ask_json", side_effect=[None, self.answer]) as ask:
+            self.assertEqual(reinvest.created_for([self.gap], self.sessions, []), [])
+            self.assertEqual(len(reinvest.created_for([self.gap], self.sessions, [])), 1)
+        self.assertEqual(ask.call_count, 2)
+
+    def test_verifier_told_it_is_the_users_own(self):
+        cand = {"task": "t", "id": "new:x", "doc": "d", "name": "x", "kind": "skill", "cost": 10, "created": True}
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(sources, "CACHE", Path(d)), \
+                mock.patch("llm.verify", return_value={"keep": True, "fit": 4}) as v:
+            reinvest.verify_all([cand], {"installed": [], "used": []})
+        self.assertTrue(all(c.kwargs["own"] for c in v.call_args_list))

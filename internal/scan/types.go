@@ -4,7 +4,12 @@
 // fixture trees.
 package scan
 
-import "time"
+import (
+	"path/filepath"
+	"time"
+
+	"github.com/thousandflowers/skillreaper/internal/safepath"
+)
 
 // Category classifies an inventoried item.
 type Category string
@@ -44,6 +49,20 @@ type Item struct {
 	// LinkTarget is set when a personal skill directory is a symlink into one
 	// of safepath.LinkedSkillHomes: prune moves the link, never its target.
 	LinkTarget string
+}
+
+// Written reports whether the item is a skill reinvest wrote: linked from
+// safepath.WrittenSkillHome. Pruning one removes its folder as well.
+func (it Item) Written() bool {
+	if it.LinkTarget == "" {
+		return false
+	}
+	root := it.RootDir
+	if root == "" {
+		root = filepath.Dir(filepath.Dir(filepath.Dir(it.Path))) // <root>/skills/<name>/SKILL.md
+	}
+	home, err := filepath.EvalSymlinks(safepath.WrittenSkillHome(root))
+	return err == nil && filepath.Dir(it.LinkTarget) == home
 }
 
 // ToolSurfaceAll marks an item with no allowed-tools restriction: it can use

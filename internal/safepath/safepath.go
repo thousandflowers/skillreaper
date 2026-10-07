@@ -208,7 +208,7 @@ func AtomicWriteFileWithin(root, target string, b []byte, perm os.FileMode) erro
 func LinkedSkillHomes(rootDir string) []string {
 	return []string{
 		filepath.Join(filepath.Dir(rootDir), ".agents", "skills"),
-		filepath.Join(rootDir, "skills-reinvest"),
+		WrittenSkillHome(rootDir),
 	}
 }
 
@@ -229,6 +229,13 @@ func LinkedSkillDir(rootDir, link string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// WrittenSkillHome is the folder reinvest writes skills to. A skill linked
+// from it was written for the user and has no other copy, so pruning it
+// removes the folder too, not just the link.
+func WrittenSkillHome(rootDir string) string {
+	return filepath.Join(rootDir, "skills-reinvest")
 }
 
 // LinkWithin checks that path is itself a symlink whose parent directory

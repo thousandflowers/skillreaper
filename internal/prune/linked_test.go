@@ -73,3 +73,53 @@ func TestQuarantineRefusesALinkItemThatIsNoLongerALink(t *testing.T) {
 		t.Fatalf("directory moved anyway: %v", err)
 	}
 }
+
+// TestPruningAWrittenSkillDeletesItsFolderAndRestoreBringsItBack: a skill
+// reinvest wrote has no other copy, so prune takes the folder with the link.
+func TestPruningAWrittenSkillDeletesItsFolderAndRestoreBringsItBack(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	folder := filepath.Join(claudeDir, "skills-reinvest", "ship-release")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: ship-release\ndescription: written\n---\n"
+	if err := os.WriteFile(filepath.Join(folder, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(claudeDir, "skills", "ship-release")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(folder, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	items, _ := scan.ScanSkills(claudeDir, "claude-code")
+	if len(items) != 1 || !items[0].Written() {
+		t.Fatalf("want one written skill, got %+v", items)
+	}
+
+	e, err := QuarantineItem(claudeDir, items[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, gone := range []string{link, folder} {
+		if _, err := os.Lstat(gone); !os.IsNotExist(err) {
+			t.Fatalf("%s still there after prune: %v", gone, err)
+		}
+	}
+	if err := Restore(claudeDir, e.ID); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(link, "SKILL.md")); err != nil || string(b) != md {
+		t.Fatalf("restore did not bring the written skill back: %q %v", b, err)
+	}
+}
+
+// TestASharedLinkedSkillIsNotWritten: a skill linked from ~/.agents/skills
+// is somebody's install; prune never deletes its folder.
+func TestASharedLinkedSkillIsNotWritten(t *testing.T) {
+	it := scan.Item{Path: "/h/.claude/skills/x/SKILL.md", LinkTarget: "/h/.agents/skills/x"}
+	if it.Written() {
+		t.Fatal("a shared linked skill must not count as written")
+	}
+}

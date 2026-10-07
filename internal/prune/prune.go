@@ -50,7 +50,11 @@ type Entry struct {
 	To   string `json:"to,omitempty"` // quarantine path
 	// Link marks a pruned linked skill: To is the moved symlink, whose target
 	// lies outside the Claude directory, so restore checks the link itself.
-	Link       bool            `json:"link,omitempty"`
+	Link bool `json:"link,omitempty"`
+	// FilesFrom/FilesTo: for a skill reinvest wrote, its folder, moved into
+	// the quarantine next to the link so it is gone but restorable.
+	FilesFrom  string          `json:"filesFrom,omitempty"`
+	FilesTo    string          `json:"filesTo,omitempty"`
 	ConfigPath string          `json:"configPath,omitempty"`
 	JSONScope  string          `json:"jsonScope,omitempty"` // "" = top-level mcpServers, else project path
 	Payload    json.RawMessage `json:"payload,omitempty"`   // removed MCP server config
@@ -177,6 +181,16 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		return Entry{}, err
 	}
 
+	filesFrom, filesTo := "", ""
+	if it.Written() {
+		if filesFrom, filesTo, err = quarantineWrittenFiles(claudeDir, root, it, dest); err != nil {
+			if rbErr := os.Rename(dest, src); rbErr != nil {
+				return Entry{}, fmt.Errorf("%w (rollback also failed: %v; link left at %s)", err, rbErr, dest)
+			}
+			return Entry{}, err
+		}
+	}
+
 	e := Entry{
 		ID:        nextID(entries),
 		Category:  string(it.Category),
@@ -185,17 +199,47 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		Root:      root,
 		To:        dest,
 		Link:      it.LinkTarget != "",
+		FilesFrom: filesFrom,
+		FilesTo:   filesTo,
 		Timestamp: time.Now(),
 	}
 	if err := saveManifest(claudeDir, append(entries, e)); err != nil {
 		// The item was moved but cannot be recorded; move it back so it is not
 		// lost without a manifest entry to restore it.
+		if filesTo != "" {
+			if rbErr := os.Rename(filesTo, filesFrom); rbErr != nil {
+				return Entry{}, fmt.Errorf("save manifest: %w (rollback also failed: %v; files left at %s)", err, rbErr, filesTo)
+			}
+		}
 		if rbErr := os.Rename(dest, src); rbErr != nil {
 			return Entry{}, fmt.Errorf("save manifest: %w (rollback also failed: %v; item left at %s)", err, rbErr, dest)
 		}
 		return Entry{}, fmt.Errorf("save manifest: %w", err)
 	}
 	return e, nil
+}
+
+// quarantineWrittenFiles moves the folder of a skill reinvest wrote into the
+// quarantine, beside its link. The folder must sit directly in the written
+// skill home of the item's root, so a tampered link cannot move anything else.
+func quarantineWrittenFiles(claudeDir, root string, it scan.Item, linkDest string) (string, string, error) {
+	home, err := safepath.ExistingPathWithin(root, safepath.WrittenSkillHome(root))
+	if err != nil {
+		return "", "", err
+	}
+	from, err := safepath.ExistingPathWithin(home, it.LinkTarget)
+	if err != nil || filepath.Dir(from) != home {
+		return "", "", fmt.Errorf("refusing to remove %s: not a folder in %s", it.LinkTarget, home)
+	}
+	to := linkDest + ".files"
+	if err := safepath.ParentWithinForWrite(claudeDir, to); err != nil {
+		return "", "", err
+	}
+	if err := os.Rename(from, to); err != nil {
+		return "", "", err
+	}
+	// Recorded unresolved, like From: restore bounds it lexically to the home.
+	return filepath.Join(safepath.WrittenSkillHome(root), filepath.Base(from)), to, nil
 }
 
 // RemoveMCP removes one MCP server from a Claude config file. The
@@ -455,6 +499,17 @@ func restoreEntry(claudeDir string, e *Entry) error {
 	}
 	if err := safepath.ParentWithinForWrite(restoreRoot, e.From); err != nil {
 		return err
+	}
+	if e.FilesTo != "" {
+		if _, err := safepath.ExistingPathWithin(claudeDir, e.FilesTo); err != nil {
+			return err
+		}
+		if err := safepath.ParentWithinForWrite(safepath.WrittenSkillHome(restoreRoot), e.FilesFrom); err != nil {
+			return err
+		}
+		if err := os.Rename(e.FilesTo, e.FilesFrom); err != nil {
+			return err
+		}
 	}
 	if err := os.Rename(e.To, e.From); err != nil {
 		return err

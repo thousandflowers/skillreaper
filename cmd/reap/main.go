@@ -1045,7 +1045,13 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 			if row.Category == scan.CatMCP || row.Category == scan.CatHook {
 				weight = "?"
 			}
-			fmt.Fprintf(stdout, "  %-6s  %-40s  %s\n", row.Category, row.Name, weight)
+			note := ""
+			if row.Written() {
+				// Written by reinvest, with no other copy: prune deletes it,
+				// folder included (still restorable from the quarantine).
+				note = "  ✎ written by reinvest · deleted with its folder"
+			}
+			fmt.Fprintf(stdout, "  %-6s  %-40s  %s%s\n", row.Category, row.Name, weight, note)
 		}
 		if skipped > 0 {
 			fmt.Fprintf(stdout, "\n  (%d unused plugin items skipped — disable via /plugin)\n", skipped)

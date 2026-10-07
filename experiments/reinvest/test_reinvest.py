@@ -366,7 +366,8 @@ class WrittenSkills(unittest.TestCase):
 class PickerWrittenSkills(unittest.TestCase):
     """Step 2: a written skill shows as one, can be read first, and can be taken without muting anything."""
 
-    new = {"gap": "g", "name": "ship-release", "fit": 4, "cost": 80, "created": True, "kind": "skill",
+    new = {"gap": "g", "name": "ship-release", "slug": "ship-release", "fit": 4, "cost": 80, "created": True,
+           "kind": "skill",
            "doc": "---\nname: ship-release\n---\nbody"}
 
     def test_offered_even_with_nothing_to_mute(self):
@@ -383,7 +384,7 @@ class PickerWrittenSkills(unittest.TestCase):
         swaps.on_key(built, 0, ord("m"))
         self.assertEqual((built[0]["mute"], built[0]["out"]), ([], 0))
         self.assertIn("m to mute old again", swaps.mute_text(built[0]))
-        self.assertEqual(swaps.apply(built, dry_run=True), ["  ✗  ship-release: needs manual setup, nothing muted · "])
+        self.assertEqual(len(swaps.apply(built, dry_run=True)), 1)  # the write, no `reap mute` line
         swaps.on_key(built, 0, ord("m"))
         self.assertEqual((built[0]["mute"], built[0]["out"]), ([old], 80))
 
@@ -392,3 +393,59 @@ class PickerWrittenSkills(unittest.TestCase):
             swaps.preview(self.new)
         self.assertEqual(run.call_args.args[0], ["less", "-R"])
         self.assertIn("body", run.call_args.kwargs["input"])
+
+
+class CreateWritten(unittest.TestCase):
+    """Step 3: a written skill lives in ~/.claude/skills-reinvest and is linked into ~/.claude/skills."""
+
+    def swap(self, mute=()):
+        c = {"kind": "skill", "name": "ship-release", "slug": "ship-release", "created": True,
+             "doc": "---\nname: ship-release\n---\nbody\n"}
+        return {"cands": [c], "idx": 0, "mute": [{"name": n} for n in mute]}
+
+    def home(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        patcher = mock.patch.dict(os.environ, {"HOME": d.name})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return Path(d.name)
+
+    def test_written_then_linked_then_muted(self):
+        home = self.home()
+        with mock.patch.object(swaps, "run", return_value=None) as run:
+            log = swaps.apply_one(self.swap(["old"]))
+        link = home / ".claude" / "skills" / "ship-release"
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.resolve(), (home / ".claude" / "skills-reinvest" / "ship-release").resolve())
+        self.assertEqual((link / "SKILL.md").read_text(), "---\nname: ship-release\n---\nbody\n")
+        self.assertEqual([c.args[0] for c in run.call_args_list], [["reap", "mute", "old"]])
+        self.assertIn("created ship-release", log[0])
+
+    def test_existing_skill_of_that_name_is_never_replaced(self):
+        home = self.home()
+        mine = home / ".claude" / "skills" / "ship-release"
+        mine.mkdir(parents=True)
+        (mine / "SKILL.md").write_text("the user's own")
+        with mock.patch.object(swaps, "run") as run:
+            log = swaps.apply_one(self.swap(["old"]))
+        self.assertEqual((mine / "SKILL.md").read_text(), "the user's own")
+        self.assertFalse((home / ".claude" / "skills-reinvest").exists())
+        run.assert_not_called()
+        self.assertIn("already exists", log[0])
+
+    def test_failed_mute_removes_what_was_written(self):
+        home = self.home()
+        fake = lambda cmd: "boom" if cmd[:3] == ["reap", "mute", "b"] else None
+        with mock.patch.object(swaps, "run", fake):
+            log = swaps.apply_one(self.swap(["a", "b"]))
+        self.assertFalse((home / ".claude" / "skills" / "ship-release").is_symlink())
+        self.assertFalse((home / ".claude" / "skills-reinvest" / "ship-release").exists())
+        self.assertTrue(log[-1].endswith("nothing changed"))
+
+    def test_dry_run_writes_nothing(self):
+        home = self.home()
+        log = swaps.apply([{**self.swap(["old"]), "ok": True}], dry_run=True)
+        self.assertFalse((home / ".claude").exists())
+        self.assertIn("skills-reinvest/ship-release/SKILL.md", log[0])
+        self.assertEqual(log[1], "  ·  reap mute old")

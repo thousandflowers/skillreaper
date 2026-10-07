@@ -13,6 +13,7 @@ import curses
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -286,6 +287,47 @@ def install_command(c: dict) -> list[str] | None:
     return None
 
 
+def skills_dir() -> Path:
+    return Path.home() / ".claude" / "skills"
+
+
+def written_dir() -> Path:
+    """Where written skills live; Claude Code loads them through a link in skills_dir(), and reap can tell them
+    apart by where the link points."""
+    return Path.home() / ".claude" / "skills-reinvest"
+
+
+def create(c: dict) -> str | None:
+    """Write a written skill and link it where Claude Code loads skills. None on success, else why not.
+    Never replaces anything: a skill or link of that name already there is the user's."""
+    link, home = skills_dir() / c["slug"], written_dir() / c["slug"]
+    if link.exists() or link.is_symlink():
+        return f"a skill named {c['slug']} already exists in {skills_dir()}"
+    if home.exists():
+        return f"{home} already exists"
+    try:
+        home.mkdir(parents=True)
+        (home / "SKILL.md").write_text(c["doc"], encoding="utf-8")
+        link.parent.mkdir(parents=True, exist_ok=True)
+        link.symlink_to(home, target_is_directory=True)
+    except OSError as e:
+        shutil.rmtree(home, ignore_errors=True)
+        return str(e)
+    return None
+
+
+def remove_written(c: dict) -> str | None:
+    """Undo create(): the link, then the folder, only when the link points at the folder reinvest wrote."""
+    link, home = skills_dir() / c["slug"], written_dir() / c["slug"]
+    try:
+        if link.is_symlink() and link.resolve() == home.resolve():
+            link.unlink()
+        shutil.rmtree(home)
+    except OSError as e:
+        return str(e)
+    return None
+
+
 def uninstall_command(c: dict) -> list[str]:
     if c["kind"] == "skill":
         return ["npx", "-y", "skills", "remove", c["slug"], *SKILLS_FLAGS]
@@ -296,7 +338,7 @@ def installed(c: dict) -> bool:
     """`skills add` exits 0 when some target failed; the skill must actually be where Claude Code reads it."""
     if c["kind"] != "skill":
         return True  # `claude mcp add` exits 1 on failure
-    return (Path.home() / ".claude" / "skills" / c["slug"] / "SKILL.md").is_file()
+    return (skills_dir() / c["slug"] / "SKILL.md").is_file()
 
 
 def run(cmd: list[str]) -> str | None:
@@ -316,7 +358,12 @@ def apply_one(s: dict) -> list[str]:
     installed by an earlier run stays: only this run's mutes are undone)."""
     c = s["cands"][s["idx"]]
     log, muted = [], []
-    if not c.get("installed"):
+    if c.get("created"):
+        err = create(c)
+        if err:
+            return [f"  ✗  {c['name']}: {err} · nothing muted"]
+        log.append(f"  ✓  created {c['name']} in {written_dir() / c['slug']}")
+    elif not c.get("installed"):
         install = install_command(c)
         if install is None:
             return [f"  ✗  {c['name']}: needs manual setup, nothing muted · {c.get('id', '')}"]
@@ -333,7 +380,7 @@ def apply_one(s: dict) -> list[str]:
             muted.append(x["name"])
             continue
         undone = [n for n in muted if run(["reap", "unmute", n]) is None]
-        removed = c.get("installed") or run(uninstall_command(c)) is None
+        removed = c.get("installed") or (remove_written(c) if c.get("created") else run(uninstall_command(c))) is None
         left = [n for n in muted if n not in undone] + ([] if removed else [c["name"] + " (installed)"])
         return log + [f"  ✗  reap mute {x['name']}: {err}",
                       "  ↺  rolled back" + (f", but still changed: {', '.join(left)}" if left else ": nothing changed")]
@@ -349,6 +396,10 @@ def apply(chosen: list[dict], dry_run: bool) -> list[str]:
             log += apply_one(s)
             continue
         c = s["cands"][s["idx"]]
+        if c.get("created"):
+            log += [f"  ·  write {written_dir() / c['slug'] / 'SKILL.md'}, link it as {skills_dir() / c['slug']}"]
+            log += [f"  ·  reap mute {x['name']}" for x in s["mute"]]
+            continue
         cmd = [] if c.get("installed") else install_command(c)
         log += ([f"  ✗  {c['name']}: needs manual setup, nothing muted · {c.get('id', '')}"] if cmd is None else
                 (["  ·  " + " ".join(cmd)] if cmd else []) + [f"  ·  reap mute {x['name']}" for x in s["mute"]])

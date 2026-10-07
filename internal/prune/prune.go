@@ -46,8 +46,11 @@ type Entry struct {
 	// time so restore can bound the write to the same tree the item came from.
 	// Empty in manifests written before multi-platform pruning; those entries
 	// fall back to the Claude directory, which is where they came from.
-	Root       string          `json:"root,omitempty"`
-	To         string          `json:"to,omitempty"` // quarantine path
+	Root string `json:"root,omitempty"`
+	To   string `json:"to,omitempty"` // quarantine path
+	// Link marks a pruned linked skill: To is the moved symlink, whose target
+	// lies outside the Claude directory, so restore checks the link itself.
+	Link       bool            `json:"link,omitempty"`
 	ConfigPath string          `json:"configPath,omitempty"`
 	JSONScope  string          `json:"jsonScope,omitempty"` // "" = top-level mcpServers, else project path
 	Payload    json.RawMessage `json:"payload,omitempty"`   // removed MCP server config
@@ -138,7 +141,13 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		}
 		return Entry{}, err
 	}
-	if _, err := safepath.ExistingPathWithin(root, src); err != nil {
+	// A linked skill is the link: that is what Claude Code loads, so that is
+	// what moves. Its target is outside root by design and is never touched.
+	if it.LinkTarget != "" {
+		if err := safepath.LinkWithin(root, src); err != nil {
+			return Entry{}, err
+		}
+	} else if _, err := safepath.ExistingPathWithin(root, src); err != nil {
 		if os.IsNotExist(err) {
 			return Entry{}, fmt.Errorf("%w: %s", ErrAlreadyGone, src)
 		}
@@ -175,6 +184,7 @@ func QuarantineItem(claudeDir string, it scan.Item) (Entry, error) {
 		From:      src,
 		Root:      root,
 		To:        dest,
+		Link:      it.LinkTarget != "",
 		Timestamp: time.Now(),
 	}
 	if err := saveManifest(claudeDir, append(entries, e)); err != nil {
@@ -432,7 +442,11 @@ func restoreEntry(claudeDir string, e *Entry) error {
 	// another platform does not belong under the Claude directory and pinning
 	// it there is what made multi-platform prune impossible. Entries written
 	// before Root existed fall back to the old bound.
-	if _, err := safepath.ExistingPathWithin(claudeDir, e.To); err != nil {
+	if e.Link {
+		if err := safepath.LinkWithin(claudeDir, e.To); err != nil {
+			return err
+		}
+	} else if _, err := safepath.ExistingPathWithin(claudeDir, e.To); err != nil {
 		return err
 	}
 	restoreRoot := e.Root

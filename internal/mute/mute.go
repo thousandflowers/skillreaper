@@ -62,6 +62,13 @@ func resolveMutableExisting(rootDir, target string) (string, error) {
 	if rel, ok := resolvedRel(filepath.Join(rootDir, "plugins"), tr); ok && isPluginSkillOrAgentPath(rel) {
 		return tr, nil
 	}
+	// A personal skill linked in from a shared skills folder: its SKILL.md
+	// lives there, not under skills/, and muting it edits it there.
+	for _, home := range safepath.LinkedSkillHomes(rootDir) {
+		if rel, ok := resolvedRel(home, tr); ok && isPersonalSkillPath(rel) {
+			return tr, nil
+		}
+	}
 	return "", fmt.Errorf("refusing to use path outside mutable skill, agent, or plugin roots: %s", target)
 }
 

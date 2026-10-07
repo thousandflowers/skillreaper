@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/thousandflowers/skillreaper/internal/safepath"
 )
 
 // ScanSkills inventories personal skills (<dir>/skills/<name>/SKILL.md)
@@ -40,14 +42,27 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 		return items, warns
 	}
 	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
 		skillPath := filepath.Join(dir, e.Name(), "SKILL.md")
-		if _, ok := resolveWithin(dir, skillPath); !ok {
+		readRoot, linkTarget := dir, ""
+		if e.Type()&os.ModeSymlink != 0 {
+			// Personal skills only: Claude Code loads a skill linked in from a
+			// shared skills folder, so reap has to weigh it too.
+			t, ok := safepath.LinkedSkillDir(filepath.Dir(dir), filepath.Join(dir, e.Name()))
+			if namePrefix != "" || !ok {
+				continue
+			}
+			readRoot, linkTarget = t, t
+		} else if !e.IsDir() {
 			continue
 		}
-		b, err := readCapped(skillPath)
+		readPath := filepath.Join(readRoot, "SKILL.md")
+		if readRoot == dir {
+			readPath = skillPath
+		}
+		if _, ok := resolveWithin(readRoot, readPath); !ok {
+			continue
+		}
+		b, err := readCapped(readPath)
 		if err != nil {
 			continue // directory without SKILL.md is not a skill
 		}
@@ -73,6 +88,7 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			InstalledAt: installedAt,
 			Removable:   removable,
 			ToolSurface: toolSurface(b, "allowed-tools"),
+			LinkTarget:  linkTarget,
 		})
 	}
 	return items, warns

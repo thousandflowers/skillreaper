@@ -41,6 +41,9 @@ type Item struct {
 	// item may use every tool, the widest and most prune-worthy surface.
 	// Zero for categories where it does not apply (MCP, hook, prose).
 	ToolSurface int
+	// LinkTarget is set when a personal skill directory is a symlink into one
+	// of safepath.LinkedSkillHomes: prune moves the link, never its target.
+	LinkTarget string
 }
 
 // ToolSurfaceAll marks an item with no allowed-tools restriction: it can use

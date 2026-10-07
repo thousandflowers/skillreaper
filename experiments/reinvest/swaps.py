@@ -3,6 +3,7 @@
 The picker is one list. Each entry shows the skills to mute above and a candidate below:
   up/down  previous / next swap      left/right  other candidates for this swap
   enter    accept / undo the swap    q           done (then asks before changing anything)
+  p        read the candidate        m           mute nothing / mute again (keep the old skills)
 
 Muting goes through `reap mute` (reversible with `reap unmute`), so it works for plugin skills too.
 """
@@ -72,14 +73,14 @@ def build(picks: list[dict], passing: list[dict], reap_pool: list[dict]) -> list
     pool, swaps = list(reap_pool), []
     for pick in picks:
         mute = pair(pick["cost"], pool)
-        if not mute and pick["cost"] is not None:
-            continue
+        if not mute and pick["cost"] is not None and not pick.get("created"):
+            continue  # a written skill is worth offering on its own: nothing to mute is fine
         pool = [x for x in pool if x not in mute]
         out = sum(x["tokens"] for x in mute)
         cands = sorted(passing, key=lambda c: (c["gap"] != pick["gap"], -c["fit"], c["cost"] is None,
                                                abs((c["cost"] or 0) - out)))
         idx = next((i for i, c in enumerate(cands) if c["name"] == pick["name"]), 0)
-        swaps.append({"mute": mute, "out": out, "cands": cands, "idx": idx, "ok": False})
+        swaps.append({"mute": mute, "out": out, "cands": cands, "idx": idx, "ok": False, "held": []})
     return swaps
 
 
@@ -90,7 +91,26 @@ def weight(cost: int | None, measured: bool = False) -> str:
 
 
 def verb(c: dict) -> str:
-    return "installed" if c.get("installed") else "install"
+    return "installed" if c.get("installed") else "create" if c.get("created") else "install"
+
+
+def kind_text(c: dict) -> str:
+    return "✎ new · written from your sessions" if c.get("created") else c["kind"]
+
+
+def toggle_mute(s: dict):
+    """Mute nothing for this swap, or the same skills again: the held ones stay out of every other swap."""
+    s["mute"], s["held"] = s.get("held", []), s["mute"]
+    s["out"] = sum(x["tokens"] for x in s["mute"])
+
+
+def preview(c: dict):
+    """The whole SKILL.md (or README) in the user's pager, before anything is accepted."""
+    pager = shlex.split(os.environ.get("PAGER") or "less")
+    try:
+        subprocess.run(pager, input=f"{c['name']} · {kind_text(c)}\n\n{c.get('doc', '')}", text=True)
+    except OSError:
+        subprocess.run(["more"], input=c.get("doc", ""), text=True)
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +157,11 @@ def settle(mcp_weights: dict[str, int | None], pool: list[dict]) -> list[dict]:
 
 
 def mute_text(s: dict) -> str:
+    if not s["mute"] and s.get("held"):
+        return f"nothing · m to mute {names(s['held'])} again"
     if not s["mute"]:
+        if s["cands"][s["idx"]]["cost"] is not None:
+            return "nothing · no unused skill of about its weight"
         return "nothing · the weight of what it installs is unknown, so nothing is traded for it"
     return f"{names(s['mute'])}   ~{s['out']} tok/session · never used"
 
@@ -161,7 +185,8 @@ def _draw(scr, swaps: list[dict], cur: int):
         if 0 <= y < h - 1:
             scr.addnstr(y, x, text, max(0, w - x - 1), attr)
 
-    put(0, 2, "reinvest · swaps   ↑↓ swap · ←→ candidate · enter accept · q done", curses.A_BOLD)
+    put(0, 2, "reinvest · swaps   ↑↓ swap · ←→ candidate · enter accept · p read · m mute on/off · q done",
+        curses.A_BOLD)
     y = 2
     for i, s in enumerate(swaps):
         c, sel = s["cands"][s["idx"]], i == cur
@@ -169,7 +194,7 @@ def _draw(scr, swaps: list[dict], cur: int):
         put(y, 2, f"{'✓' if s['ok'] else ' '}  mute      {mute_text(s)}",
             curses.A_REVERSE if sel else 0)
         pick = f"◂ {c['name']} ▸" if len(s["cands"]) > 1 else c["name"]
-        put(y + 1, 5, f"{verb(c):<9} {pick}   {weight(c['cost'], c.get('installed', False))} · {c['kind']}"
+        put(y + 1, 5, f"{verb(c):<9} {pick}   {weight(c['cost'], c.get('installed', False))} · {kind_text(c)}"
             f"   {s['idx'] + 1}/{len(s['cands'])}"
             + ("   (already picked above)" if taken else ""), curses.A_BOLD if sel else 0)
         put(y + 2, 15, f"for {c['gap']}")
@@ -199,6 +224,8 @@ def on_key(swaps: list[dict], cur: int, key: int) -> tuple[int, bool]:
     elif key in (10, 13, curses.KEY_ENTER):
         s["ok"] = not s["ok"]
         return (min(cur + 1, len(swaps) - 1) if s["ok"] else cur), False
+    elif key == ord("m") and (s["mute"] or s.get("held")):
+        toggle_mute(s)
     elif key in (ord("q"), 27):
         return cur, True
     return cur, False
@@ -221,7 +248,14 @@ def pick(swaps: list[dict]) -> list[dict]:
         cur, done = 0, False
         while not done:
             _draw(scr, swaps, cur)
-            cur, done = on_key(swaps, cur, scr.getch())
+            key = scr.getch()
+            if key == ord("p"):
+                curses.def_prog_mode()
+                curses.endwin()
+                preview(swaps[cur]["cands"][swaps[cur]["idx"]])
+                curses.reset_prog_mode()
+                continue
+            cur, done = on_key(swaps, cur, key)
     curses.wrapper(loop)
     return accepted(swaps)
 

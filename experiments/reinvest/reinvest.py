@@ -310,7 +310,7 @@ def summary(swap_list: list[dict], gaps: list[dict], dead: int) -> str:
     for s in swap_list:
         c = s["cands"][s["idx"]]
         lines += [f"  mute      {swaps.mute_text(s)}",
-                  f"  {swaps.verb(c):<9} {c['name']}   {swaps.weight(c['cost'], c.get('installed', False))} · {c['kind']}",
+                  f"  {swaps.verb(c):<9} {c['name']}   {swaps.weight(c['cost'], c.get('installed', False))} · {swaps.kind_text(c)}",
                   f"            for {c['gap']}", f"            {c['why']}", ""]
     solved = {s["cands"][s["idx"]]["gap"] for s in swap_list}
     missing = [g["name"] for g in gaps if f"{g['name']} ({g['sessions']} sessions)" not in solved]
@@ -325,7 +325,7 @@ def write_report(kinds: list[dict], gaps: list[dict], passing: list[dict], rejec
               + (f", covered by {k['covered_by']}" if k["covered_by"] else "") for k in kinds]
     lines += ["", "## Gaps", ""] + [f"- {g['name']}: {g['task']}" for g in gaps]
     lines += ["", "## Verified candidates", ""] + [
-        f"- {c['name']} ({c['kind']}, {swaps.weight(c['cost'])}, fit {c['fit']}/5) for {c['gap']}: {c['why']}"
+        f"- {c['name']} ({swaps.kind_text(c)}, {swaps.weight(c['cost'])}, fit {c['fit']}/5) for {c['gap']}: {c['why']}"
         for c in passing]
     lines += ["", "## Rejected", ""] + [f"- {n}: {r}" for n, r in rejected]
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -361,3 +361,34 @@ class WrittenSkills(unittest.TestCase):
                 mock.patch("llm.verify", return_value={"keep": True, "fit": 4}) as v:
             reinvest.verify_all([cand], {"installed": [], "used": []})
         self.assertTrue(all(c.kwargs["own"] for c in v.call_args_list))
+
+
+class PickerWrittenSkills(unittest.TestCase):
+    """Step 2: a written skill shows as one, can be read first, and can be taken without muting anything."""
+
+    new = {"gap": "g", "name": "ship-release", "fit": 4, "cost": 80, "created": True, "kind": "skill",
+           "doc": "---\nname: ship-release\n---\nbody"}
+
+    def test_offered_even_with_nothing_to_mute(self):
+        built = swaps.build([self.new], [self.new], [])
+        self.assertEqual(len(built), 1)
+        self.assertEqual(built[0]["mute"], [])
+        self.assertEqual(swaps.verb(self.new), "create")
+        self.assertIn("written from your sessions", swaps.kind_text(self.new))
+        self.assertIn("no unused skill", swaps.mute_text(built[0]))
+
+    def test_m_keeps_the_old_skills_then_mutes_them_again(self):
+        old = {"name": "old", "tokens": 80}
+        built = swaps.build([self.new], [self.new], [old])
+        swaps.on_key(built, 0, ord("m"))
+        self.assertEqual((built[0]["mute"], built[0]["out"]), ([], 0))
+        self.assertIn("m to mute old again", swaps.mute_text(built[0]))
+        self.assertEqual(swaps.apply(built, dry_run=True), ["  ✗  ship-release: needs manual setup, nothing muted · "])
+        swaps.on_key(built, 0, ord("m"))
+        self.assertEqual((built[0]["mute"], built[0]["out"]), ([old], 80))
+
+    def test_preview_pipes_the_whole_doc_to_the_pager(self):
+        with mock.patch.dict(os.environ, {"PAGER": "less -R"}), mock.patch("subprocess.run") as run:
+            swaps.preview(self.new)
+        self.assertEqual(run.call_args.args[0], ["less", "-R"])
+        self.assertIn("body", run.call_args.kwargs["input"])

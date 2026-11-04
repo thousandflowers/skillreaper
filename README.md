@@ -320,7 +320,9 @@ Upgrading, uninstalling, and platform-specific tips →
 reap                          # scan + report (read-only)
 reap gap                      # loaded-vs-fired utilization + MCP payload quality
 reap prune                    # quarantine REAP items (reversible)
+reap prune <name>             # quarantine that one item, whatever its verdict
 reap mute <name>              # strip description, keep skill available
+reap unmute                   # list what is muted
 reap unmute <name>            # restore description from backup
 reap unmute --all             # restore all muted skills
 reap keep <name>              # protect an item from pruning

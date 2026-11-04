@@ -44,6 +44,8 @@ type Opts struct {
 	// of sessions is a MUTE candidate. MuteThreshold == 0 disables MUTE.
 	MuteThreshold float64
 	MuteMinTokens int
+	// Muted names the skills whose description reap has stripped.
+	Muted map[string]bool
 }
 
 // Row is one inventory item with its evidence and verdict.
@@ -70,6 +72,8 @@ type Row struct {
 
 // Report is the full result of a scan.
 type Report struct {
+	// MutedCount is how many installed items the user has muted.
+	MutedCount  int
 	GeneratedAt time.Time
 	WindowDays  int
 	Sessions    int
@@ -213,6 +217,13 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 			if it.HookLoaded && (row.Verdict == VerdictReap || row.Verdict == VerdictMute) {
 				row.Verdict = VerdictKeep
 				row.Reason = ReasonHookLoaded
+			}
+			// Muting removed the description that makes a skill fire, so its
+			// zero uses are the mute's doing and say nothing about the skill.
+			if opts.Muted[it.Name] {
+				row.Verdict = VerdictInfo
+				row.Reason = ReasonMuted
+				r.MutedCount++
 			}
 			// Absence of evidence is not evidence of absence: an item from a
 			// platform whose transcripts we could not parse (e.g. OpenCode's

@@ -37,7 +37,7 @@ func TestStateCommandsRequireClaudeDir(t *testing.T) {
 
 	out.Reset()
 	errb.Reset()
-	if code := cmdPrune(options{claudeDir: ""}, strings.NewReader(""), &out, &errb); code == 0 {
+	if code := cmdPrune(options{claudeDir: ""}, nil, strings.NewReader(""), &out, &errb); code == 0 {
 		t.Error("prune with no claude dir should fail, not write to cwd")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "reaped")); !os.IsNotExist(err) {
@@ -284,7 +284,7 @@ func TestRunPruneAndRestore(t *testing.T) {
 
 	// Restore everything.
 	out.Reset()
-	code = run([]string{"restore", "--all", "--claude-dir", claudeDir},
+	code = run([]string{"restore", "--all", "--yes", "--claude-dir", claudeDir},
 		strings.NewReader(""), &out, &errOut)
 	if code != 0 {
 		t.Fatalf("restore exit = %d, stderr: %s", code, errOut.String())
@@ -339,7 +339,7 @@ func TestRunPruneJSONEmitsValidJSON(t *testing.T) {
 	if plan.TotalTokens <= 0 {
 		t.Error("total_tokens should sum the candidates")
 	}
-	if strings.Contains(out.String(), "[Y/n]") || strings.Contains(out.String(), "🧹") {
+	if strings.Contains(out.String(), "[y/N]") || strings.Contains(out.String(), "🧹") {
 		t.Error("the human plan leaked into the JSON stream")
 	}
 	if _, err := os.Stat(filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")); err != nil {
@@ -1778,5 +1778,207 @@ func TestRestoreWithNoArgsListsWhatIsPruned(t *testing.T) {
 	}
 	if !strings.Contains(again.String(), "Nothing to restore") {
 		t.Errorf("empty quarantine output: %s", again.String())
+	}
+}
+
+// Naming an item prunes that item and nothing else, whatever its verdict: the
+// user decided. Bare prune was what ran before, on every REAP item.
+func TestPruneByNameTouchesOnlyThatItem(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	base := []string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"}
+	exists := func(name string) bool {
+		_, err := os.Stat(filepath.Join(claudeDir, "skills", name))
+		return err == nil
+	}
+	var out, errOut bytes.Buffer
+
+	code := run(append([]string{"prune", "nosuchskill", "--yes"}, base...), strings.NewReader(""), &out, &errOut)
+	if code != 1 || !exists("usedskill") || !exists("deadskill") {
+		t.Fatalf("unknown name: exit = %d, used=%v dead=%v", code, exists("usedskill"), exists("deadskill"))
+	}
+	if !strings.Contains(errOut.String(), "nosuchskill") {
+		t.Errorf("stderr should name what was not found: %s", errOut.String())
+	}
+
+	out.Reset()
+	code = run(append([]string{"prune", "usedskill"}, base...), strings.NewReader("n\n"), &out, &errOut)
+	if code != 0 || !exists("usedskill") {
+		t.Fatalf("declined: exit = %d, used=%v", code, exists("usedskill"))
+	}
+	if !strings.Contains(out.String(), "KEEP") {
+		t.Errorf("the prompt should say what reap thinks of it:\n%s", out.String())
+	}
+
+	code = run(append([]string{"prune", "usedskill", "--yes"}, base...), strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	if exists("usedskill") {
+		t.Error("the named skill should be quarantined, even at KEEP")
+	}
+	if !exists("deadskill") {
+		t.Error("a REAP skill nobody named must stay")
+	}
+
+	code = run(append([]string{"prune", "a", "b"}, base...), strings.NewReader(""), &out, &errOut)
+	if code != 2 {
+		t.Errorf("two names: exit = %d, want 2", code)
+	}
+}
+
+// Enter is no: an action on hundreds of items must not start from one key.
+func TestConfirmDefaultsToNo(t *testing.T) {
+	cases := map[string]bool{"\n": false, "": false, "n\n": false, "x\n": false, "y\n": true, "YES\n": true}
+	for input, want := range cases {
+		var out bytes.Buffer
+		if got := confirm(strings.NewReader(input), &out, "? "); got != want {
+			t.Errorf("confirm(%q) = %v, want %v", input, got, want)
+		}
+	}
+}
+
+// restore --all brings back everything ever pruned, which can include a server
+// removed months ago on purpose: it shows the list and waits for a yes.
+func TestRestoreAllShowsTheListAndAsks(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	base := []string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"}
+	var out, errOut bytes.Buffer
+	if code := run(append([]string{"prune", "--yes"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("prune exit = %d: %s", code, errOut.String())
+	}
+	back := func() bool {
+		_, err := os.Stat(filepath.Join(claudeDir, "skills", "deadskill"))
+		return err == nil
+	}
+
+	for _, input := range []string{"\n", "n\n"} {
+		out.Reset()
+		if code := run([]string{"restore", "--all", "--claude-dir", claudeDir}, strings.NewReader(input), &out, &errOut); code != 0 {
+			t.Fatalf("exit = %d", code)
+		}
+		if back() {
+			t.Fatalf("answer %q restored the item", input)
+		}
+		if !strings.Contains(out.String(), "deadskill") || !strings.Contains(out.String(), "[y/N]") {
+			t.Errorf("should list and ask:\n%s", out.String())
+		}
+	}
+
+	if code := run([]string{"restore", "--all", "--claude-dir", claudeDir}, strings.NewReader("y\n"), &out, &errOut); code != 0 || !back() {
+		t.Fatalf("yes: exit = %d, back = %v", code, back())
+	}
+
+	out.Reset()
+	if code := run([]string{"restore", "--all", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("empty: exit = %d", code)
+	}
+	if !strings.Contains(out.String(), "Nothing to restore") {
+		t.Errorf("empty quarantine: %s", out.String())
+	}
+}
+
+// Bare unmute answers "what have I muted", as bare restore does for prune.
+func TestUnmuteWithNoArgsListsWhatIsMuted(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	if code := run([]string{"unmute", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("empty: exit = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "Nothing is muted") {
+		t.Errorf("empty output: %s", out.String())
+	}
+
+	args := []string{"mute", "usedskill", "--claude-dir", claudeDir, "--claude-json", claudeJSON}
+	if code := run(args, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
+	}
+	out.Reset()
+	if code := run([]string{"unmute", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	for _, want := range []string{"usedskill", "reap unmute <name>"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, out.String())
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(claudeDir, "skills", "usedskill", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "description:") {
+		t.Error("listing must not unmute anything")
+	}
+}
+
+// A plugin skill can be muted by naming it, and only so: the bulk command leaves
+// plugin files alone. Prune still refuses, the file would return with an update.
+func TestMutePluginSkillByNameOnly(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	root := filepath.Join(claudeDir, "plugins", "cache", "mkt", "plug", "1.0.0")
+	skill := filepath.Join(root, "skills", "wanted", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skill), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const body = "---\nname: wanted\ndescription: " + "a plugin skill nobody fires, described at length. " + "\n---\nbody\n"
+	if err := os.WriteFile(skill, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg := `{"version":2,"plugins":{"plug@mkt":[{"installPath":"` + root + `"}]}}`
+	if err := os.WriteFile(filepath.Join(claudeDir, "plugins", "installed_plugins.json"), []byte(reg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	base := []string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"}
+	read := func() string {
+		b, err := os.ReadFile(skill)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	var out, errOut bytes.Buffer
+
+	if code := run(append([]string{"mute", "--yes"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("bulk exit = %d, stderr: %s", code, errOut.String())
+	}
+	if read() != body {
+		t.Fatal("bulk mute must not touch a plugin file")
+	}
+	if code := run(append([]string{"prune", "plug:wanted", "--yes"}, base...), strings.NewReader(""), &out, &errOut); code != 1 {
+		t.Fatalf("prune exit = %d, want 1", code)
+	}
+
+	if code := run(append([]string{"mute", "plug:wanted", "--yes"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
+	}
+	if strings.Contains(read(), "description:") {
+		t.Fatalf("description should be stripped:\n%s", read())
+	}
+	if code := run([]string{"unmute", "plug:wanted", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("unmute exit = %d, stderr: %s", code, errOut.String())
+	}
+	if read() != body {
+		t.Fatalf("unmute should restore the file exactly:\n%s", read())
+	}
+}
+
+func TestResolveMutedAcceptsAUniqueShortName(t *testing.T) {
+	names := []string{"one:plan", "two:plan", "p:always", "own"}
+	cases := []struct {
+		in, want string
+		wantErr  bool
+	}{
+		{"p:always", "p:always", false},
+		{"always", "p:always", false},
+		{"own", "own", false},
+		{"one:plan", "one:plan", false},
+		{"plan", "", true},
+		{"nosuch", "nosuch", false}, // left to Unmute, which says it is not muted
+	}
+	for _, c := range cases {
+		got, err := resolveMuted(names, c.in)
+		if (err != nil) != c.wantErr || got != c.want {
+			t.Errorf("resolveMuted(%q) = %q, %v; want %q, err=%v", c.in, got, err, c.want, c.wantErr)
+		}
 	}
 }

@@ -29,11 +29,25 @@ type Headline struct {
 	Reaped     int  // DeadCount: the subset reap will condemn
 	HeldBack   int  // never fired, not condemned
 	KnowsFired bool // false when no gap was measured; then only Reaped is safe to state
+	// The dead weight by what reap prune can do about it. Unremovable items sit
+	// inside plugins, and are usually most of the total.
+	RemovableTokens int
+	PluginTokens    int
+	Muted           int
 }
 
 // NewHeadline derives the opening figures from a finished report.
 func NewHeadline(r *Report) Headline {
-	h := Headline{Reaped: r.DeadCount}
+	h := Headline{Reaped: r.DeadCount, Muted: r.MutedCount}
+	for _, row := range r.Rows {
+		switch {
+		case row.Verdict != VerdictReap:
+		case row.Removable:
+			h.RemovableTokens += row.Tokens
+		default:
+			h.PluginTokens += row.Tokens
+		}
+	}
 	if r.Gap == nil || r.Gap.Loaded <= 0 {
 		return h
 	}
@@ -42,7 +56,7 @@ func NewHeadline(r *Report) Headline {
 	h.KnowsFired = true
 	// Clamped, not trusted: the two counts come from different passes, and a
 	// negative "held back" would be printed as a fact.
-	if held := h.NeverFired - h.Reaped; held > 0 {
+	if held := h.NeverFired - h.Reaped - h.Muted; held > 0 {
 		h.HeldBack = held
 	}
 	return h
@@ -69,6 +83,24 @@ func (h Headline) Verdict() string {
 		s += fmt.Sprintf(", %d held back rather than condemned", h.HeldBack)
 	}
 	return s
+}
+
+// Split says how much of the dead weight reap prune can take. Empty when it can
+// take all of it, because the total already says so.
+func (h Headline) Split() string {
+	if h.PluginTokens == 0 {
+		return ""
+	}
+	return fmt.Sprintf("~%s removable with reap prune, ~%s inside plugins",
+		HumanNum(h.RemovableTokens), HumanNum(h.PluginTokens))
+}
+
+// MutedLine counts the muted skills, which the tables no longer show.
+func (h Headline) MutedLine() string {
+	if h.Muted == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d muted · reap unmute to list", h.Muted)
 }
 
 // Line is the same two counts on one line, for the renderers with no room to

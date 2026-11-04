@@ -170,6 +170,8 @@ func summaryFor(row Row) string {
 		return "manually protected via the keep-list"
 	case ReasonClaudeMDRef:
 		return "referenced in CLAUDE.md — protected from pruning"
+	case ReasonMuted:
+		return "you muted it, so it cannot fire on its own and its uses prove nothing"
 	case ReasonRequested:
 		return fmt.Sprintf("you asked for it by name %d time(s) and it never started", row.Requests)
 	case ReasonHookLoaded:

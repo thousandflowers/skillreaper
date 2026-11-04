@@ -422,3 +422,93 @@ func TestStripDescriptionEdgeCases(t *testing.T) {
 		t.Error("empty input should report nothing stripped")
 	}
 }
+
+// Unmute must not throw away what was written after the mute: it brings the
+// description back into the file as it is now.
+func TestUnmuteKeepsEditsMadeAfterTheMute(t *testing.T) {
+	const original = "---\nname: x\ndescription: >\n  spread over\n  two lines\nallowed-tools: Read\n---\nbody\n"
+	mutedAndEdited := func(t *testing.T, edit func(string) string) (claudeDir, path string) {
+		t.Helper()
+		claudeDir = t.TempDir()
+		path = filepath.Join(claudeDir, "skills", "x", "SKILL.md")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := Mute(claudeDir, "", "x", path); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(edit(string(b))), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return claudeDir, path
+	}
+	read := func(t *testing.T, path string) string {
+		t.Helper()
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+
+	t.Run("edit to the body stays, description returns", func(t *testing.T) {
+		claudeDir, path := mutedAndEdited(t, func(s string) string { return s + "added later\n" })
+		if err := Unmute(claudeDir, "x"); err != nil {
+			t.Fatal(err)
+		}
+		got := read(t, path)
+		for _, want := range []string{"added later", "description: >\n  spread over\n  two lines\n", "allowed-tools: Read", "name: x"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("lacks %q:\n%s", want, got)
+			}
+		}
+		if names, _ := List(claudeDir); len(names) != 0 {
+			t.Errorf("still muted: %v", names)
+		}
+	})
+
+	t.Run("a description written since is kept, not doubled", func(t *testing.T) {
+		claudeDir, path := mutedAndEdited(t, func(s string) string {
+			return strings.Replace(s, "name: x\n", "name: x\ndescription: mine now\n", 1)
+		})
+		if err := Unmute(claudeDir, "x"); err != nil {
+			t.Fatal(err)
+		}
+		got := read(t, path)
+		if !strings.Contains(got, "description: mine now") || strings.Contains(got, "spread over") {
+			t.Errorf("should keep the new description only:\n%s", got)
+		}
+	})
+
+	t.Run("no header to put it in: stops, names the copy, changes nothing", func(t *testing.T) {
+		const noHeader = "the header is gone\n"
+		claudeDir, path := mutedAndEdited(t, func(string) string { return noHeader })
+		err := Unmute(claudeDir, "x")
+		if err == nil || !strings.Contains(err.Error(), ".bak") {
+			t.Fatalf("err = %v, want one naming the backup", err)
+		}
+		if read(t, path) != noHeader {
+			t.Error("the file must stay as it is")
+		}
+		if names, _ := List(claudeDir); len(names) != 1 {
+			t.Errorf("must stay muted, the copy is still needed: %v", names)
+		}
+	})
+
+	t.Run("unchanged file comes back byte for byte", func(t *testing.T) {
+		claudeDir, path := mutedAndEdited(t, func(s string) string { return s })
+		if err := Unmute(claudeDir, "x"); err != nil {
+			t.Fatal(err)
+		}
+		if got := read(t, path); got != original {
+			t.Errorf("got:\n%s", got)
+		}
+	})
+}

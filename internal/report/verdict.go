@@ -38,6 +38,8 @@ const (
 	// ReasonClaudeMDRef holds an item at KEEP because its name is referenced
 	// in a CLAUDE.md file, so the user clearly relies on it.
 	ReasonClaudeMDRef = "claude-md-ref"
+	// ReasonMuted sets apart a skill the user muted: reap has no evidence on it.
+	ReasonMuted = "muted"
 	// ReasonRequested holds a skill at KEEP because the user asked for it by name
 	// and it never started: a wish with no invocation on record.
 	ReasonRequested = "requested"

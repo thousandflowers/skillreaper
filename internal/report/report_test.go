@@ -262,6 +262,43 @@ func TestBuildRequestedProtection(t *testing.T) {
 	}
 }
 
+// A muted skill has lost the description that makes it fire, so its zero uses
+// prove nothing: it is out of REAP and of the dead weight, and only counted.
+func TestBuildSetsMutedSkillsApart(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 60
+	items := []scan.Item{
+		{Category: scan.CatSkill, Name: "muted", Source: "personal", DescChars: 370, Removable: true},
+		{Category: scan.CatSkill, Name: "cold", Source: "personal", DescChars: 370, Removable: true},
+	}
+	r := Build(items, st, nil, Opts{
+		MinSessions: 10,
+		Cutoff:      time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC),
+		Muted:       map[string]bool{"muted": true, "pruned-long-ago": true},
+	})
+
+	byName := map[string]Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+	if m := byName["muted"]; m.Verdict == VerdictReap || m.Reason != ReasonMuted {
+		t.Errorf("muted = %s(%s)", m.Verdict, m.Reason)
+	}
+	if r.DeadCount != 1 || r.DeadTokensPerSession != byName["cold"].Tokens {
+		t.Errorf("dead = %d items, %d tok; want only cold", r.DeadCount, r.DeadTokensPerSession)
+	}
+	if r.MutedCount != 1 {
+		t.Errorf("MutedCount = %d, want 1: a muted name no longer installed is not counted", r.MutedCount)
+	}
+	h := NewHeadline(r)
+	if h.HeldBack != 0 {
+		t.Errorf("HeldBack = %d: a muted skill is not held back", h.HeldBack)
+	}
+	if got, want := h.MutedLine(), "1 muted · reap unmute to list"; got != want {
+		t.Errorf("MutedLine = %q, want %q", got, want)
+	}
+}
+
 // A heavy skill fired in too few sessions becomes MUTE(heavy-rare); the
 // recoverable tokens are tallied on the report.
 func TestBuildMute(t *testing.T) {
@@ -689,5 +726,23 @@ func TestListedSkillWeightFollowsAMuteMadeSince(t *testing.T) {
 	r := Build(items, st, nil, Opts{MinSessions: 10, Cutoff: time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)})
 	if got, want := r.Rows[0].Tokens, cost.TokensFor("", 10); got != want {
 		t.Errorf("Tokens = %d, want the muted file's %d", got, want)
+	}
+}
+
+// The opening figure says how much of it reap prune can actually take, because
+// most of the weight is usually inside plugins it cannot touch.
+func TestHeadlineSplitsWhatPruneCanRemove(t *testing.T) {
+	r := &Report{Rows: []Row{
+		{Item: scan.Item{Removable: true}, Verdict: VerdictReap, Tokens: 1470},
+		{Item: scan.Item{Removable: false}, Verdict: VerdictReap, Tokens: 7160},
+		{Item: scan.Item{Removable: true}, Verdict: VerdictKeep, Tokens: 999},
+	}}
+	if got, want := NewHeadline(r).Split(), "~1,470 removable with reap prune, ~7,160 inside plugins"; got != want {
+		t.Errorf("Split() = %q, want %q", got, want)
+	}
+	// With nothing out of reach the total already says it.
+	r = &Report{Rows: []Row{{Item: scan.Item{Removable: true}, Verdict: VerdictReap, Tokens: 10}}}
+	if got := NewHeadline(r).Split(); got != "" {
+		t.Errorf("Split() = %q, want empty", got)
 	}
 }

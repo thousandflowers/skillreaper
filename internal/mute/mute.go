@@ -303,10 +303,46 @@ func restoreWithin(claudeDir string, e Entry) error {
 	if err != nil {
 		return err
 	}
-	if err := atomicfile.Write(path, b, info.Mode().Perm()); err != nil {
+	current, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	restored, err := withDescription(current, b, backup)
+	if err != nil {
+		return err
+	}
+	if err := atomicfile.Write(path, restored, info.Mode().Perm()); err != nil {
 		return err
 	}
 	return os.Remove(backup)
+}
+
+// withDescription returns what the skill's file should hold after an unmute. A
+// file untouched since the mute gets its backup back. An edited one keeps the
+// edits and gets the description back, unless it has written a new one. A file
+// with no header to hold it is refused, naming the backup, which stays.
+func withDescription(current, backup []byte, backupPath string) ([]byte, error) {
+	stripped, removed, _ := splitDescription(backup)
+	if bytes.Equal(current, stripped) {
+		return backup, nil
+	}
+	if _, _, has := splitDescription(current); has {
+		return current, nil
+	}
+	lines := bytes.SplitAfter(current, []byte("\n"))
+	if len(lines) == 0 || string(bytes.TrimSpace(lines[0])) != "---" {
+		return nil, fmt.Errorf("the file has changed and has no header to put the description in; it is saved in %s", backupPath)
+	}
+	for i := 1; i < len(lines); i++ {
+		if string(bytes.TrimSpace(lines[i])) == "---" {
+			var out bytes.Buffer
+			out.Write(bytes.Join(lines[:i], nil))
+			out.Write(removed)
+			out.Write(bytes.Join(lines[i:], nil))
+			return out.Bytes(), nil
+		}
+	}
+	return nil, fmt.Errorf("the file has changed and its header does not close; the description is saved in %s", backupPath)
 }
 
 func resolveBackupExisting(claudeDir, target string) (string, error) {
@@ -323,13 +359,20 @@ func resolveBackupExisting(claudeDir, target string) (string, error) {
 // untouched. The second result is false when there was no frontmatter
 // description to strip.
 func stripDescription(b []byte) ([]byte, bool) {
+	out, _, found := splitDescription(b)
+	return out, found
+}
+
+// splitDescription returns the file without its description, and the lines that
+// held it.
+func splitDescription(b []byte) (rest, removed []byte, found bool) {
 	sc := bufio.NewScanner(bytes.NewReader(b))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	var out bytes.Buffer
 	first := true
 	inHeader := false
-	found := false
+	var taken bytes.Buffer
 	dropping := false // dropping continuation lines of a removed description
 	keyIndent := 0
 	for sc.Scan() {
@@ -350,6 +393,8 @@ func stripDescription(b []byte) ([]byte, bool) {
 				// indented deeper than the key (blank lines belong to it too).
 				// A line at the key's indent or shallower ends the value.
 				if trimmed == "" || indentOf(line) > keyIndent {
+					taken.WriteString(line)
+					taken.WriteByte('\n')
 					continue
 				}
 				dropping = false
@@ -364,13 +409,15 @@ func stripDescription(b []byte) ([]byte, bool) {
 				found = true
 				keyIndent = indentOf(line)
 				dropping = true // also drop any continuation lines that follow
+				taken.WriteString(line)
+				taken.WriteByte('\n')
 				continue
 			}
 		}
 		out.WriteString(line)
 		out.WriteByte('\n')
 	}
-	return out.Bytes(), found
+	return out.Bytes(), taken.Bytes(), found
 }
 
 // indentOf returns the number of leading whitespace characters in line.

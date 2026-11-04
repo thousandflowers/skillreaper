@@ -77,12 +77,12 @@ Usage:
   reap apm [flags]          emit a proposed APM apm.yml from per-repo firing
   reap manifest <name>      emit a release manifest for one skill
   reap why <name>           explain in detail why an item got its verdict
-  reap prune [flags]        quarantine unused items (reversible)
+  reap prune [<name>]       quarantine one item, or every REAP item (reversible)
   reap keep <name>          mark item as keep (never prune)
   reap keep --list          show all kept items
   reap keep --remove <name>  remove item from keep list
   reap mute [<name>]        strip skill/agent descriptions (reversible)
-  reap unmute <name>|--all  restore a muted skill's description
+  reap unmute [<name>|--all]  list muted skills, or restore a description
   reap restore [<id>|--all]  list pruned items, or undo a prune
   reap share [flags]        print a ready-to-share message about your savings
   reap snapshot             save this run's --json payload for later comparison
@@ -251,9 +251,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "unmute":
 		return cmdUnmute(opts, rest, stdout, stderr)
 	case "prune":
-		return cmdPrune(opts, stdin, stdout, stderr)
+		return cmdPrune(opts, rest, stdin, stdout, stderr)
 	case "restore":
-		return cmdRestore(opts, rest, stdout, stderr)
+		return cmdRestore(opts, rest, stdin, stdout, stderr)
 	case "install-hook":
 		return cmdInstallHook(opts, stdout, stderr)
 	case "uninstall-hook":
@@ -696,7 +696,22 @@ func gather(opts options) (*report.Report, error) {
 		ClaudeMDLines: claudeMD,
 		MuteThreshold: opts.muteThreshold,
 		MuteMinTokens: opts.muteMinTokens,
+		Muted:         mutedSet(opts.claudeDir),
 	}), nil
+}
+
+// mutedSet names what is muted. Unreadable state sets nothing apart: the skills
+// are then judged like any other, and reap unmute reports the error.
+func mutedSet(claudeDir string) map[string]bool {
+	names, err := mute.List(claudeDir)
+	if err != nil {
+		return nil
+	}
+	set := make(map[string]bool, len(names))
+	for _, n := range names {
+		set[n] = true
+	}
+	return set
 }
 
 // mergeStats combines two usage stats into dst.
@@ -963,7 +978,11 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
+func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) > 1 || len(args) == 1 && opts.source != "" {
+		fmt.Fprintln(stderr, "usage: reap prune [<name>] or reap prune --source <source>")
+		return 2
+	}
 	if !requireClaudeDir(opts, stderr) {
 		return 1
 	}
@@ -976,8 +995,17 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 	var candidates []report.Row
 	var skipped int
 	var dead []report.Row
+	named := len(args) == 1
+	if named {
+		row, ok := findItem(r, args[0])
+		if !ok {
+			fmt.Fprintln(stderr, pruneNameMiss(r, args[0]))
+			return 1
+		}
+		candidates = append(candidates, row)
+	}
 	for _, row := range r.Rows {
-		if row.Verdict != report.VerdictReap {
+		if named || row.Verdict != report.VerdictReap {
 			continue
 		}
 		// dead is every unused item, removable or not; candidates is what this
@@ -1031,7 +1059,12 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if !machine {
-		fmt.Fprintf(stdout, "\n🧹  %d items unused · reclaim ~%s tok/session\n\n", len(candidates), report.HumanCount(totalTok))
+		if named {
+			fmt.Fprintf(stdout, "\n🧹  reap says %s (%s) · reclaim ~%s tok/session\n\n",
+				candidates[0].Verdict, candidates[0].Reason, report.HumanNum(totalTok))
+		} else {
+			fmt.Fprintf(stdout, "\n🧹  %d items unused · reclaim ~%s tok/session\n\n", len(candidates), report.HumanCount(totalTok))
+		}
 		// A list of N dead items reads as N decisions. Grouped by where they
 		// came from it usually is not: one plugin tends to account for most of
 		// the weight, so the real choice is between a handful of sources.
@@ -1066,12 +1099,15 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 			return 0
 		}
-		prompt := fmt.Sprintf("\nPrune all %d items? This quarantines them (reversible). [Y/n] ", len(candidates))
+		prompt := fmt.Sprintf("\nPrune all %d items? This quarantines them (reversible). [y/N] ", len(candidates))
+		if named {
+			prompt = fmt.Sprintf("\nPrune %s? This quarantines it (reversible). [y/N] ", candidates[0].Name)
+		}
 		if opts.source != "" {
 			// Naming the source in the prompt matters more than usual: the
 			// number is smaller than the one the report showed, and without
 			// the reason for that a smaller number reads like a miscount.
-			prompt = fmt.Sprintf("\nPrune %d items from %s? This quarantines them (reversible). [Y/n] ",
+			prompt = fmt.Sprintf("\nPrune %d items from %s? This quarantines them (reversible). [y/N] ",
 				len(candidates), opts.source)
 		}
 		if !confirm(stdin, stdout, prompt) {
@@ -1143,7 +1179,11 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "skipped %d item(s) another process had already moved (e.g. %s); a second prune may be running\n",
 			len(alreadyGone), alreadyGone[0])
 	}
-	fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore --all (or a single id)\n")
+	if named && len(done) == 1 {
+		fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore %s\n", done[0].ID)
+	} else {
+		fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore --all (or a single id)\n")
+	}
 	col := colorEnabled(opts, stdout)
 	// len(done), not len(candidates): with already-gone items skipped rather
 	// than aborting the run, the two can differ, and the saving claimed has to
@@ -1152,6 +1192,17 @@ func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
 	tryShowShareHint(opts, stdout, col)
 	tryShowStarCta(opts, stdout, r, col)
 	return 0
+}
+
+// pruneNameMiss says why a name cannot be pruned or muted. An item in the inventory that
+// findItem refused sits inside a plugin, and only Claude Code can disable it.
+func pruneNameMiss(r *report.Report, name string) string {
+	for _, row := range r.Rows {
+		if row.Name == name || strings.HasSuffix(row.Name, ":"+name) {
+			return fmt.Sprintf("error: %s is inside a plugin and can only be disabled via /plugin in Claude Code", row.Name)
+		}
+	}
+	return fmt.Sprintf("error: no skill or agent found: %s", name)
 }
 
 // writePruneJSON emits the prune plan, or its result when --yes carried it out,
@@ -1203,11 +1254,27 @@ func writePruneJSON(w, stderr io.Writer, candidates []report.Row, totalTok, skip
 	return 0
 }
 
-func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
+func cmdRestore(opts options, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if !requireClaudeDir(opts, stderr) {
 		return 1
 	}
-	if opts.all {
+	if opts.all || len(args) == 0 {
+		count, err := showPruned(opts.claudeDir, stdout)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		if count == 0 {
+			return 0
+		}
+		if !opts.all {
+			fmt.Fprintln(stdout, "\nreap restore <id> brings one back, reap restore --all brings back all of them.")
+			return 0
+		}
+		if !opts.yes && !confirm(stdin, stdout, fmt.Sprintf("\nRestore all %d items? [y/N] ", count)) {
+			fmt.Fprintln(stdout, "aborted")
+			return 0
+		}
 		n, err := prune.RestoreAll(opts.claudeDir)
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
@@ -1215,9 +1282,6 @@ func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "restored %d items\n", n)
 		return 0
-	}
-	if len(args) == 0 {
-		return listPruned(opts.claudeDir, stdout, stderr)
 	}
 	if err := prune.Restore(opts.claudeDir, args[0]); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -1227,21 +1291,33 @@ func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// findItem locates a skill or agent row by its exact invocation key, then by
-// the bare suffix of a namespaced key (so "plan" matches "ecc:plan"). Both
-// categories are mutable, so `reap mute <name>` resolves either.
+// findItem locates a removable skill or agent row by its exact invocation key,
+// then by the bare suffix of a namespaced key (so "plan" matches "ecc:plan").
 func findItem(r *report.Report, name string) (report.Row, bool) {
-	mutable := func(row report.Row) bool {
+	return findRow(r, name, func(row report.Row) bool {
 		return row.Removable && (row.Category == scan.CatSkill || row.Category == scan.CatAgent)
-	}
+	})
+}
+
+// findMutable is findItem plus plugin skills. Asked for by name they can be
+// muted: a description is the one thing of a plugin's that reap can take back.
+func findMutable(r *report.Report, name string) (report.Row, bool) {
+	return findRow(r, name, func(row report.Row) bool {
+		return row.Category == scan.CatSkill && strings.HasPrefix(row.Source, "plugin:") ||
+			row.Removable && row.Category == scan.CatAgent ||
+			row.Removable && row.Category == scan.CatSkill
+	})
+}
+
+func findRow(r *report.Report, name string, eligible func(report.Row) bool) (report.Row, bool) {
 	for _, row := range r.Rows {
-		if mutable(row) && row.Name == name {
+		if eligible(row) && row.Name == name {
 			return row, true
 		}
 	}
 	matches := make([]report.Row, 0, 2)
 	for _, row := range r.Rows {
-		if !mutable(row) {
+		if !eligible(row) {
 			continue
 		}
 		if i := strings.LastIndexByte(row.Name, ':'); i >= 0 && row.Name[i+1:] == name {
@@ -1254,8 +1330,8 @@ func findItem(r *report.Report, name string) (report.Row, bool) {
 	return report.Row{}, false
 }
 
-// confirm prints prompt to stdout and reads a yes/no answer from stdin. A bare
-// Enter (empty line) counts as yes; anything other than y/yes is a no.
+// confirm prints prompt to stdout and reads a yes/no answer from stdin. Only
+// y/yes is a yes: a bare Enter is a no, since this guards actions on many items.
 func confirm(stdin io.Reader, stdout io.Writer, prompt string) bool {
 	fmt.Fprint(stdout, prompt)
 	sc := bufio.NewScanner(stdin)
@@ -1263,7 +1339,7 @@ func confirm(stdin io.Reader, stdout io.Writer, prompt string) bool {
 		return false
 	}
 	line := strings.ToLower(strings.TrimSpace(sc.Text()))
-	return line == "" || line == "y" || line == "yes"
+	return line == "y" || line == "yes"
 }
 
 func muteEligible(row report.Row) bool {
@@ -1286,9 +1362,9 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 	// Named single mute: reap mute <name>. Mutes the named skill or agent
 	// regardless of verdict (the user asked for it explicitly).
 	if len(args) > 0 {
-		row, ok := findItem(r, args[0])
+		row, ok := findMutable(r, args[0])
 		if !ok {
-			fmt.Fprintf(stderr, "no skill or agent found: %s\n", args[0])
+			fmt.Fprintln(stderr, pruneNameMiss(r, args[0]))
 			return 1
 		}
 		if err := mute.Mute(opts.claudeDir, row.RootDir, row.Name, row.Path); err != nil {
@@ -1297,6 +1373,9 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		}
 		fmt.Fprintf(stdout, "muted %s — description stripped (~%d tok/session saved)\n", row.Name, row.Tokens)
 		fmt.Fprintf(stdout, "Undo: reap unmute %s\n", row.Name)
+		if !row.Removable {
+			fmt.Fprintln(stdout, "A plugin update can bring the description back.")
+		}
 		col := colorEnabled(opts, stdout)
 		report.RenderValueFeedback(stdout, "muted", 1, row.Tokens, r.SessionsPerMonth, opts.price, col)
 		tryShowShareHint(opts, stdout, col)
@@ -1320,7 +1399,7 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		fmt.Fprintf(stdout, "  %-6s  %-40s  ~%d tok/session\n", row.Category, row.Name, row.Tokens)
 	}
 	if !opts.yes {
-		if !confirm(stdin, stdout, fmt.Sprintf("\nMute all %d items? This strips their descriptions (reversible). [Y/n] ", len(candidates))) {
+		if !confirm(stdin, stdout, fmt.Sprintf("\nMute all %d items? This strips their descriptions (reversible). [y/N] ", len(candidates))) {
 			fmt.Fprintln(stdout, "aborted")
 			return 0
 		}
@@ -1359,14 +1438,23 @@ func cmdUnmute(opts options, args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: reap unmute <name>|--all")
-		return 2
+		return listMuted(opts.claudeDir, stdout, stderr)
 	}
-	if err := mute.Unmute(opts.claudeDir, args[0]); err != nil {
+	names, err := mute.List(opts.claudeDir)
+	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "unmuted %s\n", args[0])
+	name, err := resolveMuted(names, args[0])
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if err := mute.Unmute(opts.claudeDir, name); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "unmuted %s\n", name)
 	return 0
 }
 

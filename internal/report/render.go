@@ -283,6 +283,12 @@ func headlineNotes(r *Report) []string {
 	if v := NewHeadline(r).Verdict(); v != "" {
 		out = append(out, v)
 	}
+	if s := NewHeadline(r).Split(); s != "" {
+		out = append(out, s)
+	}
+	if m := NewHeadline(r).MutedLine(); m != "" {
+		out = append(out, m)
+	}
 	// The figures above are an estimate, per session and per item. This is
 	// neither: it is what the provider billed, and the only place the cache
 	// split can be seen. Resident context is paid once as a cache creation and
@@ -617,6 +623,9 @@ func groupByVerdict(rows []Row) map[string][]Row {
 		m[v] = nil
 	}
 	for _, r := range rows {
+		if r.Reason == ReasonMuted {
+			continue // counted in the headline, listed by reap unmute
+		}
 		m[r.Verdict] = append(m[r.Verdict], r)
 	}
 	return m

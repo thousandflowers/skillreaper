@@ -500,3 +500,26 @@ func TestParseSkillWeight(t *testing.T) {
 		}
 	}
 }
+
+// Only a message the user sent is an invocation. Transcripts also hold the tag
+// as data: a file read back in a tool_result, source written by the assistant,
+// the raw API request log.
+func TestParseCountsCommandNameOnlyInUserMessages(t *testing.T) {
+	dir := t.TempDir()
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		`{"type":"user","timestamp":"2026-06-01T10:00:00Z","message":{"content":"<command-message>typed</command-message>\n<command-name>/typed</command-name>"}}`,
+		`{"type":"user","timestamp":"2026-06-01T10:00:01Z","message":{"content":[{"type":"text","text":"<command-name>/typedblock</command-name>"}]}}`,
+		`{"type":"user","timestamp":"2026-06-01T10:01:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"t","content":"<command-name>/inresult</command-name>"}]}}`,
+		`{"type":"assistant","timestamp":"2026-06-01T10:02:00Z","message":{"content":[{"type":"text","text":"<command-name>/saidbyassistant</command-name>"}]}}`,
+		`{"type":"api-request-blob","timestamp":"2026-06-01T10:03:00Z","message":{"content":[{"type":"text","text":"<command-name>/inblob</command-name>"}]}}`,
+	)
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]int{"typed": 1, "typedblock": 1, "inresult": 0, "saidbyassistant": 0, "inblob": 0} {
+		if got := st.Uses[scan.CatSkill][name]; got != want {
+			t.Errorf("%s uses = %d, want %d", name, got, want)
+		}
+	}
+}

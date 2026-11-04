@@ -587,11 +587,10 @@ func parseFile(path, project string, st *Stats) {
 
 		hasToolUse := e.Type == "assistant" && bytes.Contains(line, []byte(`"tool_use"`))
 		hasToolResult := bytes.Contains(line, []byte(`"tool_result"`))
-		hasCommand := bytes.Contains(line, []byte(`<command-name>`))
 
-		if hasCommand {
-			for _, m := range commandNameRe.FindAllSubmatch(line, -1) {
-				recSkill(string(m[1]), ts)
+		if e.Type == "user" && bytes.Contains(line, []byte(`<command-name>`)) {
+			for _, name := range typedCommands(e.Message.Content) {
+				recSkill(name, ts)
 			}
 		}
 		if !hasToolUse && !hasToolResult {
@@ -632,6 +631,31 @@ func parseFile(path, project string, st *Stats) {
 	for key, n := range skillChars {
 		st.SkillWeight = recordInjected(st.SkillWeight, key, Injected{Chars: n, At: lastTS})
 	}
+}
+
+// typedCommands returns the commands in a user message's own text. The tag also
+// reaches a user entry as data, in a tool_result that read a file holding it.
+func typedCommands(content json.RawMessage) []string {
+	var text string
+	if json.Unmarshal(content, &text) != nil {
+		var blocks []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(content, &blocks) != nil {
+			return nil
+		}
+		for _, b := range blocks {
+			if b.Type == "text" {
+				text += b.Text
+			}
+		}
+	}
+	var names []string
+	for _, m := range commandNameRe.FindAllStringSubmatch(text, -1) {
+		names = append(names, m[1])
+	}
+	return names
 }
 
 // recordSkillListing measures each skill's entry in one injected listing.

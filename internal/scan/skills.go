@@ -23,9 +23,14 @@ func ScanSkills(dir, platformID string) ([]Item, []Warning) {
 	plugins, pw := installedPlugins(dir)
 	warns = append(warns, pw...)
 	for _, p := range plugins {
+		start := len(items)
 		items, warns = appendSkillsFromDir(items, warns,
 			filepath.Join(p.InstallPath, "skills"),
 			p.Name+":", "plugin:"+p.FullName, p.InstalledAt, false, platformID)
+		loaded := hookLoadedSkills(p.InstallPath)
+		for i := start; i < len(items); i++ {
+			items[i].HookLoaded = loaded[strings.TrimPrefix(items[i].Name, p.Name+":")]
+		}
 	}
 	return items, warns
 }

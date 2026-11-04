@@ -170,6 +170,8 @@ func summaryFor(row Row) string {
 		return "manually protected via the keep-list"
 	case ReasonClaudeMDRef:
 		return "referenced in CLAUDE.md — protected from pruning"
+	case ReasonHookLoaded:
+		return "injected every session by its plugin's hook — in use without being invoked"
 	default:
 		return row.Reason
 	}

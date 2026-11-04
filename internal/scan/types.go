@@ -40,6 +40,9 @@ type Item struct {
 	BodyChars   int       // chars loaded on invocation (SKILL.md body)
 	InstalledAt time.Time // zero when unknown
 	Removable   bool      // safe to prune automatically
+	// HookLoaded is set on a plugin skill its SessionStart hook injects: it
+	// works in every session and no transcript records an invocation.
+	HookLoaded bool
 	// ToolSurface is the permission breadth of a skill/agent: the count of
 	// tools it is restricted to via the "allowed-tools" (skill) or "tools"
 	// (agent) frontmatter field. ToolSurfaceAll means no restriction — the

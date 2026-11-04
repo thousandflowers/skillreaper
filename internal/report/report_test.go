@@ -207,6 +207,30 @@ func TestBuildClaudeMDProtection(t *testing.T) {
 	}
 }
 
+// A skill a hook injects every session is in use even with no invocation on
+// record: it is held at KEEP, and says why.
+func TestBuildHookLoadedProtection(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 60
+
+	items := []scan.Item{
+		{Category: scan.CatSkill, Name: "p:always", Source: "plugin:p@m", DescChars: 370, HookLoaded: true},
+		{Category: scan.CatSkill, Name: "p:cold", Source: "plugin:p@m", DescChars: 370},
+	}
+	r := Build(items, st, nil, Opts{MinSessions: 10, Cutoff: time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)})
+
+	byName := map[string]Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+	if v, rsn := byName["p:always"].Verdict, byName["p:always"].Reason; v != VerdictKeep || rsn != ReasonHookLoaded {
+		t.Errorf("p:always = %s(%s), want KEEP(%s)", v, rsn, ReasonHookLoaded)
+	}
+	if v := byName["p:cold"].Verdict; v != VerdictReap {
+		t.Errorf("p:cold = %s, want REAP", v)
+	}
+}
+
 // A heavy skill fired in too few sessions becomes MUTE(heavy-rare); the
 // recoverable tokens are tallied on the report.
 func TestBuildMute(t *testing.T) {

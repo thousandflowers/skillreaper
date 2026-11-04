@@ -201,6 +201,10 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				row.Verdict = VerdictKeep
 				row.Reason = ReasonClaudeMDRef
 			}
+			if it.HookLoaded && (row.Verdict == VerdictReap || row.Verdict == VerdictMute) {
+				row.Verdict = VerdictKeep
+				row.Reason = ReasonHookLoaded
+			}
 			// Absence of evidence is not evidence of absence: an item from a
 			// platform whose transcripts we could not parse (e.g. OpenCode's
 			// SQLite store) has no complete usage signal, so REAP or MUTE would

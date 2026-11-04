@@ -1733,3 +1733,50 @@ func TestRetentionWarningIgnoresOtherPlatforms(t *testing.T) {
 		t.Fatal("warned on a 5-day Claude Code corpus")
 	}
 }
+
+// Bare restore answers "what would I be restoring": every item still in
+// quarantine, newest first, with the id restore takes. It restores nothing.
+func TestRestoreWithNoArgsListsWhatIsPruned(t *testing.T) {
+	claudeDir := t.TempDir()
+	reaped := filepath.Join(claudeDir, "reaped")
+	if err := os.MkdirAll(reaped, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"version":1,"entries":[
+	 {"id":"001","category":"skill","name":"old-skill","from":"` + claudeDir + `/skills/old-skill","to":"` + reaped + `/skill/old-skill","timestamp":"2026-10-01T09:30:00Z"},
+	 {"id":"002","category":"skill","name":"back-again","from":"` + claudeDir + `/skills/back-again","to":"` + reaped + `/skill/back-again","timestamp":"2026-10-02T09:30:00Z","restored":true},
+	 {"id":"003","category":"mcp","name":"new-server","configPath":"` + claudeDir + `/.claude.json","payload":{},"timestamp":"2026-11-03T18:05:00Z"}
+	]}`
+	if err := os.WriteFile(filepath.Join(reaped, "manifest.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"restore", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut)
+
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	got := out.String()
+	for _, want := range []string{"001", "old-skill", "2026-10-01", "003", "new-server", "2026-11-03", "reap restore <id>"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "back-again") {
+		t.Errorf("an item already restored must not be listed:\n%s", got)
+	}
+	if strings.Index(got, "new-server") > strings.Index(got, "old-skill") {
+		t.Errorf("newest must come first:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(reaped, "manifest.json")); err != nil {
+		t.Error(err)
+	}
+	var again bytes.Buffer
+	if code := run([]string{"restore", "--claude-dir", t.TempDir()}, strings.NewReader(""), &again, &errOut); code != 0 {
+		t.Fatalf("empty exit = %d", code)
+	}
+	if !strings.Contains(again.String(), "Nothing to restore") {
+		t.Errorf("empty quarantine output: %s", again.String())
+	}
+}

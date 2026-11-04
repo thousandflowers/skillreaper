@@ -83,7 +83,7 @@ Usage:
   reap keep --remove <name>  remove item from keep list
   reap mute [<name>]        strip skill/agent descriptions (reversible)
   reap unmute <name>|--all  restore a muted skill's description
-  reap restore <id>|--all   undo prune actions
+  reap restore [<id>|--all]  list pruned items, or undo a prune
   reap share [flags]        print a ready-to-share message about your savings
   reap snapshot             save this run's --json payload for later comparison
   reap diff [<a> [<b>]]     compare two snapshots (default: newest vs previous)
@@ -1217,8 +1217,7 @@ func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: reap restore <id>|--all")
-		return 2
+		return listPruned(opts.claudeDir, stdout, stderr)
 	}
 	if err := prune.Restore(opts.claudeDir, args[0]); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)

@@ -324,6 +324,8 @@ reap mute <name>              # strip description, keep skill available
 reap unmute <name>            # restore description from backup
 reap unmute --all             # restore all muted skills
 reap keep <name>              # protect an item from pruning
+reap restore                  # list what is pruned, with ids
+reap restore <id>             # undo one prune
 reap restore --all            # undo every prune
 reap why <name>               # explain in detail why an item got its verdict
 reap by-project               # skills bucketed by the project that fired them

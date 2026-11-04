@@ -688,6 +688,11 @@ Tracked as issues, grouped by the problem they solve.
   corpus ([#53](https://github.com/thousandflowers/skillreaper/issues/53));
   measuring wrong-tool picks
   ([#55](https://github.com/thousandflowers/skillreaper/issues/55)).
+- **Act on more than one stack shape** - group skills by domain and language,
+  then act on a group
+  ([#101](https://github.com/thousandflowers/skillreaper/issues/101)); move a
+  skill between user and workspace scope
+  ([#102](https://github.com/thousandflowers/skillreaper/issues/102)).
 - **Teams** - shared policy with verdicts that stay on each machine
   ([#89](https://github.com/thousandflowers/skillreaper/issues/89)), and a
   hosted view of them

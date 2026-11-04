@@ -671,7 +671,7 @@ func gather(opts options) (*report.Report, error) {
 
 	keepSet, _ := override.KeepSet(opts.claudeDir)
 	home, _ := os.UserHomeDir()
-	claudeMD := scan.LoadClaudeMD(cwd, home)
+	claudeMD := scan.LoadClaudeMD(cwd, home, opts.claudeDir)
 
 	return report.Build(items, st, warns, report.Opts{
 		// The durable record, consulted so an item that fired before the
@@ -1563,7 +1563,7 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 	}
 	cwd, _ := os.Getwd()
 	home, _ := os.UserHomeDir()
-	claudeMD := scan.ClaudeMDReferences(scan.LoadClaudeMD(cwd, home), row.Name)
+	claudeMD := scan.ClaudeMDReferences(scan.LoadClaudeMD(cwd, home, opts.claudeDir), row.Name)
 
 	e := report.BuildExplanation(row, r.Sessions, report.ExplainInput{
 		MinSessions:   opts.minSessions,

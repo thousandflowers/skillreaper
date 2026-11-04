@@ -9,7 +9,7 @@
 
   [1mutilization 1%[0m  7/378 items fired · ~278/22998 tok touched (30d)
 
-  [36m── SKILLS · description injected every session ───────────────────────────────────────────────────[0m
+  [36m── SKILLS · listed every session: name, and description while it fits ────────────────────────────[0m
 
     [1mx  REAP · unused          292 items · ~21,415 tok/session[0m
 [2m       NAME               TOK  SRC  PERM  USES   LAST[0m
@@ -33,7 +33,7 @@
     =  audit-catalog     42  own   all    11    3d
     =  audit-backlog     40  own   all    17    2d
 
-  [36m── MCP SERVERS · tool schemas injected; weight unknown without running them ──────────────────────[0m
+  [36m── MCP SERVERS · tool names + instructions injected; ? = never loaded ────────────────────────────[0m
 
     [1mx  REAP · unused          11 items[0m
 [2m       NAME       TOK  SRC  USES   LAST[0m

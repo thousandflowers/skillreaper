@@ -10,7 +10,7 @@
 
   utilization 1%  7/378 items fired · ~278/22998 tok touched (30d)
 
-  ── SKILLS · description injected every session ───────────────────────────────
+  ── SKILLS · listed every session: name, and description while it fits ────────
 
     x  REAP · unused          292 items · ~21,415 tok/session
        NAME               TOK  SRC  PERM  USES   LAST
@@ -34,7 +34,7 @@
     =  audit-catalog     42  own   all    11    3d
     =  audit-backlog     40  own   all    17    2d
 
-  ── MCP SERVERS · tool schemas injected; weight unknown without running them ──
+  ── MCP SERVERS · tool names + instructions injected; ? = never loaded ────────
 
     x  REAP · unused          11 items
        NAME       TOK  SRC  USES   LAST

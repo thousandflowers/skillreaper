@@ -49,7 +49,9 @@ type Opts struct {
 // Row is one inventory item with its evidence and verdict.
 type Row struct {
 	scan.Item
-	Uses     int
+	Uses int
+	// Requests is how often the user asked for it by name in a message.
+	Requests int
 	LastUsed time.Time
 	Verdict  string
 	Reason   string // why this verdict was assigned
@@ -201,6 +203,13 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				row.Verdict = VerdictKeep
 				row.Reason = ReasonClaudeMDRef
 			}
+			if it.Category == scan.CatSkill {
+				row.Requests = lookupRequests(st, it)
+			}
+			if row.Requests > 0 && row.Verdict == VerdictReap && row.Reason == ReasonUnused {
+				row.Verdict = VerdictKeep
+				row.Reason = ReasonRequested
+			}
 			if it.HookLoaded && (row.Verdict == VerdictReap || row.Verdict == VerdictMute) {
 				row.Verdict = VerdictKeep
 				row.Reason = ReasonHookLoaded
@@ -260,6 +269,16 @@ func lookupUses(st *usage.Stats, it scan.Item) (int, time.Time) {
 		}
 	}
 	return uses, last
+}
+
+// lookupRequests counts requests under the skill's full name and its bare suffix.
+func lookupRequests(st *usage.Stats, it scan.Item) int {
+	name := strings.ToLower(it.Name)
+	n := st.Requests[name]
+	if _, bare, ok := strings.Cut(name, ":"); ok {
+		n += st.Requests[bare]
+	}
+	return n
 }
 
 // lookupMCPWeight is the server's latest injected weight in chars, under its

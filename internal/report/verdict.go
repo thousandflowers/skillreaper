@@ -38,6 +38,9 @@ const (
 	// ReasonClaudeMDRef holds an item at KEEP because its name is referenced
 	// in a CLAUDE.md file, so the user clearly relies on it.
 	ReasonClaudeMDRef = "claude-md-ref"
+	// ReasonRequested holds a skill at KEEP because the user asked for it by name
+	// and it never started: a wish with no invocation on record.
+	ReasonRequested = "requested"
 	// ReasonHookLoaded holds a skill at KEEP because its plugin's SessionStart
 	// hook injects it: it is in use with no invocation on record.
 	ReasonHookLoaded = "hook-loaded"

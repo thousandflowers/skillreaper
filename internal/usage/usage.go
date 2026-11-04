@@ -29,8 +29,21 @@ const maxLineBytes = 10 * 1024 * 1024
 
 var commandNameRe = regexp.MustCompile(`<command-name>/?([^<\s]+)</command-name>`)
 
+var (
+	// quotedRe matches a tagged block or a code fence.
+	quotedRe = regexp.MustCompile("(?s)<[a-z][\\w-]*\\b[^>]*>.*?</[a-z][\\w-]*>|```.*?```")
+	// afterVerbRe matches "usa graphify", "run the skill x", "use `/x`".
+	afterVerbRe = regexp.MustCompile("(?i)(?:^|[^\\pL\\pN:_-])(?:usa|lancia|avvia|use|run|skill)\\s+(?:(?:la|il|lo|the|a)\\s+)?(?:skill\\s+)?[`*/]*([\\pL\\pN_:-]+)")
+	// beforeSkillRe matches "the graphify skill".
+	beforeSkillRe = regexp.MustCompile("(?i)([\\pL\\pN_:-]+)[`*]*\\s+skill\\b")
+)
+
 // Stats aggregates invocation counts per category and invocation key.
 type Stats struct {
+	// Requests counts how often the user asked for a skill in words, by the
+	// lowercased name they wrote. Apart from Uses: nothing started. It holds
+	// every word that followed a verb; only names that match an item are read.
+	Requests     map[string]int
 	Sessions     int
 	FilesScanned int
 	// MalformedLines is the total across every failure kind below, kept as a
@@ -177,6 +190,7 @@ func NewStats(windowDays int) *Stats {
 		LastAttempt: map[scan.Category]map[string]time.Time{
 			scan.CatSkill: {}, scan.CatAgent: {}, scan.CatMCP: {},
 		},
+		Requests:      map[string]int{},
 		SkillProjects: map[string]map[string]int{},
 		MCPPayload:    map[string]PayloadStat{},
 		MCPWeight:     map[string]Injected{},
@@ -235,7 +249,11 @@ func (s *Stats) recordError(cat scan.Category, key string, ts time.Time) {
 type entry struct {
 	Type      string `json:"type"`
 	Timestamp string `json:"timestamp"`
-	Message   struct {
+	// IsMeta marks text the harness added, IsSidechain a subagent's transcript,
+	// where the "user" is Claude writing a prompt.
+	IsMeta      bool `json:"isMeta"`
+	IsSidechain bool `json:"isSidechain"`
+	Message     struct {
 		Content json.RawMessage `json:"content"`
 		Usage   *usageBlock     `json:"usage"`
 	} `json:"message"`
@@ -457,6 +475,9 @@ func MergeInto(dst, src *Stats) {
 			}
 		}
 	}
+	for name, n := range src.Requests {
+		dst.Requests[name] += n
+	}
 	for key, projects := range src.SkillProjects {
 		if dst.SkillProjects[key] == nil {
 			dst.SkillProjects[key] = map[string]int{}
@@ -588,9 +609,15 @@ func parseFile(path, project string, st *Stats) {
 		hasToolUse := e.Type == "assistant" && bytes.Contains(line, []byte(`"tool_use"`))
 		hasToolResult := bytes.Contains(line, []byte(`"tool_result"`))
 
-		if e.Type == "user" && bytes.Contains(line, []byte(`<command-name>`)) {
-			for _, name := range typedCommands(e.Message.Content) {
-				recSkill(name, ts)
+		if e.Type == "user" {
+			text := userText(e.Message.Content)
+			for _, m := range commandNameRe.FindAllStringSubmatch(text, -1) {
+				recSkill(m[1], ts)
+			}
+			if !e.IsMeta && !e.IsSidechain {
+				for _, name := range requestedNames(text) {
+					st.Requests[name]++
+				}
 			}
 		}
 		if !hasToolUse && !hasToolResult {
@@ -633,27 +660,43 @@ func parseFile(path, project string, st *Stats) {
 	}
 }
 
-// typedCommands returns the commands in a user message's own text. The tag also
-// reaches a user entry as data, in a tool_result that read a file holding it.
-func typedCommands(content json.RawMessage) []string {
+// userText returns a user message's own text. The tags that mark a command also
+// reach a user entry as data, in a tool_result that read a file holding them.
+func userText(content json.RawMessage) string {
 	var text string
-	if json.Unmarshal(content, &text) != nil {
-		var blocks []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		}
-		if json.Unmarshal(content, &blocks) != nil {
-			return nil
-		}
-		for _, b := range blocks {
-			if b.Type == "text" {
-				text += b.Text
-			}
+	if json.Unmarshal(content, &text) == nil {
+		return text
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(content, &blocks) != nil {
+		return ""
+	}
+	for _, b := range blocks {
+		if b.Type == "text" {
+			text += b.Text
 		}
 	}
+	return text
+}
+
+// requestedNames returns the names asked for in a message, once each: the word
+// after a verb of starting or the word "skill", or the word before "skill".
+// Tagged blocks and code fences are text the user quoted, not what they asked.
+func requestedNames(text string) []string {
+	text = quotedRe.ReplaceAllString(text, " ")
+	seen := map[string]bool{}
 	var names []string
-	for _, m := range commandNameRe.FindAllStringSubmatch(text, -1) {
-		names = append(names, m[1])
+	for _, re := range []*regexp.Regexp{afterVerbRe, beforeSkillRe} {
+		for _, m := range re.FindAllStringSubmatch(text, -1) {
+			name := strings.ToLower(strings.TrimRight(m[1], ":-"))
+			if name != "" && !seen[name] {
+				seen[name] = true
+				names = append(names, name)
+			}
+		}
 	}
 	return names
 }

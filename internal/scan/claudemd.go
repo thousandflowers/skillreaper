@@ -12,9 +12,7 @@ import (
 // maxImportDepth is how many @imports Claude Code follows from a memory file.
 const maxImportDepth = 5
 
-// importRe finds an @path in a memory file: at the start of a line or after a
-// space, so an email address or a scoped package is not taken for one unless it
-// looks like a path to a file that exists, which readCapped settles.
+// importRe finds an @path in a memory file; one that is no file reads as nothing.
 var importRe = regexp.MustCompile(`(?:^|\s)@([~\w./-]+)`)
 
 // claudeMDPaths lists the memory files a session reads: the user's, then those
@@ -40,9 +38,13 @@ func claudeMDPaths(cwd, home, claudeDir string) []string {
 	return paths
 }
 
-// markdownUnder lists the .md files in a rules folder, however deep. A missing
-// folder lists nothing.
+// markdownUnder lists the .md files in a rules folder, however deep, which may
+// itself be a link. A missing folder lists nothing.
 func markdownUnder(root string) []string {
+	// WalkDir does not follow a link at its root.
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
 	var paths []string
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && filepath.Ext(p) == ".md" {
@@ -78,7 +80,6 @@ func readMemoryFile(path, home string, seen map[string]bool, depth int) []string
 		return nil
 	}
 	var lines []string
-	var imports []string
 	sc := bufio.NewScanner(bytes.NewReader(b))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
@@ -88,11 +89,8 @@ func readMemoryFile(path, home string, seen map[string]bool, depth int) []string
 		}
 		lines = append(lines, line)
 		for _, m := range importRe.FindAllStringSubmatch(line, -1) {
-			imports = append(imports, resolveImport(m[1], filepath.Dir(path), home))
+			lines = append(lines, readMemoryFile(resolveImport(m[1], filepath.Dir(path), home), home, seen, depth+1)...)
 		}
-	}
-	for _, p := range imports {
-		lines = append(lines, readMemoryFile(p, home, seen, depth+1)...)
 	}
 	return lines
 }
@@ -127,17 +125,15 @@ func endsWord(line string, j int) bool {
 }
 
 // markedAsSkill reports whether the word at line[i:j] is written as a skill: in
-// backticks or bold, as a /command, or followed by the word "skill".
+// backticks or bold, as a /command, or next to the word "skill" on either side:
+// English puts it after the name, Italian before.
 func markedAsSkill(line string, i, j int) bool {
 	before, after := line[:i], line[j:]
-	switch {
-	case strings.HasSuffix(before, "`") && strings.HasPrefix(after, "`"),
-		strings.HasSuffix(before, "**") && strings.HasPrefix(after, "**"),
-		strings.HasSuffix(before, "/"),
-		strings.HasPrefix(after, " skill"):
-		return true
-	}
-	return false
+	return strings.HasSuffix(before, "`") && strings.HasPrefix(after, "`") ||
+		strings.HasSuffix(before, "**") && strings.HasPrefix(after, "**") ||
+		strings.HasSuffix(before, "/") ||
+		strings.HasPrefix(after, " skill") ||
+		strings.HasSuffix(strings.ToLower(before), "skill ")
 }
 
 // ClaudeMDReferences reports whether a skill is named in any of the given lines.

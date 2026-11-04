@@ -231,6 +231,37 @@ func TestBuildHookLoadedProtection(t *testing.T) {
 	}
 }
 
+// A skill asked for by name and never started stays, and its uses stay at zero:
+// the request is reported apart. Any spelling of its name counts.
+func TestBuildRequestedProtection(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 60
+	st.Requests["wanted"] = 2
+	st.Requests["bare"] = 1
+
+	items := []scan.Item{
+		{Category: scan.CatSkill, Name: "wanted", Source: "personal", DescChars: 370, Removable: true},
+		{Category: scan.CatSkill, Name: "p:bare", Source: "plugin:p@m", DescChars: 370},
+		{Category: scan.CatSkill, Name: "cold", Source: "personal", DescChars: 370, Removable: true},
+	}
+	r := Build(items, st, nil, Opts{MinSessions: 10, Cutoff: time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)})
+
+	byName := map[string]Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+	w := byName["wanted"]
+	if w.Verdict != VerdictKeep || w.Reason != ReasonRequested || w.Requests != 2 || w.Uses != 0 {
+		t.Errorf("wanted = %s(%s) requests=%d uses=%d", w.Verdict, w.Reason, w.Requests, w.Uses)
+	}
+	if b := byName["p:bare"]; b.Reason != ReasonRequested {
+		t.Errorf("p:bare = %s(%s)", b.Verdict, b.Reason)
+	}
+	if v := byName["cold"].Verdict; v != VerdictReap {
+		t.Errorf("cold = %s, want REAP", v)
+	}
+}
+
 // A heavy skill fired in too few sessions becomes MUTE(heavy-rare); the
 // recoverable tokens are tallied on the report.
 func TestBuildMute(t *testing.T) {

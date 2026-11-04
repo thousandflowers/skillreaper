@@ -59,6 +59,8 @@ func TestClaudeMDReferencesBareSuffixNeedsAMarker(t *testing.T) {
 		{"run /review before merging", true},
 		{"- **review** after each change", true},
 		{"use the review skill", true},
+		{"usa la skill review prima di finire", true},
+		{"Skill review, sempre", true},
 		{"every change gets a review before merge", false},
 		{"see code-review for details", false},
 	}
@@ -101,5 +103,21 @@ func TestLoadClaudeMDReadsWhatEverySessionLoads(t *testing.T) {
 	}
 	if ClaudeMDReferences(lines, "txtskill") {
 		t.Error("a rules file that is not markdown must not count")
+	}
+}
+
+// A rules folder kept elsewhere and linked in is still the user's rules.
+func TestLoadClaudeMDFollowsALinkedRulesFolder(t *testing.T) {
+	root := t.TempDir()
+	claudeDir := filepath.Join(root, "claude")
+	writeAll(t, root, map[string]string{"dotfiles/rules/a/r.md": "use linkedskill\n"})
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "dotfiles", "rules"), filepath.Join(claudeDir, "rules")); err != nil {
+		t.Fatal(err)
+	}
+	if !ClaudeMDReferences(LoadClaudeMD("", "", claudeDir), "linkedskill") {
+		t.Error("a skill named in a linked rules folder must count")
 	}
 }

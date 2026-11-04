@@ -523,3 +523,48 @@ func TestParseCountsCommandNameOnlyInUserMessages(t *testing.T) {
 		}
 	}
 }
+
+// A skill asked for in words is recorded apart from its uses. Only what the user
+// wrote counts: a subagent's prompt, pasted text and tool output do not.
+func TestParseRecordsRequestsByName(t *testing.T) {
+	dir := t.TempDir()
+	line := func(extra, content string) string {
+		b, err := json.Marshal(content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return `{"type":"user","timestamp":"2026-06-01T10:00:00Z",` + extra + `"message":{"content":` + string(b) + `}}`
+	}
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		line("", "usa graphify su questa cartella"),
+		line("", "lancia la skill Ponytail, grazie"),
+		line("", "please use `ecc:plan` here"),
+		line("", "the deploy skill is what I want"),
+		line("", "usa graphify e poi basta"),
+		line("", "graphify ha un bug nel parser"),
+		line("", "because reviewer is slow"),
+		line(`"isSidechain":true,`, "use subagentonly now"),
+		line(`"isMeta":true,`, "use metaonly now"),
+		line("", "guarda <pasted_content id=\"1\">use pastedonly now</pasted_content>"),
+		line("", "guarda\n```\nuse fencedonly now\n```"),
+		`{"type":"user","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"t","content":"use resultonly now"}]}}`,
+	)
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{"graphify": 2, "ponytail": 1, "ecc:plan": 1, "deploy": 1}
+	for name, n := range want {
+		if got := st.Requests[name]; got != n {
+			t.Errorf("%s requests = %d, want %d", name, got, n)
+		}
+	}
+	for _, name := range []string{"reviewer", "subagentonly", "metaonly", "pastedonly", "fencedonly", "resultonly"} {
+		if got := st.Requests[name]; got != 0 {
+			t.Errorf("%s requests = %d, want 0", name, got)
+		}
+	}
+	if got := st.Uses[scan.CatSkill]["graphify"]; got != 0 {
+		t.Errorf("a request must not count as a use, got %d", got)
+	}
+}

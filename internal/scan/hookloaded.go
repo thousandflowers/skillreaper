@@ -19,8 +19,8 @@ var pluginRootPathRe = regexp.MustCompile(`\$\{?(?:CLAUDE_)?PLUGIN_ROOT\}?/([^"'
 //
 // ponytail: reads the folders holding the hook scripts rather than following
 // what they run, because the path often sits in a sibling they import. A script
-// there that names a SKILL.md for another purpose over-protects; that errs
-// towards KEEP, and the skill can still be pruned or muted by name.
+// there that names a SKILL.md for another purpose over-protects, which errs
+// towards KEEP.
 func hookLoadedSkills(installPath string) map[string]bool {
 	commands := sessionStartCommands(installPath)
 	if len(commands) == 0 {

@@ -6,6 +6,13 @@ on:
   pull_request:
 
 jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reinvest tests
+        working-directory: experiments/reinvest
+        run: python3 -m unittest test_reinvest
   test:
     env:
       COVERAGE_THRESHOLD: "70"
@@ -24,6 +31,9 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -race ./... -coverprofile=coverage.out
+      - name: Test east of UTC
+        if: runner.os != 'Windows'
+        run: TZ=Asia/Tokyo go test ./cmd/... ./internal/report/...
       - name: Coverage
         run: |
           go tool cover -func=coverage.out | tee coverage.txt

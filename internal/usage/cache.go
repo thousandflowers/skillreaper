@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/thousandflowers/skillreaper/internal/clock"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ import (
 // cacheFormat is bumped whenever the serialised shape of Stats changes.
 // A mismatch is a miss, never a partial read: an old cache decoded into a new
 // struct would silently drop whatever field was added.
-const cacheFormat = 2
+const cacheFormat = 8
 
 // Fingerprint identifies a corpus and the window applied to it, cheaply enough
 // to be worth checking before parsing.
@@ -37,30 +38,34 @@ func Fingerprint(dirs []string, windowDays int) string {
 	}
 	var ents []ent
 	for _, dir := range dirs {
-		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() || !strings.HasSuffix(path, ".jsonl") {
+		for _, root := range transcriptRoots(dir) {
+			err := filepath.WalkDir(root.dir, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.IsDir() || !strings.HasSuffix(path, ".jsonl") {
+					return nil
+				}
+				info, ierr := d.Info()
+				if ierr != nil {
+					return ierr
+				}
+				ents = append(ents, ent{path, info.Size(), info.ModTime().UnixNano()})
 				return nil
+			})
+			if err != nil {
+				// A tree that cannot be walked completely must not produce a
+				// fingerprint: caching a partial corpus under a name that looks
+				// complete is worse than never caching at all.
+				return ""
 			}
-			info, ierr := d.Info()
-			if ierr != nil {
-				return ierr
-			}
-			ents = append(ents, ent{path, info.Size(), info.ModTime().UnixNano()})
-			return nil
-		})
-		if err != nil {
-			// A tree that cannot be walked completely must not produce a
-			// fingerprint: caching a partial corpus under a name that looks
-			// complete is worse than never caching at all.
-			return ""
 		}
 	}
 	sort.Slice(ents, func(i, j int) bool { return ents[i].path < ents[j].path })
 	h := sha256.New()
-	fmt.Fprintf(h, "v%d;days=%d;", cacheFormat, windowDays)
+	// The day is in it because the window moves: an event in an unchanged file
+	// falls out of the window by itself.
+	fmt.Fprintf(h, "v%d;days=%d;day=%s;", cacheFormat, windowDays, clock.Now().UTC().Format("2006-01-02"))
 	for _, e := range ents {
 		fmt.Fprintf(h, "%s|%d|%d;", e.path, e.size, e.mod)
 	}

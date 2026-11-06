@@ -51,22 +51,23 @@ func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 		}
 		stem := strings.TrimSuffix(e.Name(), ".md")
 		// The subagent_type recorded in transcripts is the file name (plus any
-		// plugin prefix); by convention it equals the stem. Frontmatter name is
-		// metadata and intentionally not used as the key.
-		_, desc, bodyChars := parseFrontmatter(b)
+		// plugin prefix); by convention it equals the stem. A differing frontmatter
+		// name stays the key's alias: it can fire under either.
+		fmName, desc, bodyChars := parseFrontmatter(b)
 		key := namePrefix + stem
 		items = append(items, Item{
-			Category:    CatAgent,
-			Name:        key,
-			Platform:    platformID,
-			Source:      source,
-			Path:        path,
-			Description: desc,
-			DescChars:   len(key) + len(desc),
-			BodyChars:   bodyChars,
-			InstalledAt: installedAt,
-			Removable:   removable,
-			ToolSurface: toolSurface(b, "tools", "allowed-tools"),
+			Category:        CatAgent,
+			Name:            key,
+			Platform:        platformID,
+			Source:          source,
+			Path:            path,
+			FrontmatterName: otherName(fmName, stem),
+			Description:     desc,
+			DescChars:       len(key) + len(desc),
+			BodyChars:       bodyChars,
+			InstalledAt:     installedAt,
+			Removable:       removable,
+			ToolSurface:     toolSurface(b, "tools", "allowed-tools"),
 		})
 	}
 	return items, warns

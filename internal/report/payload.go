@@ -103,11 +103,12 @@ func avgChars(r PayloadRow) string {
 	if r.Calls == 0 {
 		return "0"
 	}
-	return humanChars(r.TotalChars / r.Calls)
+	return HumanCount(r.TotalChars / r.Calls)
 }
 
 // humanChars formats a byte count compactly: 1234 → "1.2k", 980 → "980".
-func humanChars(n int) string {
+// HumanCount writes a count compactly: 1234 -> "1.2k".
+func HumanCount(n int) string {
 	if n >= 1000 {
 		return fmt.Sprintf("%.1fk", float64(n)/1000)
 	}
@@ -142,7 +143,7 @@ func renderPayloadQuality(w io.Writer, r *Report, width int, paint func(code, s 
 	var tools, calls, quality, avg, note []string
 	for _, pr := range r.MCPPayload {
 		tools = append(tools, pr.Tool)
-		calls = append(calls, humanNum(pr.Calls))
+		calls = append(calls, HumanNum(pr.Calls))
 		quality = append(quality, fmt.Sprintf("%d%%", pr.QualityPct))
 		avg = append(avg, "~"+avgChars(pr))
 		if pr.Noisy {

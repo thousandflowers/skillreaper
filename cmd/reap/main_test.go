@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -37,7 +39,7 @@ func TestStateCommandsRequireClaudeDir(t *testing.T) {
 
 	out.Reset()
 	errb.Reset()
-	if code := cmdPrune(options{claudeDir: ""}, strings.NewReader(""), &out, &errb); code == 0 {
+	if code := cmdPrune(options{claudeDir: ""}, nil, strings.NewReader(""), &out, &errb); code == 0 {
 		t.Error("prune with no claude dir should fail, not write to cwd")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "reaped")); !os.IsNotExist(err) {
@@ -72,7 +74,7 @@ func buildFixture(t *testing.T) (claudeDir, claudeJSON string) {
 
 	// One transcript with a usedskill invocation.
 	write(filepath.Join(claudeDir, "projects", "p1", "s1.jsonl"),
-		`{"type":"assistant","timestamp":"2026-06-09T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"usedskill"}}]}}`+"\n")
+		`{"type":"assistant","timestamp":"`+time.Now().Add(-24*time.Hour).UTC().Format(time.RFC3339)+`","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"usedskill"}}]}}`+"\n")
 	return claudeDir, claudeJSON
 }
 
@@ -86,7 +88,7 @@ func TestMuteNamedAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errOut bytes.Buffer
-	code := run([]string{"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "myagent"},
+	code := run([]string{"mute", "--yes", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "myagent"},
 		strings.NewReader(""), &out, &errOut)
 	if code != 0 {
 		t.Fatalf("mute agent exit = %d, stderr: %s", code, errOut.String())
@@ -104,7 +106,7 @@ func TestMuteBareAbortsOnDecline(t *testing.T) {
 	// Bare `reap mute` must prompt; answering no leaves files untouched.
 	code := run([]string{"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"},
 		strings.NewReader("n\n"), &out, &errOut)
-	if code != 0 {
+	if code != exitNotDone {
 		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
 	}
 	b, _ := os.ReadFile(dead)
@@ -171,7 +173,7 @@ func TestRunReportJSON(t *testing.T) {
 func TestRunReportOverlongTranscriptHoldsAbsenceDecisionsAtReview(t *testing.T) {
 	claudeDir, claudeJSON := buildFixture(t)
 	transcript := filepath.Join(claudeDir, "projects", "p1", "s1.jsonl")
-	overlong := `{"type":"assistant","timestamp":"2026-06-09T10:01:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"missedskill"}}],"pad":"` +
+	overlong := `{"type":"assistant","timestamp":"` + time.Now().Add(-24*time.Hour).UTC().Format(time.RFC3339) + `","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"missedskill"}}],"pad":"` +
 		strings.Repeat("x", 10*1024*1024+1) + `"}}`
 	f, err := os.OpenFile(transcript, os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
@@ -228,8 +230,8 @@ func TestFindItemRejectsAmbiguousSuffixMatch(t *testing.T) {
 		{Item: scan.Item{Category: scan.CatSkill, Name: "one:plan", Removable: true}},
 		{Item: scan.Item{Category: scan.CatSkill, Name: "two:plan", Removable: true}},
 	}}
-	if _, ok := findItem(r, "plan"); ok {
-		t.Fatal("ambiguous suffix match should not select an arbitrary item")
+	if rows, err := findItem(r, "plan"); err == nil {
+		t.Fatalf("ambiguous suffix match should not select an arbitrary item: %+v", rows)
 	}
 }
 
@@ -238,9 +240,9 @@ func TestFindItemAllowsUniqueSuffixMatch(t *testing.T) {
 		{Item: scan.Item{Category: scan.CatSkill, Name: "one:plan", Removable: true}},
 		{Item: scan.Item{Category: scan.CatSkill, Name: "two:build", Removable: true}},
 	}}
-	row, ok := findItem(r, "plan")
-	if !ok || row.Name != "one:plan" {
-		t.Fatalf("unique suffix match = %+v, %v; want one:plan", row, ok)
+	rows, err := findItem(r, "plan")
+	if err != nil || len(rows) != 1 || rows[0].Name != "one:plan" {
+		t.Fatalf("unique suffix match = %+v, %v; want one:plan", rows, err)
 	}
 }
 
@@ -284,7 +286,7 @@ func TestRunPruneAndRestore(t *testing.T) {
 
 	// Restore everything.
 	out.Reset()
-	code = run([]string{"restore", "--all", "--claude-dir", claudeDir},
+	code = run([]string{"restore", "--all", "--yes", "--claude-dir", claudeDir},
 		strings.NewReader(""), &out, &errOut)
 	if code != 0 {
 		t.Fatalf("restore exit = %d, stderr: %s", code, errOut.String())
@@ -339,7 +341,7 @@ func TestRunPruneJSONEmitsValidJSON(t *testing.T) {
 	if plan.TotalTokens <= 0 {
 		t.Error("total_tokens should sum the candidates")
 	}
-	if strings.Contains(out.String(), "[Y/n]") || strings.Contains(out.String(), "🧹") {
+	if strings.Contains(out.String(), "[y/N]") || strings.Contains(out.String(), "🧹") {
 		t.Error("the human plan leaked into the JSON stream")
 	}
 	if _, err := os.Stat(filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")); err != nil {
@@ -413,7 +415,7 @@ func TestRunPruneInteractiveAbort(t *testing.T) {
 		"prune", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
 		"--min-sessions", "1",
 	}, strings.NewReader("n\n"), &out, &errOut)
-	if code != 0 {
+	if code != exitNotDone {
 		t.Fatalf("exit = %d", code)
 	}
 	if !strings.Contains(out.String(), "aborted") {
@@ -553,7 +555,7 @@ func TestRunMuteUnmute(t *testing.T) {
 	var out, errOut bytes.Buffer
 
 	code := run([]string{
-		"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "usedskill",
+		"mute", "--yes", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "usedskill",
 	}, strings.NewReader(""), &out, &errOut)
 	if code != 0 {
 		t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
@@ -591,7 +593,7 @@ func TestRunMuteFlagOrdering(t *testing.T) {
 		skill := filepath.Join(claudeDir, "skills", "usedskill", "SKILL.md")
 		var out, errOut bytes.Buffer
 		code := run([]string{
-			"mute", "usedskill",
+			"mute", "usedskill", "--yes",
 			"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--no-nudge",
 		}, strings.NewReader(""), &out, &errOut)
 		if code != 0 {
@@ -608,7 +610,7 @@ func TestRunMuteFlagOrdering(t *testing.T) {
 		var out, errOut bytes.Buffer
 		code := run([]string{
 			"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--no-nudge",
-			"mute", "deadskill",
+			"mute", "deadskill", "--yes",
 		}, strings.NewReader(""), &out, &errOut)
 		if code != 0 {
 			t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
@@ -951,7 +953,7 @@ func TestMuteShowsValueFeedback(t *testing.T) {
 	var out, errOut bytes.Buffer
 
 	code := run([]string{
-		"mute", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "usedskill",
+		"mute", "--yes", "--claude-dir", claudeDir, "--claude-json", claudeJSON, "usedskill",
 	}, strings.NewReader(""), &out, &errOut)
 	if code != 0 {
 		t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
@@ -1196,6 +1198,7 @@ func TestRunBannerOnTerminal(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"-h"}} {
 		t.Run(args[0], func(t *testing.T) {
 			stubTerminal(t, true, 80)
+			t.Setenv("NO_COLOR", "")
 			var out, errOut bytes.Buffer
 
 			run(args, strings.NewReader(""), &out, &errOut)
@@ -1299,12 +1302,14 @@ func TestGatherScansEveryDetectedPlatform(t *testing.T) {
 		return []platform.Info{
 			{
 				ID: platform.ClaudeCode, Name: "Claude Code",
+				HasSkills: true, HasAgents: true, HasMCP: true, HasHooks: true, HasProse: true,
 				ConfigDirAbs: claudeDir, ConfigFileAbs: claudeJSON,
 				TranscriptType: "jsonl", HasTranscripts: true,
 				TranscriptDirs: []string{filepath.Join(claudeDir, "projects")},
 			},
 			{
 				ID: platform.CodexCLI, Name: "Codex CLI",
+				HasSkills: true, HasAgents: true, HasMCP: true, HasHooks: true, HasProse: true,
 				ConfigDirAbs: codexDir, TranscriptType: "jsonl",
 			},
 		}
@@ -1360,12 +1365,14 @@ func TestPlatformWithoutTranscriptsIsNotReapedOnAnotherPlatformsSessions(t *test
 		return []platform.Info{
 			{
 				ID: platform.ClaudeCode, Name: "Claude Code",
+				HasSkills: true, HasAgents: true, HasMCP: true, HasHooks: true, HasProse: true,
 				ConfigDirAbs: claudeDir, ConfigFileAbs: claudeJSON,
 				TranscriptType: "jsonl", HasTranscripts: true,
 				TranscriptDirs: []string{filepath.Join(claudeDir, "projects")},
 			},
 			{
 				ID: platform.OpenClaw, Name: "OpenClaw",
+				HasSkills: true, HasAgents: true, HasMCP: true, HasHooks: true, HasProse: true,
 				ConfigDirAbs: blindDir, TranscriptType: "none", HasTranscripts: false,
 			},
 		}
@@ -1702,7 +1709,7 @@ func TestRetentionWarning(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			w, ok := retentionWarning(options{claudeDir: dir, days: tt.days}, tt.corpus)
+			w, ok := retentionWarning(options{claudeDir: dir, days: tt.days, hasClaudeCode: true}, tt.corpus)
 			if ok != tt.wantWarn {
 				t.Fatalf("warned = %v, want %v (msg: %q)", ok, tt.wantWarn, w.Msg)
 			}
@@ -1729,7 +1736,348 @@ func TestRetentionWarningIgnoresOtherPlatforms(t *testing.T) {
 	st := usage.NewStats(30)
 	now := time.Now()
 	st.ObserveCorpus(now.AddDate(0, 0, -5), now) // Claude Code: 5 days
-	if _, ok := retentionWarning(options{claudeDir: t.TempDir(), days: 30}, st); ok {
+	if _, ok := retentionWarning(options{claudeDir: t.TempDir(), days: 30, hasClaudeCode: true}, st); ok {
 		t.Fatal("warned on a 5-day Claude Code corpus")
+	}
+}
+
+// Bare restore answers "what would I be restoring": every item still in
+// quarantine, newest first, with the id restore takes. It restores nothing.
+func TestRestoreWithNoArgsListsWhatIsPruned(t *testing.T) {
+	claudeDir := t.TempDir()
+	reaped := filepath.Join(claudeDir, "reaped")
+	if err := os.MkdirAll(reaped, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"version":1,"entries":[
+	 {"id":"001","category":"skill","name":"old-skill","from":"` + claudeDir + `/skills/old-skill","to":"` + reaped + `/skill/old-skill","timestamp":"2026-10-01T09:30:00Z"},
+	 {"id":"002","category":"skill","name":"back-again","from":"` + claudeDir + `/skills/back-again","to":"` + reaped + `/skill/back-again","timestamp":"2026-10-02T09:30:00Z","restored":true},
+	 {"id":"003","category":"mcp","name":"new-server","configPath":"` + claudeDir + `/.claude.json","payload":{},"timestamp":"2026-11-03T18:05:00Z"}
+	]}`
+	if err := os.WriteFile(filepath.Join(reaped, "manifest.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	// The dates below are read in local time; pin it so any timezone passes.
+	local := time.Local
+	time.Local = time.UTC
+	t.Cleanup(func() { time.Local = local })
+	code := run([]string{"restore", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut)
+
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	got := out.String()
+	for _, want := range []string{"001", "old-skill", "2026-10-01", "003", "new-server", "2026-11-03", "reap restore <id>"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "back-again") {
+		t.Errorf("an item already restored must not be listed:\n%s", got)
+	}
+	if strings.Index(got, "new-server") > strings.Index(got, "old-skill") {
+		t.Errorf("newest must come first:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(reaped, "manifest.json")); err != nil {
+		t.Error(err)
+	}
+	var again bytes.Buffer
+	if code := run([]string{"restore", "--claude-dir", t.TempDir()}, strings.NewReader(""), &again, &errOut); code != 0 {
+		t.Fatalf("empty exit = %d", code)
+	}
+	if !strings.Contains(again.String(), "Nothing to restore") {
+		t.Errorf("empty quarantine output: %s", again.String())
+	}
+}
+
+// Naming an item prunes that item and nothing else, whatever its verdict: the
+// user decided. Bare prune was what ran before, on every REAP item.
+func TestPruneByNameTouchesOnlyThatItem(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	base := []string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"}
+	exists := func(name string) bool {
+		_, err := os.Stat(filepath.Join(claudeDir, "skills", name))
+		return err == nil
+	}
+	var out, errOut bytes.Buffer
+
+	code := run(append([]string{"prune", "nosuchskill", "--yes"}, base...), strings.NewReader(""), &out, &errOut)
+	if code != 1 || !exists("usedskill") || !exists("deadskill") {
+		t.Fatalf("unknown name: exit = %d, used=%v dead=%v", code, exists("usedskill"), exists("deadskill"))
+	}
+	if !strings.Contains(errOut.String(), "nosuchskill") {
+		t.Errorf("stderr should name what was not found: %s", errOut.String())
+	}
+
+	out.Reset()
+	code = run(append([]string{"prune", "usedskill"}, base...), strings.NewReader("n\n"), &out, &errOut)
+	if code != exitNotDone || !exists("usedskill") {
+		t.Fatalf("declined: exit = %d, used=%v", code, exists("usedskill"))
+	}
+	if !strings.Contains(out.String(), "KEEP") {
+		t.Errorf("the prompt should say what reap thinks of it:\n%s", out.String())
+	}
+
+	code = run(append([]string{"prune", "usedskill", "--yes"}, base...), strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
+	}
+	if exists("usedskill") {
+		t.Error("the named skill should be quarantined, even at KEEP")
+	}
+	if !exists("deadskill") {
+		t.Error("a REAP skill nobody named must stay")
+	}
+
+	code = run(append([]string{"prune", "a", "b"}, base...), strings.NewReader(""), &out, &errOut)
+	if code != 2 {
+		t.Errorf("two names: exit = %d, want 2", code)
+	}
+}
+
+// Enter is no: an action on hundreds of items must not start from one key.
+func TestConfirmDefaultsToNo(t *testing.T) {
+	cases := map[string]bool{"\n": false, "": false, "n\n": false, "x\n": false, "y\n": true, "YES\n": true}
+	for input, want := range cases {
+		var out bytes.Buffer
+		if got := confirm(strings.NewReader(input), &out, "? "); got != want {
+			t.Errorf("confirm(%q) = %v, want %v", input, got, want)
+		}
+	}
+}
+
+// restore --all brings back everything ever pruned, which can include a server
+// removed months ago on purpose: it shows the list and waits for a yes.
+func TestRestoreAllShowsTheListAndAsks(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	base := []string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"}
+	var out, errOut bytes.Buffer
+	if code := run(append([]string{"prune", "--yes"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("prune exit = %d: %s", code, errOut.String())
+	}
+	back := func() bool {
+		_, err := os.Stat(filepath.Join(claudeDir, "skills", "deadskill"))
+		return err == nil
+	}
+
+	for _, input := range []string{"\n", "n\n"} {
+		out.Reset()
+		if code := run([]string{"restore", "--all", "--claude-dir", claudeDir}, strings.NewReader(input), &out, &errOut); code != exitNotDone {
+			t.Fatalf("exit = %d", code)
+		}
+		if back() {
+			t.Fatalf("answer %q restored the item", input)
+		}
+		if !strings.Contains(out.String(), "deadskill") || !strings.Contains(errOut.String(), "[y/N]") {
+			t.Errorf("should list and ask:\n%s%s", out.String(), errOut.String())
+		}
+	}
+
+	if code := run([]string{"restore", "--all", "--claude-dir", claudeDir}, strings.NewReader("y\n"), &out, &errOut); code != 0 || !back() {
+		t.Fatalf("yes: exit = %d, back = %v", code, back())
+	}
+
+	out.Reset()
+	if code := run([]string{"restore", "--all", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("empty: exit = %d", code)
+	}
+	if !strings.Contains(out.String(), "Nothing to restore") {
+		t.Errorf("empty quarantine: %s", out.String())
+	}
+}
+
+// Bare unmute answers "what have I muted", as bare restore does for prune.
+func TestUnmuteWithNoArgsListsWhatIsMuted(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	var out, errOut bytes.Buffer
+
+	if code := run([]string{"unmute", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("empty: exit = %d, stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "Nothing is muted") {
+		t.Errorf("empty output: %s", out.String())
+	}
+
+	args := []string{"mute", "usedskill", "--yes", "--claude-dir", claudeDir, "--claude-json", claudeJSON}
+	if code := run(args, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
+	}
+	out.Reset()
+	if code := run([]string{"unmute", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	for _, want := range []string{"usedskill", "reap unmute <name>"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, out.String())
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(claudeDir, "skills", "usedskill", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "description:") {
+		t.Error("listing must not unmute anything")
+	}
+}
+
+// A plugin skill can be muted by naming it, and only so: the bulk command leaves
+// plugin files alone. Prune still refuses, the file would return with an update.
+func TestMutePluginSkillByNameOnly(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	root := filepath.Join(claudeDir, "plugins", "cache", "mkt", "plug", "1.0.0")
+	skill := filepath.Join(root, "skills", "wanted", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skill), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const body = "---\nname: wanted\ndescription: " + "a plugin skill nobody fires, described at length. " + "\n---\nbody\n"
+	if err := os.WriteFile(skill, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg := `{"version":2,"plugins":{"plug@mkt":[{"installPath":"` + root + `"}]}}`
+	if err := os.WriteFile(filepath.Join(claudeDir, "plugins", "installed_plugins.json"), []byte(reg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	base := []string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"}
+	read := func() string {
+		b, err := os.ReadFile(skill)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	var out, errOut bytes.Buffer
+
+	if code := run(append([]string{"mute", "--yes"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("bulk exit = %d, stderr: %s", code, errOut.String())
+	}
+	if read() != body {
+		t.Fatal("bulk mute must not touch a plugin file")
+	}
+	if code := run(append([]string{"prune", "--yes"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("bulk prune exit = %d, stderr: %s", code, errOut.String())
+	}
+	if read() != body {
+		t.Fatal("bulk prune must not touch a plugin file")
+	}
+
+	if code := run(append([]string{"mute", "plug:wanted", "--yes"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("mute exit = %d, stderr: %s", code, errOut.String())
+	}
+	if strings.Contains(read(), "description:") {
+		t.Fatalf("description should be stripped:\n%s", read())
+	}
+	if code := run([]string{"unmute", "plug:wanted", "--claude-dir", claudeDir}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("unmute exit = %d, stderr: %s", code, errOut.String())
+	}
+	if read() != body {
+		t.Fatalf("unmute should restore the file exactly:\n%s", read())
+	}
+}
+
+func TestResolveMutedAcceptsAUniqueShortName(t *testing.T) {
+	names := []string{"one:plan", "two:plan", "p:always", "own"}
+	cases := []struct {
+		in, want string
+		wantErr  bool
+	}{
+		{"p:always", "p:always", false},
+		{"always", "p:always", false},
+		{"own", "own", false},
+		{"one:plan", "one:plan", false},
+		{"plan", "", true},
+		{"nosuch", "nosuch", false}, // left to Unmute, which says it is not muted
+	}
+	for _, c := range cases {
+		got, err := resolveMuted(names, c.in)
+		if (err != nil) != c.wantErr || got != c.want {
+			t.Errorf("resolveMuted(%q) = %q, %v; want %q, err=%v", c.in, got, err, c.want, c.wantErr)
+		}
+	}
+}
+
+// One name on several platforms, or in two categories, is refused until one is
+// named; the platform, the category and the path each select it.
+func TestFindRowSelectors(t *testing.T) {
+	r := &report.Report{Rows: []report.Row{
+		{Item: scan.Item{Category: scan.CatSkill, Name: "dup", Platform: "claude-code", Path: "/c/skills/dup/SKILL.md", Removable: true}},
+		{Item: scan.Item{Category: scan.CatSkill, Name: "dup", Platform: "codex", Path: "/x/skills/dup/SKILL.md", Removable: true}},
+		{Item: scan.Item{Category: scan.CatAgent, Name: "dup", Platform: "codex", Path: "/x/agents/dup.md", Removable: true}},
+	}}
+	if _, err := findItem(r, "dup"); err == nil || !strings.Contains(err.Error(), "codex:agent:dup") {
+		t.Fatalf("bare name: %v", err)
+	}
+	for typed, want := range map[string]string{
+		"claude-code:dup":        "/c/skills/dup/SKILL.md",
+		"agent:dup":              "/x/agents/dup.md",
+		"codex:skill:dup":        "/x/skills/dup/SKILL.md",
+		"/x/skills/dup/SKILL.md": "/x/skills/dup/SKILL.md",
+	} {
+		rows, err := findItem(r, typed)
+		if err != nil || len(rows) != 1 || rows[0].Path != want {
+			t.Errorf("%s = %+v, %v; want %s", typed, rows, err, want)
+		}
+	}
+}
+
+// A question nobody can answer is a no, and a line of data on a pipe is not a yes.
+func TestConfirmNeedsATerminal(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	fmt.Fprintln(w, "yes")
+	w.Close()
+	orig := openTTY
+	openTTY = func() (*os.File, error) { return nil, errors.New("no tty") }
+	t.Cleanup(func() { openTTY = orig })
+	var errOut bytes.Buffer
+	if confirm(r, &errOut, "go? ") {
+		t.Error("a piped line counted as consent")
+	}
+	if !strings.Contains(errOut.String(), "--yes") {
+		t.Errorf("should say how to go ahead: %q", errOut.String())
+	}
+}
+
+func TestHintsUseTheInvokedName(t *testing.T) {
+	rw := hintRewriter("skillreaper", nil)
+	in := "run `reap prune` or reap mute x; the reap of it. Usage: reap [flags]\n"
+	want := "run `skillreaper prune` or skillreaper mute x; the reap of it. Usage: skillreaper [flags]\n"
+	if got := string(rw([]byte(in))); got != want {
+		t.Errorf("got %q", got)
+	}
+	if hintRewriter("reap", nil) != nil || hintRewriter("reap-after", nil) != nil || hintRewriter("skillreaper", []string{"--json"}) != nil {
+		t.Error("reap itself, scratch names and JSON stay as they are")
+	}
+}
+
+// A kept item stays put when named, with --yes too, until the keep is removed.
+func TestKeepProtectsAgainstNamedActions(t *testing.T) {
+	claudeDir, claudeJSON := buildFixture(t)
+	base := []string{"--claude-dir", claudeDir, "--claude-json", claudeJSON, "--min-sessions", "1"}
+	md := filepath.Join(claudeDir, "skills", "deadskill", "SKILL.md")
+	before, _ := os.ReadFile(md)
+	var out, errOut bytes.Buffer
+	if code := run(append([]string{"keep", "deadskill"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("keep: %d %s", code, errOut.String())
+	}
+	for _, cmd := range []string{"prune", "mute"} {
+		errOut.Reset()
+		code := run(append([]string{cmd, "deadskill", "--yes"}, base...), strings.NewReader(""), &out, &errOut)
+		if code == 0 || !strings.Contains(errOut.String(), "deadskill is kept: run reap keep --remove deadskill first") {
+			t.Errorf("%s: exit %d, %q", cmd, code, errOut.String())
+		}
+		if b, err := os.ReadFile(md); err != nil || !bytes.Equal(b, before) {
+			t.Errorf("%s touched a kept item: %v", cmd, err)
+		}
+	}
+	if code := run(append([]string{"keep", "--remove", "deadskill"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("keep --remove: %d", code)
+	}
+	if code := run(append([]string{"prune", "deadskill", "--yes"}, base...), strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Errorf("prune after --remove: %d %s", code, errOut.String())
 	}
 }

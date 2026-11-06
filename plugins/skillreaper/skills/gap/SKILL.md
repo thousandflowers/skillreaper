@@ -17,7 +17,7 @@ so. `--days N` sets the evidence window (default 30).
 
 ## If reap is not installed
 
-Decide with `command -v reap` and nothing else - never an absolute path, never a
+Decide with `command -v reap || command -v skillreaper` and nothing else (use whichever name it finds) - never an absolute path, never a
 filesystem search: a copy found off `PATH` may be an older build, and silently
 using it hides a broken install.
 

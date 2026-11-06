@@ -6,6 +6,7 @@
 package atomicfile
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 )
@@ -54,4 +55,35 @@ func syncDir(dir string) {
 	}
 	defer d.Close()
 	_ = d.Sync()
+}
+
+// LoadJSON decodes the JSON file at path into a T. A missing file is the zero
+// T, not an error: state files start out absent.
+func LoadJSON[T any](path string) (T, error) {
+	var v T
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return v, nil
+	}
+	if err == nil {
+		err = json.Unmarshal(b, &v)
+	}
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return v, nil
+}
+
+// SaveJSON writes v as indented JSON to path atomically, creating its
+// directory, readable by the owner only.
+func SaveJSON(path string, v any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return Write(path, b, 0o600)
 }

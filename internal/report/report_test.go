@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thousandflowers/skillreaper/internal/cost"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/usage"
 )
@@ -206,6 +207,67 @@ func TestBuildClaudeMDProtection(t *testing.T) {
 	}
 }
 
+// A skill a hook injects every session is in use even with no invocation on
+// record: it is held at KEEP, and says why.
+func TestBuildHookLoadedProtection(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 60
+
+	items := []scan.Item{
+		{Category: scan.CatSkill, Name: "p:always", Source: "plugin:p@m", DescChars: 370, HookLoaded: true},
+		{Category: scan.CatSkill, Name: "p:cold", Source: "plugin:p@m", DescChars: 370},
+	}
+	r := Build(items, st, nil, Opts{MinSessions: 10, Cutoff: time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)})
+
+	byName := map[string]Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+	if v, rsn := byName["p:always"].Verdict, byName["p:always"].Reason; v != VerdictKeep || rsn != ReasonHookLoaded {
+		t.Errorf("p:always = %s(%s), want KEEP(%s)", v, rsn, ReasonHookLoaded)
+	}
+	if v := byName["p:cold"].Verdict; v != VerdictReap {
+		t.Errorf("p:cold = %s, want REAP", v)
+	}
+}
+
+// A muted skill has lost the description that makes it fire, so its zero uses
+// prove nothing: it is out of REAP and of the dead weight, and only counted.
+func TestBuildSetsMutedSkillsApart(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 60
+	items := []scan.Item{
+		{Category: scan.CatSkill, Name: "muted", Source: "personal", Path: "/skills/muted/SKILL.md", DescChars: 370, Removable: true},
+		{Category: scan.CatSkill, Name: "cold", Source: "personal", DescChars: 370, Removable: true},
+	}
+	r := Build(items, st, nil, Opts{
+		MinSessions: 10,
+		Cutoff:      time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC),
+		Muted:       map[string]bool{"/skills/muted/SKILL.md": true, "/skills/pruned-long-ago/SKILL.md": true},
+	})
+
+	byName := map[string]Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+	if m := byName["muted"]; m.Verdict == VerdictReap || m.Reason != ReasonMuted {
+		t.Errorf("muted = %s(%s)", m.Verdict, m.Reason)
+	}
+	if r.DeadCount != 1 || r.DeadTokensPerSession != byName["cold"].Tokens {
+		t.Errorf("dead = %d items, %d tok; want only cold", r.DeadCount, r.DeadTokensPerSession)
+	}
+	if r.MutedCount != 1 {
+		t.Errorf("MutedCount = %d, want 1: a muted name no longer installed is not counted", r.MutedCount)
+	}
+	h := NewHeadline(r)
+	if h.HeldBack != 0 {
+		t.Errorf("HeldBack = %d: a muted skill is not held back", h.HeldBack)
+	}
+	if got, want := h.MutedLine(), "1 muted · reap unmute to list"; got != want {
+		t.Errorf("MutedLine = %q, want %q", got, want)
+	}
+}
+
 // A heavy skill fired in too few sessions becomes MUTE(heavy-rare); the
 // recoverable tokens are tallied on the report.
 func TestBuildMute(t *testing.T) {
@@ -276,11 +338,9 @@ func TestBuildManifest(t *testing.T) {
 	if m.UsageWindow.Uses != 5 || m.UsageWindow.Projects != 1 {
 		t.Errorf("usage window = %+v", m.UsageWindow)
 	}
-	if len(m.Hooks) != 1 || m.Hooks[0] != "echo hi" {
+	// A record that ships with a release names the event and never the command.
+	if len(m.Hooks) != 1 || strings.Contains(m.Hooks[0], "echo") {
 		t.Errorf("hooks = %v", m.Hooks)
-	}
-	if !strings.Contains(m.RestorePath, "muted") {
-		t.Errorf("restore path = %s", m.RestorePath)
 	}
 	if _, ok := BuildManifest(r, "nope", "/x/.claude", ""); ok {
 		t.Error("expected not-found for unknown skill")
@@ -561,5 +621,95 @@ func TestMCPWeightIsReportedAsUnknownNotZero(t *testing.T) {
 		if strings.Contains(line, "deadserver") && !strings.Contains(line, "?") {
 			t.Errorf("--agent line publishes a numeric weight for an unmeasured server: %q", line)
 		}
+	}
+}
+
+// An MCP server Claude Code recorded injecting gets that weight, found under
+// its plugin alias too; one never seen in a session stays unknown and out of
+// the dead-token total.
+func TestMCPWeightFromTranscripts(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 40
+	st.MCPWeight["plugin_ecc_exa"] = usage.Injected{Chars: 400, At: time.Now()}
+	items := []scan.Item{
+		{Category: scan.CatMCP, Name: "exa", Source: "plugin:ecc@ecc"},
+		{Category: scan.CatMCP, Name: "never-loaded", Source: "user-config", Removable: true},
+	}
+	r := Build(items, st, nil, Opts{MinSessions: 10, Cutoff: time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)})
+	byName := map[string]Row{}
+	for _, row := range r.Rows {
+		byName[row.Name] = row
+	}
+	exa := byName["exa"]
+	if exa.WeightUnknown || exa.Tokens != cost.TokensFor("", 400) {
+		t.Errorf("exa: WeightUnknown=%v Tokens=%d, want measured %d", exa.WeightUnknown, exa.Tokens, cost.TokensFor("", 400))
+	}
+	if !byName["never-loaded"].WeightUnknown {
+		t.Error("never-loaded: weight should stay unknown")
+	}
+	if r.DeadTokensPerSession != exa.Tokens || r.DeadUnknownWeight != 1 {
+		t.Errorf("dead = %d tok, %d unknown; want %d tok, 1 unknown", r.DeadTokensPerSession, r.DeadUnknownWeight, exa.Tokens)
+	}
+}
+
+// A Claude Code skill seen in an injected listing weighs what it took there;
+// one never seen keeps the SKILL.md estimate. Muting a skill whose description
+// was not injected saves nothing, so it is not proposed for MUTE.
+func TestSkillWeightFromListing(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 40
+	st.SkillWeight["ecc:heavy"] = usage.Injected{Chars: 20, At: time.Now()}
+	st.Uses[scan.CatSkill]["ecc:heavy"] = 1
+	items := []scan.Item{
+		{Category: scan.CatSkill, Name: "ecc:heavy", Platform: "claude-code", Source: "plugin:ecc@ecc", DescChars: 1200},
+		{Category: scan.CatSkill, Name: "fresh", Platform: "claude-code", Source: "personal", DescChars: 370},
+		{Category: scan.CatSkill, Name: "ecc:heavy", Platform: "opencode", Source: "personal", DescChars: 1200},
+	}
+	r := Build(items, st, nil, Opts{MinSessions: 10, MuteThreshold: 0.2, MuteMinTokens: 50,
+		Cutoff: time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)})
+	got := map[string]Row{}
+	for _, row := range r.Rows {
+		got[row.Platform+"/"+row.Name] = row
+	}
+	if row := got["claude-code/ecc:heavy"]; row.Tokens != cost.TokensFor("", 20) || row.Verdict == VerdictMute {
+		t.Errorf("listed skill: Tokens=%d Verdict=%s, want %d and not MUTE", row.Tokens, row.Verdict, cost.TokensFor("", 20))
+	}
+	if row := got["claude-code/fresh"]; row.Tokens != cost.TokensFor("", 370) {
+		t.Errorf("unlisted skill: Tokens=%d, want file estimate %d", row.Tokens, cost.TokensFor("", 370))
+	}
+	if row := got["opencode/ecc:heavy"]; row.Tokens != cost.TokensFor("", 1200) {
+		t.Errorf("other platform: Tokens=%d, want file estimate %d", row.Tokens, cost.TokensFor("", 1200))
+	}
+}
+
+// The listing is from the last session, so it lags a mute made since: the
+// description is gone from the file but still in the old listing. What is
+// injected next session cannot exceed what the file holds now.
+func TestListedSkillWeightFollowsAMuteMadeSince(t *testing.T) {
+	st := usage.NewStats(30)
+	st.Sessions = 40
+	st.SkillWeight["muted"] = usage.Injected{Chars: 400, At: time.Now()}
+	items := []scan.Item{{Category: scan.CatSkill, Name: "muted", Platform: "claude-code", Source: "personal", DescChars: 10}}
+	r := Build(items, st, nil, Opts{MinSessions: 10, Cutoff: time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)})
+	if got, want := r.Rows[0].Tokens, cost.TokensFor("", 10); got != want {
+		t.Errorf("Tokens = %d, want the muted file's %d", got, want)
+	}
+}
+
+// The opening figure says how much of it reap prune can actually take, because
+// most of the weight is usually inside plugins it cannot touch.
+func TestHeadlineSplitsWhatPruneCanRemove(t *testing.T) {
+	r := &Report{Rows: []Row{
+		{Item: scan.Item{Removable: true}, Verdict: VerdictReap, Tokens: 1470},
+		{Item: scan.Item{Removable: false, Source: "plugin:p@m"}, Verdict: VerdictReap, Tokens: 7160},
+		{Item: scan.Item{Removable: true}, Verdict: VerdictKeep, Tokens: 999},
+	}}
+	if got, want := NewHeadline(r).Split(), "~1,470 removable with reap prune, ~7,160 inside plugins"; got != want {
+		t.Errorf("Split() = %q, want %q", got, want)
+	}
+	// With nothing out of reach the total already says it.
+	r = &Report{Rows: []Row{{Item: scan.Item{Removable: true}, Verdict: VerdictReap, Tokens: 10}}}
+	if got := NewHeadline(r).Split(); got != "" {
+		t.Errorf("Split() = %q, want empty", got)
 	}
 }

@@ -3,13 +3,14 @@
 
       [1m371[0m  items never fired, of 378 loaded
   [1m~22,720[0m  dead tokens per session
-   [1m~$2.32[0m  per month at your usage
+   [1m~$2.39[0m  per month, $3.00/M assumed
 [2m  371 of them marked REAP[0m
+[2m  monthly figures are extrapolated from 29 days of history[0m
 [2m  a floor, not a total: 11 unused items (MCP servers, hooks) carry weight that was never measured[0m
 
   [1mutilization 1%[0m  7/378 items fired · ~278/22998 tok touched (30d)
 
-  [36m── SKILLS · description injected every session ───────────────────────────────────────────────────[0m
+  [36m── SKILLS · listed every session: name, and description while it fits ────────────────────────────[0m
 
     [1mx  REAP · unused          292 items · ~21,415 tok/session[0m
 [2m       NAME               TOK  SRC  PERM  USES   LAST[0m
@@ -33,7 +34,7 @@
     =  audit-catalog     42  own   all    11    3d
     =  audit-backlog     40  own   all    17    2d
 
-  [36m── MCP SERVERS · tool schemas injected; weight unknown without running them ──────────────────────[0m
+  [36m── MCP SERVERS · tool names + instructions injected; ? = never loaded ────────────────────────────[0m
 
     [1mx  REAP · unused          11 items[0m
 [2m       NAME       TOK  SRC  USES   LAST[0m
@@ -69,7 +70,7 @@
 
   [36m── DO ────────────────────────────────────────────────────────────────────────────────────────────[0m
     [1mreap prune[0m   371 items · ~22,720 tok/session reclaimed
-    [1mreap mute[0m    2 skills · ~102 tok · audit-invoice, audit-dataset
+    [1mreap mute[0m    362 items · ~21,151 tok · import-timesheet, render-playlist, review-sitemap, deplo…
 
 [2m  All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all[0m
 [2m  Analysis is local: only files on this machine were read, nothing was sent over the network.[0m

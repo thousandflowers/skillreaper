@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -166,8 +167,9 @@ func TestScanSkillsSkipsSymlinkedSkillOutsideSkillsRoot(t *testing.T) {
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
-	if findItem(items, "linked") != nil {
-		t.Fatal("symlinked skill outside skills root should not be loaded")
+	it := findItem(items, "linked")
+	if it == nil || it.Removable || it.ViaLink == "" || it.DescChars == 0 {
+		t.Fatalf("symlinked skill outside skills root must be a weighed read-only row: %+v", it)
 	}
 }
 
@@ -181,8 +183,9 @@ func TestScanSkillsSkipsSymlinkedSkillsRootOutsideClaudeDir(t *testing.T) {
 	}
 
 	items, _ := ScanSkills(home, "test")
-	if findItem(items, "outside") != nil {
-		t.Fatal("symlinked skills root outside claudeDir should not be loaded")
+	it := findItem(items, "outside")
+	if it == nil || it.Removable || it.ViaLink == "" || it.DescChars == 0 {
+		t.Fatalf("symlinked skills root must give weighed read-only rows: %+v", it)
 	}
 }
 
@@ -272,5 +275,41 @@ func TestScanAgentsSkipsSymlinkedAgentsRootOutsideClaudeDir(t *testing.T) {
 	items, _ := ScanAgents(home, "test")
 	if findItem(items, "helper") != nil {
 		t.Fatal("symlinked agents root outside claudeDir should not be loaded")
+	}
+}
+
+// A link that leads nowhere is said, and stops nothing else.
+func TestScanSkillsNamesBrokenLinks(t *testing.T) {
+	home := t.TempDir()
+	mustWrite(t, filepath.Join(home, "skills", "real", "SKILL.md"), "---\nname: real\ndescription: d\n---\n")
+	skills := filepath.Join(home, "skills")
+	if err := os.Symlink(filepath.Join(home, "missing"), filepath.Join(skills, "dangling")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(skills, "loop"), filepath.Join(skills, "loop")); err != nil {
+		t.Fatal(err)
+	}
+	items, warns := ScanSkills(home, "test")
+	if findItem(items, "real") == nil || !findItem(items, "real").Removable {
+		t.Errorf("the real skill was affected: %+v", items)
+	}
+	named := map[string]bool{}
+	for _, w := range warns {
+		named[filepath.Base(w.Path)] = strings.Contains(w.Msg, "leads nowhere")
+	}
+	if !named["dangling"] || !named["loop"] {
+		t.Errorf("broken links not named: %+v", warns)
+	}
+}
+
+// A plain folder with no SKILL.md is neither a skill nor a broken link.
+func TestScanSkillsFolderWithoutSkillFileIsNotBroken(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, "skills", "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	items, warns := ScanSkills(home, "test")
+	if len(items) != 0 || len(warns) != 0 {
+		t.Errorf("want nothing for an empty folder, got items %+v warns %+v", items, warns)
 	}
 }

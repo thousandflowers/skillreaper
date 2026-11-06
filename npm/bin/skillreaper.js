@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { constants as osConstants } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { downloadVerifiedReleaseAsset, isSourceCheckout, platformTarget } from '../lib/release.js';
@@ -40,5 +41,22 @@ if (!existsSync(bin)) {
   await download();
 }
 
-const result = spawnSync(bin, process.argv.slice(2), { stdio: 'inherit' });
-process.exit(result.status ?? 1);
+// Spawned, not spawnSync: a blocked wrapper dies on the first signal and hands
+// the shell back while the tool is still finishing, with nobody to tell it to
+// stop on SIGTERM. Ctrl-C reaches the whole foreground group by itself, so that
+// one is only waited out; the others are passed on.
+const child = spawn(bin, process.argv.slice(2), {
+  stdio: 'inherit',
+  env: { ...process.env, SKILLREAPER_WRAPPER: process.argv[1] },
+});
+process.on('SIGINT', () => {});
+for (const signal of ['SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => child.kill(signal));
+}
+child.on('error', (err) => {
+  console.error(`could not start skillreaper: ${err.message}`);
+  process.exit(1);
+});
+child.on('exit', (code, signal) => {
+  process.exit(code ?? 128 + (osConstants.signals[signal] ?? 0));
+});

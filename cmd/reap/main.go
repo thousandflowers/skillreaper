@@ -5,7 +5,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +30,7 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/report"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/snapshot"
+	"github.com/thousandflowers/skillreaper/internal/tty"
 	"github.com/thousandflowers/skillreaper/internal/usage"
 )
 
@@ -78,19 +79,21 @@ Usage:
   reap apm [flags]          emit a proposed APM apm.yml from per-repo firing
   reap manifest <name>      emit a release manifest for one skill
   reap why <name>           explain in detail why an item got its verdict
-  reap prune [flags]        quarantine unused items (reversible)
+  reap prune [<name>]       quarantine one item, or every REAP item (reversible)
   reap keep <name>          mark item as keep (never prune)
   reap keep --list          show all kept items
   reap keep --remove <name>  remove item from keep list
   reap mute [<name>]        strip skill/agent descriptions (reversible)
-  reap unmute <name>|--all  restore a muted skill's description
-  reap restore <id>|--all   undo prune actions
+  reap unmute [<name>|--all]  list muted skills, or restore a description
+  reap restore [<id>|<name>|--all]  list pruned items, or undo a prune
+  reap delete <name>        remove one item for good (cannot be restored)
   reap share [flags]        print a ready-to-share message about your savings
   reap snapshot             save this run's --json payload for later comparison
   reap diff [<a> [<b>]]     compare two snapshots (default: newest vs previous)
   reap install-hook         add a weekly SessionStart nudge to settings.json
   reap uninstall-hook       remove skillreaper's SessionStart nudge
   reap version              print version
+  reap help                 print this
 
 Flags:
 `
@@ -131,10 +134,24 @@ type options struct {
 	// the state commands have a directory, and gather must not read that as a
 	// request to scan Claude Code alone.
 	claudeDirExplicit bool
+	// hasClaudeCode says opts.claudeDir is a Claude Code directory. On a machine
+	// with only other tools, state lives under the first of those instead, and
+	// what only Claude Code reads (settings.json, its retention) does not apply.
+	hasClaudeCode bool
+	// priceChosen says --price or a known --model set the price by hand.
+	priceChosen bool
 }
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	invoked := invokedName(os.Args[0])
+	out := &stdoutTracker{f: os.Stdout, rewrite: hintRewriter(invoked, os.Args[1:])}
+	errOut := &stdoutTracker{f: os.Stderr, rewrite: hintRewriter(invoked, nil)}
+	code := run(os.Args[1:], os.Stdin, out, errOut)
+	if code == 0 && out.err != nil {
+		fmt.Fprintf(os.Stderr, "error: could not write the output: %v\n", out.err)
+		code = 1
+	}
+	os.Exit(code)
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -150,7 +167,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.IntVar(&opts.minTokens, "min-tokens", 3, "items below this token weight → KEEP(tiny)")
 	fs.Float64Var(&opts.muteThreshold, "mute-threshold", 0.20, "MUTE used skills fired in fewer than this fraction of sessions (0 disables)")
 	fs.IntVar(&opts.muteMinTokens, "mute-min-tokens", 50, "only MUTE skills heavier than this token weight")
-	fs.StringVar(&opts.source, "source", "", "prune: quarantine only items from this source (see the by-source summary)")
+	fs.StringVar(&opts.source, "source", "", "prune, mute: act only on items from this source (see the by-source summary)")
 	fs.Float64Var(&opts.routeThreshold, "route-threshold", 0.10, "route: skills fired in fewer than this fraction of sessions get routed behind a leaf router")
 	fs.IntVar(&opts.routeMinSkills, "route-min-skills", 0, "route: skip the plan unless at least this many skills survive a prune (0 = always show)")
 	fs.IntVar(&opts.top, "top", report.AgentMaxRows, "--agent: cap the dead-item table at this many rows")
@@ -164,11 +181,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&opts.noNudge, "no-nudge", false, "suppress the star-CTA prompt")
 	fs.BoolVar(&opts.noBanner, "no-banner", false, "suppress the wordmark shown above the default report and the usage text")
 	fs.BoolVar(&opts.noCache, "no-cache", false, "re-parse the transcript corpus instead of reusing a cached parse")
-	fs.BoolVar(&opts.yes, "yes", false, "prune: apply without confirmation")
-	fs.BoolVar(&opts.all, "all", false, "mute/restore/unmute: act on every eligible item")
+	fs.BoolVar(&opts.yes, "yes", false, "prune, mute, delete, restore --all, unmute --all: apply without asking")
+	fs.BoolVar(&opts.all, "all", false, "mute, restore, unmute: act on every eligible item")
 	fs.BoolVar(&opts.dryRun, "dry-run", false, "install-hook: print the change without writing")
 	fs.BoolVar(&opts.quiet, "quiet", false, "suppress the normal text report")
-	fs.BoolVar(&opts.listKeep, "list", false, "keep: list all kept items")
+	fs.BoolVar(&opts.listKeep, "list", false, "keep, snapshot: list what is saved")
 	fs.StringVar(&opts.removeKeep, "remove", "", "keep: remove a kept item")
 	fs.StringVar(&opts.claudeDir, "claude-dir", "", "Claude Code directory (default ~/.claude)")
 	fs.StringVar(&opts.claudeJSON, "claude-json", "", "Claude config file (default ~/.claude.json)")
@@ -177,12 +194,23 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// has been parsed, so the opt-out has to be legible straight from args or
 	// `reap --help --no-banner` would print the thing it just opted out of.
 	optedOut := noBannerRequested(args)
-	fs.Usage = func() {
+	printUsage := func(out io.Writer) {
 		o := bannerOptions(opts)
 		o.NoBanner = o.NoBanner || optedOut
 		banner.Print(stderr, stdout, o)
-		fmt.Fprintf(stderr, usageText, platformNames())
+		fs.SetOutput(out)
+		fmt.Fprintf(out, usageText, platformNames())
 		fs.PrintDefaults()
+		fs.SetOutput(stderr)
+	}
+	// Help that was asked for is the output, so it goes where output goes and
+	// can be read through a pager. Help shown for a mistake stays on stderr.
+	fs.Usage = func() {
+		if helpRequested(args) {
+			printUsage(stdout)
+			return
+		}
+		printUsage(stderr)
 	}
 	// Go's flag.Parse stops at the first positional argument, so flags placed
 	// after a subcommand or its name (e.g. `reap mute foo --claude-dir X`) would
@@ -214,6 +242,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var rest []string
 	if len(positionals) > 0 {
 		cmd, rest = positionals[0], positionals[1:]
+	}
+	if msg := invocationError(fs, cmd, rest); msg != "" {
+		fmt.Fprintf(stderr, "error: %s\n", msg)
+		return 2
+	}
+	if cmd == "help" {
+		printUsage(stdout)
+		return 0
 	}
 
 	if err := fillDefaults(&opts, stderr); err != nil {
@@ -250,11 +286,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "mute":
 		return cmdMute(opts, rest, stdin, stdout, stderr)
 	case "unmute":
-		return cmdUnmute(opts, rest, stdout, stderr)
+		return cmdUnmute(opts, rest, stdin, stdout, stderr)
 	case "prune":
-		return cmdPrune(opts, stdin, stdout, stderr)
+		return cmdPrune(opts, rest, stdin, stdout, stderr)
 	case "restore":
-		return cmdRestore(opts, rest, stdout, stderr)
+		return cmdRestore(opts, rest, stdin, stdout, stderr)
+	case "delete":
+		return cmdDelete(opts, rest, stdin, stdout, stderr)
 	case "install-hook":
 		return cmdInstallHook(opts, stdout, stderr)
 	case "uninstall-hook":
@@ -275,6 +313,20 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fs.Usage()
 		return 2
 	}
+}
+
+// helpRequested reports whether the arguments ask for help, as opposed to the
+// flag package falling back on the usage text for a bad flag.
+func helpRequested(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "--":
+			return false
+		case "-h", "-help", "--help":
+			return true
+		}
+	}
+	return false
 }
 
 // noBannerRequested reports whether --no-banner appears anywhere in args,
@@ -312,7 +364,13 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
+		consumed := len(args) - fs.NArg()
+		terminated := consumed > 0 && args[consumed-1] == "--"
 		args = fs.Args()
+		// After a literal -- everything is a positional, however it looks.
+		if terminated {
+			return append(positionals, args...), nil
+		}
 		if len(args) == 0 {
 			return positionals, nil
 		}
@@ -386,20 +444,29 @@ func trimFloat(f float64) string {
 
 func fillDefaults(opts *options, stderr io.Writer) error {
 	opts.claudeDirExplicit = opts.claudeDir != ""
+	opts.hasClaudeCode = opts.claudeDirExplicit
 	if opts.claudeDir == "" {
 		detected := platform.Detect()
 		for _, p := range detected {
 			if p.ID == platform.ClaudeCode {
 				opts.claudeDir = p.ConfigDirAbs
 				opts.claudeJSON = p.ConfigFileAbs
+				opts.hasClaudeCode = true
 				break
 			}
 		}
+		// Without Claude Code the report still lists the other tools' items, so
+		// the actions it offers need somewhere to keep their undo state.
+		if opts.claudeDir == "" && len(detected) > 0 {
+			opts.claudeDir = detected[0].ConfigDirAbs
+		}
 	}
+	opts.priceChosen = opts.price > 0
 	// Price: --model lookup takes priority, then --price, then default.
 	if opts.model != "" {
 		if p, ok := cost.LookupPrice(opts.model); ok {
 			opts.price = p
+			opts.priceChosen = true
 		} else {
 			// An unknown --model used to fall through in silence, so a typo and
 			// a model this build simply does not know produced identical,
@@ -439,11 +506,19 @@ func requireClaudeDir(opts options, stderr io.Writer) bool {
 // its tokens. Name is part of the key because several MCP servers legitimately
 // share the config file that declares them — keying on the path alone would
 // collapse them into one.
+//
+// Prose is one file however many tools read it, so its key leaves the platform
+// out: the first platform to list it holds its weight, and the same CLAUDE.md is
+// not added to the total once per tool.
 func dedupeByPath(items []scan.Item) []scan.Item {
 	seen := make(map[string]bool, len(items))
 	out := items[:0]
 	for _, it := range items {
-		key := string(it.Category) + "\x00" + it.Platform + "\x00" + it.Path + "\x00" + it.Name
+		platformKey := it.Platform
+		if it.Category == scan.CatProse {
+			platformKey = ""
+		}
+		key := string(it.Category) + "\x00" + platformKey + "\x00" + it.Path + "\x00" + it.Name
 		if seen[key] {
 			continue
 		}
@@ -470,6 +545,11 @@ func gather(opts options) (*report.Report, error) {
 			Name:           "Claude Code",
 			ConfigDirAbs:   opts.claudeDir,
 			ConfigFileAbs:  opts.claudeJSON,
+			HasSkills:      true,
+			HasAgents:      true,
+			HasMCP:         true,
+			HasHooks:       true,
+			HasProse:       true,
 			TranscriptType: "jsonl",
 			TranscriptDirs: []string{filepath.Join(opts.claudeDir, "projects")},
 		}
@@ -501,11 +581,32 @@ func gather(opts options) (*report.Report, error) {
 		pid := string(p.ID)
 		root = dir
 
-		collect(scan.ScanSkills(dir, pid))
-		collect(scan.ScanAgents(dir, pid))
-		collect(scan.ScanMCP(p.ConfigFileAbs, dir, pid, p.ConfigFormat))
-		collect(scan.ScanHooks(dir, pid))
-		collect(scan.ScanProse(dir, cwd, pid))
+		// The platform table says what each tool has; a folder named the same way
+		// under a tool that does not read it is not part of its stack.
+		if p.HasSkills {
+			collect(scan.ScanSkillsIn(dir, pid, p.NestedSkills))
+			for _, extra := range p.SkillDirs {
+				if extra != filepath.Join(dir, "skills") {
+					collect(scan.ScanDeclaredSkills(extra, pid))
+				}
+			}
+		}
+		if p.HasAgents {
+			collect(scan.ScanAgents(dir, pid))
+		}
+		if p.HasMCP {
+			collect(scan.ScanMCP(p.ConfigFileAbs, dir, pid, p.ConfigFormat))
+		}
+		if p.HasHooks {
+			collect(scan.ScanHooks(dir, pid))
+		}
+		projectDir := ""
+		if p.ReadsProjectCLAUDE {
+			projectDir = cwd
+		}
+		if p.HasProse {
+			collect(scan.ScanProse(dir, projectDir, pid))
+		}
 
 		for _, prosePath := range p.ProseDirs {
 			info, err := os.Stat(prosePath)
@@ -513,7 +614,8 @@ func gather(opts options) (*report.Report, error) {
 				continue
 			}
 			if info.IsDir() {
-				collect(scan.ScanProse(prosePath, "", pid))
+				// ScanProse takes the directory holding rules/, not rules/ itself.
+				collect(scan.ScanProse(filepath.Dir(prosePath), "", pid))
 			} else {
 				collect(scan.ScanProseFile(prosePath, pid), nil)
 			}
@@ -532,6 +634,8 @@ func gather(opts options) (*report.Report, error) {
 	digestDirty := false
 
 	evidenceBlind := map[string]bool{}
+	blindReason := map[string]string{}
+	perPlatform := map[string]*usage.Stats{}
 	// cleanupPeriodDays governs Claude Code's transcripts and nothing else, so
 	// the corpus it is compared against has to be Claude Code's alone. The
 	// merged Stats spans every platform scanned, and other agents keep their
@@ -543,25 +647,56 @@ func gather(opts options) (*report.Report, error) {
 		parsedAny := false
 		var sqliteErr error
 		mergeParsed := func(parsed *usage.Stats) {
-			parsedAny = true
+			// A walk that found no session of this platform is no evidence, even
+			// if it returned cleanly: its items must not be judged on the sessions
+			// of some other platform.
+			parsedAny = parsedAny || parsed.Sessions > 0
+			if perPlatform[pid] == nil {
+				perPlatform[pid] = usage.NewStats(opts.days)
+			}
+			mergeStats(perPlatform[pid], parsed)
+			perPlatform[pid].ObserveCorpus(parsed.OldestTranscript, parsed.NewestTranscript)
 			if p.ID == platform.ClaudeCode {
 				claudeCorpus.ObserveCorpus(parsed.OldestTranscript, parsed.NewestTranscript)
 			}
 			if parsed.IncompleteEvidence && !evidenceBlind[pid] {
 				evidenceBlind[pid] = true
+				blindReason[pid] = "at least one transcript record exceeded the parser limit or could not be read"
 				warns = append(warns, scan.Warning{
 					Path:     p.ConfigDirAbs,
 					Msg:      fmt.Sprintf("%s usage evidence is incomplete because at least one transcript record exceeded the parser limit or could not be read; its items are shown as REVIEW, not REAP/MUTE.", p.Name),
 					Advisory: true,
 				})
 			}
-			if st == nil {
-				st = parsed
-			} else {
-				mergeStats(st, parsed)
+			if parsed.PositiveOnly && parsed.Sessions > 0 && !evidenceBlind[pid] {
+				evidenceBlind[pid] = true
+				blindReason[pid] = "its history shows what fired but not everything that was used, so no fire proves nothing"
+				warns = append(warns, scan.Warning{
+					Path:     p.ConfigDirAbs,
+					Msg:      fmt.Sprintf("%s: %s; its used items show as used and the rest are shown as REVIEW, not REAP/MUTE.", p.Name, blindReason[pid]),
+					Advisory: true,
+				})
 			}
+			if st == nil {
+				st = usage.NewStats(opts.days)
+			}
+			mergeStats(st, parsed)
 		}
 		switch p.TranscriptType {
+		case "codex-jsonl":
+			// Sources get a prefix because an earlier version recorded these files
+			// with no fires in them, and that record must not stop them being read.
+			scoped := func(id string) string { return pid + ":" + id }
+			for _, td := range p.TranscriptDirs {
+				needs := func(id string) bool { return !digest.HasSource(scoped(id)) }
+				observe := func(id string, one *usage.Stats) {
+					digest.Add(scoped(id), scopedObservation(pid, observationFrom(one)))
+					digestDirty = true
+				}
+				if parsed, err := usage.ParseCodex(td, cutoff, opts.days, needs, observe); err == nil {
+					mergeParsed(parsed)
+				}
+			}
 		case "jsonl":
 			// Parsing the corpus is what costs: on an 800-transcript, 345 MB
 			// tree, walking and stat-ing takes 22 ms and reading every byte
@@ -589,7 +724,7 @@ func gather(opts options) (*report.Report, error) {
 				// used less often than that can ever accumulate.
 				needs := func(id string) bool { return !digest.HasSource(id) }
 				observe := func(id string, one *usage.Stats) {
-					digest.Add(id, observationFrom(one))
+					digest.Add(id, scopedObservation(pid, observationFrom(one)))
 					digestDirty = true
 				}
 				parsed, err := usage.ParseObserving(td, cutoff, opts.days, needs, observe)
@@ -635,8 +770,7 @@ func gather(opts options) (*report.Report, error) {
 		// Either way the items must not be REAP'd or MUTE'd against a session
 		// count that belongs to some other platform, so flag it and say why.
 		if !parsedAny {
-			evidenceBlind[pid] = true
-			reason := "no session transcripts were found"
+			reason := fmt.Sprintf("no session transcripts were found in the last %d days", opts.days)
 			switch {
 			case !p.HasTranscripts:
 				reason = "it exposes no session transcripts at all, so nothing can be observed about its items"
@@ -646,11 +780,13 @@ func gather(opts options) (*report.Report, error) {
 				} else if sqliteErr != nil {
 					reason = fmt.Sprintf("its SQLite history could not be read: %v", sqliteErr)
 				} else {
-					reason = "no SQLite session history was found"
+					reason = fmt.Sprintf("no session history was found (looked in %s)", p.TranscriptDBTried)
 				}
-			case p.TranscriptType != "jsonl":
+			case p.TranscriptType != "jsonl" && p.TranscriptType != "codex-jsonl":
 				reason = fmt.Sprintf("its transcripts use a format skillreaper does not parse yet (%s)", p.TranscriptType)
 			}
+			evidenceBlind[pid] = true
+			blindReason[pid] = reason
 			warns = append(warns, scan.Warning{
 				Path:     p.ConfigDirAbs,
 				Msg:      fmt.Sprintf("%s usage is not counted because %s; its items are shown as REVIEW, not REAP/MUTE.", p.Name, reason),
@@ -670,15 +806,28 @@ func gather(opts options) (*report.Report, error) {
 		_ = evidence.Save(digestPath, digest)
 	}
 
-	keepSet, _ := override.KeepSet(opts.claudeDir)
+	keepSet, keepErr := override.KeepSet(opts.claudeDir)
+	if keepErr != nil {
+		warns = append(warns, scan.Warning{Path: override.Path(opts.claudeDir),
+			Msg: fmt.Sprintf("the keep list cannot be read, so nothing is protected by it in this report: %v", keepErr)})
+	}
 	home, _ := os.UserHomeDir()
-	claudeMD := scan.LoadClaudeMD(cwd, home)
+	claudeMD := scan.LoadClaudeMD(cwd, home, opts.claudeDir)
 
+	names := map[string]string{}
+	for _, p := range platform.All() {
+		names[string(p.ID)] = p.Name
+	}
+	muted, muteLost := mutedSet(opts.claudeDir, items)
+	price, priceBasis := pricing(opts, st)
 	return report.Build(items, st, warns, report.Opts{
+		PlatformNames: names,
+		PriceBasis:    priceBasis,
+		PrunedCopies:  prunedCopies(opts.claudeDir),
 		// The durable record, consulted so an item that fired before the
 		// retention sweep is not mistaken for one that never fired at all.
-		History: func(category, name string) (int, time.Time, bool) {
-			r, ok := digest.Lookup(category, name)
+		History: func(platformID, category, name string) (int, time.Time, bool) {
+			r, ok := digest.Lookup(category, scopedName(platformID, name))
 			if !ok || r.Uses == 0 {
 				return 0, time.Time{}, false
 			}
@@ -689,15 +838,136 @@ func gather(opts options) (*report.Report, error) {
 		GraceDays:     opts.graceDays,
 		MinTokens:     opts.minTokens,
 		Model:         opts.model,
-		PricePerMTok:  opts.price,
+		PricePerMTok:  price,
 		Cutoff:        cutoff,
 		WindowDays:    opts.days,
 		KeepSet:       keepSet,
 		EvidenceBlind: evidenceBlind,
+		BlindReason:   blindReason,
+		PerPlatform:   perPlatform,
+		RetentionDays: retentionFor(opts.claudeDir),
 		ClaudeMDLines: claudeMD,
 		MuteThreshold: opts.muteThreshold,
 		MuteMinTokens: opts.muteMinTokens,
+		Muted:         muted,
+		MuteLost:      muteLost,
+		PruneLost:     prunedPluginItems(opts.claudeDir),
 	}), nil
+}
+
+// mutedSet sorts the items reap has muted by what is true of the file now: still
+// without a description is muted, with one again is a mute that was lost. Muting
+// is per file, so the same name elsewhere is neither. State records resolved
+// paths, so each item's path is resolved to compare. Unreadable state sets nothing
+// apart: the skills are then judged like any other, and reap unmute reports it.
+func mutedSet(claudeDir string, items []scan.Item) (muted, lost map[string]bool) {
+	entries, err := mute.Entries(claudeDir)
+	if err != nil || len(entries) == 0 {
+		return nil, nil
+	}
+	recorded := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		recorded[e.Path] = true
+	}
+	muted, lost = map[string]bool{}, map[string]bool{}
+	for _, it := range items {
+		if it.Path == "" {
+			continue
+		}
+		p, err := filepath.EvalSymlinks(it.Path)
+		if err != nil || !recorded[p] {
+			continue
+		}
+		if mute.Strippable(p) {
+			lost[it.Path] = true
+		} else {
+			muted[it.Path] = true
+		}
+	}
+	return muted, lost
+}
+
+// pricing is the input price behind the money figures, and what it rests on. A
+// price asked for wins; next comes the mix of models the transcripts show, and
+// only without either a stated assumption.
+func pricing(opts options, st *usage.Stats) (float64, string) {
+	if opts.priceChosen {
+		return opts.price, ""
+	}
+	if blended, ok := cost.Blended(st.ModelUse); ok {
+		return blended, "the models in your transcripts"
+	}
+	return opts.price, "assumed, " + cost.DefaultModel
+}
+
+// prunedCopies maps where each pruned item came from to its manifest id, so a
+// live item with a copy in quarantine can say so.
+func prunedCopies(claudeDir string) map[string]string {
+	entries, err := prune.LoadManifest(claudeDir)
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, e := range entries {
+		if !e.Restored && !prune.NeverMoved(e) && e.From != "" {
+			out[e.From] = e.ID
+		}
+	}
+	return out
+}
+
+// prunedPluginItems is every plugin item in quarantine, by the key report.Build
+// looks for: any row of that key is one an update brought back.
+func prunedPluginItems(claudeDir string) map[string]bool {
+	entries, err := prune.LoadManifest(claudeDir)
+	if err != nil {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, e := range entries {
+		if !e.Restored && !prune.NeverMoved(e) && report.IsPluginSource(e.Source) {
+			out[report.PruneLostKey(e.Platform, e.Category, e.Source, e.Name)] = true
+		}
+	}
+	return out
+}
+
+// retentionFor is Claude Code's transcript retention for a directory.
+func retentionFor(claudeDir string) int {
+	days, _ := scan.RetentionDays(claudeDir)
+	return days
+}
+
+// scopedName is an item's key in the durable digest. Each platform has its own
+// record, as a use in one tool says nothing about the copy in another. Claude
+// Code's keys stay bare, so digests already on disk keep their meaning.
+func scopedName(platformID, name string) string {
+	if platformID == "" || platformID == string(platform.ClaudeCode) {
+		return name
+	}
+	return platformID + "|" + name
+}
+
+// scopedObservation returns o with its names under the platform's keys.
+func scopedObservation(platformID string, o evidence.Observation) evidence.Observation {
+	scope := func(in map[string]map[string]int) map[string]map[string]int {
+		out := make(map[string]map[string]int, len(in))
+		for cat, byName := range in {
+			out[cat] = make(map[string]int, len(byName))
+			for name, n := range byName {
+				out[cat][scopedName(platformID, name)] = n
+			}
+		}
+		return out
+	}
+	last := make(map[string]map[string]time.Time, len(o.Last))
+	for cat, byName := range o.Last {
+		last[cat] = make(map[string]time.Time, len(byName))
+		for name, t := range byName {
+			last[cat][scopedName(platformID, name)] = t
+		}
+	}
+	return evidence.Observation{Uses: scope(o.Uses), Errors: scope(o.Errors), At: o.At, Last: last}
 }
 
 // mergeStats combines two usage stats into dst.
@@ -719,7 +989,7 @@ const corpusReachesHorizon = 0.9
 // deleting evidence now). A corpus far shorter than the horizon is just a
 // young installation and stays silent.
 func retentionWarning(opts options, st *usage.Stats) (scan.Warning, bool) {
-	if strings.TrimSpace(opts.claudeDir) == "" || st == nil {
+	if strings.TrimSpace(opts.claudeDir) == "" || st == nil || !opts.hasClaudeCode {
 		return scan.Warning{}, false
 	}
 	retention, explicit := scan.RetentionDays(opts.claudeDir)
@@ -757,16 +1027,34 @@ func observationFrom(one *usage.Stats) evidence.Observation {
 	o := evidence.Observation{
 		Uses:   map[string]map[string]int{},
 		Errors: map[string]map[string]int{},
+		Last:   map[string]map[string]time.Time{},
+	}
+	addUse := func(cat, name string, n int, ts time.Time) {
+		if n == 0 {
+			return
+		}
+		if o.Uses[cat] == nil {
+			o.Uses[cat], o.Last[cat] = map[string]int{}, map[string]time.Time{}
+		}
+		o.Uses[cat][name] += n
+		if ts.After(o.Last[cat][name]) {
+			o.Last[cat][name] = ts
+		}
+		if ts.After(o.At) {
+			o.At = ts
+		}
 	}
 	for cat, byName := range one.Uses {
 		for name, n := range byName {
-			if n == 0 {
-				continue
-			}
-			if o.Uses[string(cat)] == nil {
-				o.Uses[string(cat)] = map[string]int{}
-			}
-			o.Uses[string(cat)][name] += n
+			addUse(string(cat), name, n, one.Last[cat][name])
+		}
+	}
+	// Uses before the window are not use in the window, and are history all the
+	// same: this record is what the older verdicts read.
+	olderUses, olderLast := one.OlderUses()
+	for cat, byName := range olderUses {
+		for name, n := range byName {
+			addUse(string(cat), name, n, olderLast[cat][name])
 		}
 	}
 	for cat, byName := range one.Errors {
@@ -780,74 +1068,22 @@ func observationFrom(one *usage.Stats) evidence.Observation {
 			o.Errors[string(cat)][name] += n
 		}
 	}
-	for _, byName := range one.Last {
-		for _, ts := range byName {
-			if ts.After(o.At) {
-				o.At = ts
-			}
-		}
-	}
 	return o
 }
 
 func mergeStats(dst, src *usage.Stats) {
 	dst.Sessions += src.Sessions
 	dst.FilesScanned += src.FilesScanned
-	dst.MalformedLines += src.MalformedLines
-	dst.UnreadableFiles += src.UnreadableFiles
-	dst.TruncatedReads += src.TruncatedReads
-	dst.OversizedLines += src.OversizedLines
-	dst.UnparsableLines += src.UnparsableLines
-	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
 	dst.SkippedByCutoff += src.SkippedByCutoff
-	// Unlike the corpus bracket below, the measured totals do merge: they are
-	// sums over messages, and a message belongs to exactly one transcript.
-	dst.Measured.Merge(src.Measured)
+	// Counts, evidence flags and measured totals merge in usage.MergeInto: they
+	// are sums over messages, and a message belongs to exactly one transcript.
 	// The corpus bracket is deliberately NOT merged. It is only ever compared
 	// against a per-platform setting (cleanupPeriodDays is Claude Code's), and a
 	// merged span reads like one platform's while describing all of them — which
 	// is the bug this warning shipped with in its first draft: an 81-day corpus
 	// belonging to another agent, measured against Claude Code's 30-day horizon.
 	// Callers needing a span must take it from the per-platform Stats.
-	for cat, uses := range src.Uses {
-		for key, count := range uses {
-			dst.Uses[cat][key] += count
-		}
-	}
-	for cat, lasts := range src.Last {
-		for key, ts := range lasts {
-			if ts.After(dst.Last[cat][key]) {
-				dst.Last[cat][key] = ts
-			}
-		}
-	}
-	for cat, errs := range src.Errors {
-		for key, count := range errs {
-			dst.Errors[cat][key] += count
-		}
-	}
-	for cat, lasts := range src.LastAttempt {
-		for key, ts := range lasts {
-			if ts.After(dst.LastAttempt[cat][key]) {
-				dst.LastAttempt[cat][key] = ts
-			}
-		}
-	}
-	for key, projs := range src.SkillProjects {
-		if dst.SkillProjects[key] == nil {
-			dst.SkillProjects[key] = map[string]int{}
-		}
-		for proj, count := range projs {
-			dst.SkillProjects[key][proj] += count
-		}
-	}
-	for key, p := range src.MCPPayload {
-		d := dst.MCPPayload[key]
-		d.Calls += p.Calls
-		d.TotalChars += p.TotalChars
-		d.NoiseChars += p.NoiseChars
-		dst.MCPPayload[key] = d
-	}
+	usage.MergeInto(dst, src)
 }
 
 func cmdReport(opts options, stdout, stderr io.Writer) int {
@@ -882,6 +1118,7 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		col := colorEnabled(opts, stdout)
 		report.RenderText(stdout, r, col)
 		tryShowStarCta(opts, stdout, r, col)
+		report.RenderReinvestHint(stdout, report.ReinvestPath(), col)
 		// Permanent signature, deliberately outside every nudge gate above.
 		// Living in this branch is what excludes it from --json/--md/--quiet.
 		report.RenderFooter(stdout, col)
@@ -936,26 +1173,22 @@ func cmdGap(opts options, stdout, stderr io.Writer) int {
 }
 
 func colorEnabled(opts options, w io.Writer) bool {
-	if opts.noColor || os.Getenv("NO_COLOR") != "" {
+	if opts.noColor || os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
 		return false
 	}
-	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
+	return tty.IsTerminal(w)
 }
 
 func cmdKeepRemove(opts options, name string, stdout, stderr io.Writer) int {
 	if !requireClaudeDir(opts, stderr) {
 		return 1
 	}
-	if err := override.RemoveKeep(opts.claudeDir, name); err != nil {
+	removed, err := override.RemoveKeep(opts.claudeDir, name)
+	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "removed keep: %s\n", name)
+	fmt.Fprintf(stdout, "removed keep: %s\n", removed)
 	return 0
 }
 
@@ -1000,422 +1233,163 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "marked as keep: %s\n", itemKey)
+	// The key is one name, so it holds every copy of that name on every platform.
+	for _, row := range r.Rows {
+		if override.ItemKey(string(row.Category), row.Name) == itemKey {
+			fmt.Fprintf(stdout, "  covers %s: %s\n", row.Platform, row.Path)
+		}
+	}
 	fmt.Fprintf(stdout, "This item will be excluded from prune. Undo: reap keep --remove %s\n", itemKey)
 	return 0
 }
 
-func cmdPrune(opts options, stdin io.Reader, stdout, stderr io.Writer) int {
-	if !requireClaudeDir(opts, stderr) {
-		return 1
+// findItem locates the row a named prune or delete acts on. See findRow for how a
+// name is read. A name that reaches a removable row means that row, as it always
+// did; only a name that reaches nothing else goes on to a plugin's item, a link or
+// a shared folder. A server of a config reap cannot edit is not offered at all.
+func findItem(r *report.Report, name string) ([]report.Row, error) {
+	return findPreferring(r, name, func(row report.Row) bool {
+		return row.Category == scan.CatSkill || row.Category == scan.CatAgent ||
+			row.Category == scan.CatMCP && (row.Removable || report.IsPluginSource(row.Source))
+	})
+}
+
+// findMutable is findItem for what has a description to strip: skills and agents.
+func findMutable(r *report.Report, name string) ([]report.Row, error) {
+	return findPreferring(r, name, func(row report.Row) bool {
+		return row.Category == scan.CatSkill || row.Category == scan.CatAgent
+	})
+}
+
+// findPreferring looks among the removable rows first, then among all of them.
+func findPreferring(r *report.Report, name string, eligible func(report.Row) bool) ([]report.Row, error) {
+	rows, err := findRow(r, name, func(row report.Row) bool { return row.Removable && eligible(row) })
+	if err != nil || len(rows) > 0 {
+		return rows, err
 	}
-	r, err := gather(opts)
+	return findRow(r, name, eligible)
+}
+
+// findRow reads a typed name: a path to the item, or its invocation key with an
+// optional platform and category in front ("codex:skill:plan"), or the bare
+// suffix of a namespaced key ("plan" for "ecc:plan"). One name can be several
+// items, and which one is not this tool's to guess, so several matches come back
+// as an error listing how to name each.
+func findRow(r *report.Report, typed string, eligible func(report.Row) bool) ([]report.Row, error) {
+	plat, cat, name := splitSelector(typed)
+	var exact, leaf []report.Row
+	for _, row := range r.Rows {
+		if !eligible(row) || (plat != "" && row.Platform != plat) || (cat != "" && string(row.Category) != cat) {
+			continue
+		}
+		switch i := strings.LastIndexByte(row.Name, ':'); {
+		case row.Path == typed, row.Name == name:
+			exact = append(exact, row)
+		case i >= 0 && row.Name[i+1:] == name:
+			leaf = append(leaf, row)
+		}
+	}
+	matches := exact
+	if len(matches) == 0 {
+		matches = leaf
+	}
+	if len(matches) < 2 {
+		return matches, nil
+	}
+	// A shared folder is listed once per tool reading it, and it is one item.
+	if matches[0].Path != "" && !slices.ContainsFunc(matches, func(m report.Row) bool { return m.Path != matches[0].Path }) {
+		return matches[:1], nil
+	}
+	lines := make([]string, len(matches))
+	for i, m := range matches {
+		lines[i] = fmt.Sprintf("  %s:%s:%s  %s", m.Platform, m.Category, m.Name, m.Path)
+	}
+	return nil, fmt.Errorf("%s matches %d items; name one of them, by this form or by its path:\n%s", typed, len(matches), strings.Join(lines, "\n"))
+}
+
+// splitSelector takes a known platform and a known category off the front of a
+// typed name. Anything else stays part of the name.
+func splitSelector(typed string) (plat, cat, name string) {
+	name = typed
+	if head, rest, ok := strings.Cut(name, ":"); ok {
+		for _, p := range platform.All() {
+			if string(p.ID) == head {
+				plat, name = head, rest
+				break
+			}
+		}
+	}
+	if head, rest, ok := strings.Cut(name, ":"); ok {
+		for _, c := range []scan.Category{scan.CatSkill, scan.CatAgent, scan.CatMCP} {
+			if string(c) == head {
+				cat, name = head, rest
+				break
+			}
+		}
+	}
+	return plat, cat, name
+}
+
+// exitNotDone is the status of a question not answered yes: nothing ran, which a
+// wrapping script has to be able to tell from a run that did.
+const exitNotDone = 3
+
+// openTTY is the terminal to ask on when stdin is something else. It is a variable
+// so a test can stand in for having no terminal.
+var openTTY = func() (*os.File, error) { return os.OpenFile("/dev/tty", os.O_RDWR, 0) }
+
+// answerSource is where a yes may come from: the person at the terminal, never a
+// line of data. A loop's list on stdin is that loop's data, and a line in it
+// reading "yes" is not consent. With no terminal there is nobody to ask.
+func answerSource(stdin io.Reader) (io.Reader, func()) {
+	f, isFile := tty.FileOf(stdin)
+	if !isFile {
+		return stdin, func() {} // an in-process caller's own reader
+	}
+	if tty.IsTerminal(f) {
+		return f, func() {}
+	}
+	t, err := openTTY()
 	if err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
+		return nil, func() {}
 	}
-
-	var candidates []report.Row
-	var skipped int
-	var dead []report.Row
-	for _, row := range r.Rows {
-		if row.Verdict != report.VerdictReap {
-			continue
-		}
-		// dead is every unused item, removable or not; candidates is what this
-		// run will act on. The by-source summary is built from dead on purpose:
-		// most of the weight is usually plugin items that reap cannot remove,
-		// and a summary of only the removable ones would show three small
-		// sources while the plugin holding 90% of the tokens went unmentioned.
-		dead = append(dead, row)
-		if !row.Removable {
-			skipped++
-			continue
-		}
-		if opts.source != "" && row.Source != opts.source {
-			continue
-		}
-		candidates = append(candidates, row)
-	}
-
-	if opts.source != "" && len(candidates) == 0 && len(dead) > 0 {
-		fmt.Fprintf(stderr, "error: no removable unused items from source %q\n", opts.source)
-		fmt.Fprintln(stderr, "sources with unused items:")
-		for _, t := range report.SourceTotals(dead) {
-			fmt.Fprintf(stderr, "  %s — %d of %d removable\n", t.Source, t.Removable, t.Items)
-		}
-		return 1
-	}
-
-	// --json and --quiet are non-interactive by definition: a confirmation
-	// prompt cannot be answered on a stream someone is piping into jq, and it
-	// cannot even be read on one they silenced. Both therefore describe the plan
-	// and stop unless --yes was given as well.
-	machine := opts.asJSON || opts.quiet
-
-	totalTok := 0
-	for _, row := range candidates {
-		totalTok += row.Tokens
-	}
-
-	if len(candidates) == 0 {
-		switch {
-		case opts.asJSON:
-			return writePruneJSON(stdout, stderr, nil, 0, skipped, false, nil)
-		case opts.quiet:
-			return 0
-		}
-		fmt.Fprintln(stdout, "Nothing to reap. Your stack is clean (or evidence is insufficient).")
-		if skipped > 0 {
-			fmt.Fprintf(stdout, "%d unused plugin items can only be disabled via /plugin in Claude Code.\n", skipped)
-		}
-		return 0
-	}
-
-	if !machine {
-		fmt.Fprintf(stdout, "\n🧹  %d items unused · reclaim ~%s tok/session\n\n", len(candidates), humanTok(totalTok))
-		// A list of N dead items reads as N decisions. Grouped by where they
-		// came from it usually is not: one plugin tends to account for most of
-		// the weight, so the real choice is between a handful of sources.
-		// Printed only when there is more than one, and only when the run is
-		// not already scoped to a single source.
-		if opts.source == "" {
-			report.RenderSourceTotals(stdout, report.SourceTotals(dead), len(dead), humanTok)
-		}
-		for _, row := range candidates {
-			weight := fmt.Sprintf("~%d tok", row.Tokens)
-			if row.Category == scan.CatMCP || row.Category == scan.CatHook {
-				weight = "?"
-			}
-			fmt.Fprintf(stdout, "  %-6s  %-40s  %s\n", row.Category, row.Name, weight)
-		}
-		if skipped > 0 {
-			fmt.Fprintf(stdout, "\n  (%d unused plugin items skipped — disable via /plugin)\n", skipped)
-		}
-	}
-
-	if !opts.yes {
-		if machine {
-			// Nothing was touched: report the plan and leave the tree alone.
-			if opts.asJSON {
-				return writePruneJSON(stdout, stderr, candidates, totalTok, skipped, false, nil)
-			}
-			return 0
-		}
-		prompt := fmt.Sprintf("\nPrune all %d items? This quarantines them (reversible). [Y/n] ", len(candidates))
-		if opts.source != "" {
-			// Naming the source in the prompt matters more than usual: the
-			// number is smaller than the one the report showed, and without
-			// the reason for that a smaller number reads like a miscount.
-			prompt = fmt.Sprintf("\nPrune %d items from %s? This quarantines them (reversible). [Y/n] ",
-				len(candidates), opts.source)
-		}
-		if !confirm(stdin, stdout, prompt) {
-			fmt.Fprintln(stdout, "aborted")
-			return 0
-		}
-	}
-
-	selected := candidates
-	// Serialise against other prunes on this directory. Quarantine is a
-	// read-modify-write of the manifest, so two runs finishing at once leave
-	// one set of moved files with no manifest entry — present in reaped/ and
-	// invisible to restore. Measured before this lock existed: 501 skills in,
-	// 148 restored after six concurrent runs.
-	lock, lockErr := prune.AcquireLock(opts.claudeDir)
-	if lockErr != nil {
-		if errors.Is(lockErr, prune.ErrLocked) {
-			fmt.Fprintln(stderr, "error: another prune is running against this directory; wait for it to finish")
-			return 1
-		}
-		fmt.Fprintf(stderr, "error: could not take the prune lock: %v\n", lockErr)
-		return 1
-	}
-	defer lock.Release()
-
-	var done []prune.Entry
-	// Items another process moved out from under this run. With the lock held
-	// this should be empty; it stays handled because a file can still be
-	// removed by hand between the report and the move.
-	var alreadyGone []string
-	for _, row := range selected {
-		var e prune.Entry
-		var err error
-		switch row.Category {
-		case scan.CatMCP:
-			scope := ""
-			if strings.HasPrefix(row.Source, "project:") {
-				scope = strings.TrimPrefix(row.Source, "project:")
-			}
-			e, err = prune.RemoveMCP(opts.claudeDir, row.Path, scope, row.Name)
-		default:
-			e, err = prune.QuarantineItem(opts.claudeDir, row.Item)
-		}
-		if err != nil {
-			// An item that vanished between the report and the move is not a
-			// failure of this run: a concurrent prune, or a manual removal,
-			// got there first. Aborting here left the earlier items
-			// quarantined and the later ones untouched, on an error message
-			// that named a missing file rather than the race that caused it.
-			if errors.Is(err, prune.ErrAlreadyGone) {
-				alreadyGone = append(alreadyGone, row.Name)
-				continue
-			}
-			fmt.Fprintf(stderr, "error reaping %s: %v\n", row.Name, err)
-			return 1
-		}
-		done = append(done, e)
-		if !machine {
-			fmt.Fprintf(stdout, "reaped %s %s (id %s)\n", row.Category, row.Name, e.ID)
-		}
-	}
-	if opts.asJSON {
-		return writePruneJSON(stdout, stderr, selected, totalTok, skipped, true, done)
-	}
-	if opts.quiet {
-		return 0
-	}
-	if len(alreadyGone) > 0 {
-		fmt.Fprintf(stderr, "skipped %d item(s) another process had already moved (e.g. %s); a second prune may be running\n",
-			len(alreadyGone), alreadyGone[0])
-	}
-	fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore --all (or a single id)\n")
-	col := colorEnabled(opts, stdout)
-	// len(done), not len(candidates): with already-gone items skipped rather
-	// than aborting the run, the two can differ, and the saving claimed has to
-	// be the saving actually made.
-	report.RenderValueFeedback(stdout, "pruned", len(done), totalTok, r.SessionsPerMonth, opts.price, col)
-	tryShowShareHint(opts, stdout, col)
-	tryShowStarCta(opts, stdout, r, col)
-	return 0
+	return t, func() { t.Close() }
 }
 
-// writePruneJSON emits the prune plan, or its result when --yes carried it out,
-// as a single JSON document. Applied is explicit rather than implied by a
-// non-empty entries list: a plan over zero candidates and a completed prune of
-// zero candidates are different facts, and a caller checking whether its disk
-// changed should not have to infer which one it got.
-func writePruneJSON(w, stderr io.Writer, candidates []report.Row, totalTok, skipped int, applied bool, done []prune.Entry) int {
-	type item struct {
-		Category string `json:"category"`
-		Name     string `json:"name"`
-		Tokens   int    `json:"tokens"`
-		Path     string `json:"path,omitempty"`
+// confirm prints prompt to stderr and reads a yes/no answer from the terminal.
+// Only y/yes is a yes: a bare Enter is a no, since this guards actions on many
+// items. The question goes to stderr so it is on the screen when stdout is
+// redirected, and keys pressed before it appeared do not answer it.
+func confirm(stdin io.Reader, stderr io.Writer, prompt string) bool {
+	fmt.Fprint(stderr, prompt)
+	src, done := answerSource(stdin)
+	defer done()
+	if src == nil {
+		fmt.Fprintln(stderr, "\nno terminal to ask on; pass --yes to go ahead")
+		return false
 	}
-	type entry struct {
-		ID       string `json:"id"`
-		Name     string `json:"name"`
-		Category string `json:"category"`
-	}
-	out := struct {
-		Candidates         []item  `json:"candidates"`
-		TotalTokens        int     `json:"total_tokens"`
-		SkippedPluginItems int     `json:"skipped_plugin_items"`
-		Applied            bool    `json:"applied"`
-		Pruned             []entry `json:"pruned"`
-	}{
-		Candidates:         make([]item, 0, len(candidates)),
-		TotalTokens:        totalTok,
-		SkippedPluginItems: skipped,
-		Applied:            applied,
-		Pruned:             make([]entry, 0, len(done)),
-	}
-	for _, row := range candidates {
-		out.Candidates = append(out.Candidates, item{
-			Category: string(row.Category), Name: row.Name, Tokens: row.Tokens, Path: row.Path,
-		})
-	}
-	for i, e := range done {
-		name, cat := e.ID, ""
-		if i < len(candidates) {
-			name, cat = candidates[i].Name, string(candidates[i].Category)
-		}
-		out.Pruned = append(out.Pruned, entry{ID: e.ID, Name: name, Category: cat})
-	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(out); err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
-	return 0
-}
-
-func cmdRestore(opts options, args []string, stdout, stderr io.Writer) int {
-	if !requireClaudeDir(opts, stderr) {
-		return 1
-	}
-	if opts.all {
-		n, err := prune.RestoreAll(opts.claudeDir)
-		if err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "restored %d items\n", n)
-		return 0
-	}
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: reap restore <id>|--all")
-		return 2
-	}
-	if err := prune.Restore(opts.claudeDir, args[0]); err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
-	fmt.Fprintf(stdout, "restored %s\n", args[0])
-	return 0
-}
-
-// findItem locates a skill or agent row by its exact invocation key, then by
-// the bare suffix of a namespaced key (so "plan" matches "ecc:plan"). Both
-// categories are mutable, so `reap mute <name>` resolves either.
-func findItem(r *report.Report, name string) (report.Row, bool) {
-	mutable := func(row report.Row) bool {
-		return row.Removable && (row.Category == scan.CatSkill || row.Category == scan.CatAgent)
-	}
-	for _, row := range r.Rows {
-		if mutable(row) && row.Name == name {
-			return row, true
-		}
-	}
-	matches := make([]report.Row, 0, 2)
-	for _, row := range r.Rows {
-		if !mutable(row) {
-			continue
-		}
-		if i := strings.LastIndexByte(row.Name, ':'); i >= 0 && row.Name[i+1:] == name {
-			matches = append(matches, row)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], true
-	}
-	return report.Row{}, false
-}
-
-// confirm prints prompt to stdout and reads a yes/no answer from stdin. A bare
-// Enter (empty line) counts as yes; anything other than y/yes is a no.
-func confirm(stdin io.Reader, stdout io.Writer, prompt string) bool {
-	fmt.Fprint(stdout, prompt)
-	sc := bufio.NewScanner(stdin)
+	tty.FlushInput(src)
+	sc := bufio.NewScanner(src)
 	if !sc.Scan() {
 		return false
 	}
 	line := strings.ToLower(strings.TrimSpace(sc.Text()))
-	return line == "" || line == "y" || line == "yes"
-}
-
-func muteEligible(row report.Row) bool {
-	return row.Path != "" &&
-		row.Removable &&
-		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
-		(row.Verdict == report.VerdictReap || row.Verdict == report.VerdictMute)
-}
-
-func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if !requireClaudeDir(opts, stderr) {
-		return 1
-	}
-	r, err := gather(opts)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
-
-	// Named single mute: reap mute <name>. Mutes the named skill or agent
-	// regardless of verdict (the user asked for it explicitly).
-	if len(args) > 0 {
-		row, ok := findItem(r, args[0])
-		if !ok {
-			fmt.Fprintf(stderr, "no skill or agent found: %s\n", args[0])
-			return 1
-		}
-		if err := mute.Mute(opts.claudeDir, row.RootDir, row.Name, row.Path); err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "muted %s — description stripped (~%d tok/session saved)\n", row.Name, row.Tokens)
-		fmt.Fprintf(stdout, "Undo: reap unmute %s\n", row.Name)
-		col := colorEnabled(opts, stdout)
-		report.RenderValueFeedback(stdout, "muted", 1, row.Tokens, r.SessionsPerMonth, opts.price, col)
-		tryShowShareHint(opts, stdout, col)
-		return 0
-	}
-
-	// Bulk mute: reap mute (bare) or reap mute --all. Like prune, this rewrites
-	// many files, so preview the candidates and confirm before acting.
-	var candidates []report.Row
-	for _, row := range r.Rows {
-		if muteEligible(row) {
-			candidates = append(candidates, row)
-		}
-	}
-	if len(candidates) == 0 {
-		fmt.Fprintln(stdout, "Nothing to mute.")
-		return 0
-	}
-	fmt.Fprintf(stdout, "\n%d items eligible to mute (strips the injected description; reversible):\n", len(candidates))
-	for _, row := range candidates {
-		fmt.Fprintf(stdout, "  %-6s  %-40s  ~%d tok/session\n", row.Category, row.Name, row.Tokens)
-	}
-	if !opts.yes {
-		if !confirm(stdin, stdout, fmt.Sprintf("\nMute all %d items? This strips their descriptions (reversible). [Y/n] ", len(candidates))) {
-			fmt.Fprintln(stdout, "aborted")
-			return 0
-		}
-	}
-	muted, totalTok := 0, 0
-	for _, row := range candidates {
-		if err := mute.Mute(opts.claudeDir, row.RootDir, row.Name, row.Path); err != nil {
-			if errors.Is(err, mute.ErrAlreadyMuted) {
-				continue
-			}
-			fmt.Fprintf(stderr, "error muting %s: %v\n", row.Name, err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "muted %s (~%d tok/session)\n", row.Name, row.Tokens)
-		muted++
-		totalTok += row.Tokens
-	}
-	fmt.Fprintf(stdout, "\nmuted %d items · ~%s tok/session reclaimed\n", muted, humanTok(totalTok))
-	col := colorEnabled(opts, stdout)
-	report.RenderValueFeedback(stdout, "muted", muted, totalTok, r.SessionsPerMonth, opts.price, col)
-	tryShowShareHint(opts, stdout, col)
-	return 0
-}
-
-func cmdUnmute(opts options, args []string, stdout, stderr io.Writer) int {
-	if !requireClaudeDir(opts, stderr) {
-		return 1
-	}
-	if opts.all {
-		n, err := mute.UnmuteAll(opts.claudeDir)
-		if err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "unmuted %d skills\n", n)
-		return 0
-	}
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: reap unmute <name>|--all")
-		return 2
-	}
-	if err := mute.Unmute(opts.claudeDir, args[0]); err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
-	fmt.Fprintf(stdout, "unmuted %s\n", args[0])
-	return 0
+	return line == "y" || line == "yes"
 }
 
 func cmdInstallHook(opts options, stdout, stderr io.Writer) int {
 	if !requireClaudeDir(opts, stderr) {
 		return 1
 	}
+	if !opts.hasClaudeCode {
+		fmt.Fprintln(stderr, "error: the nudge hook is a Claude Code feature, and no Claude Code directory was found")
+		return 1
+	}
 	settings := filepath.Join(opts.claudeDir, "settings.json")
-	exe, err := os.Executable()
-	if err != nil || exe == "" {
-		exe = "reap"
+	exe, err := hookExecutable(stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
 	}
 	out, err := hook.Install(settings, hook.Command(exe), opts.dryRun)
 	if err != nil {
@@ -1429,6 +1403,26 @@ func cmdInstallHook(opts options, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "installed SessionStart nudge hook in %s\n", settings)
 	fmt.Fprintf(stdout, "Undo: reap uninstall-hook\n")
 	return 0
+}
+
+// wrapperEnv is how the npm wrapper names itself. The binary it starts lives
+// inside the package and is replaced or removed on upgrade, while the wrapper's
+// path stays, and the wrapper fetches the binary again when it is missing.
+const wrapperEnv = "SKILLREAPER_WRAPPER"
+
+// hookExecutable is the path a hook should call for this install.
+func hookExecutable(stderr io.Writer) (string, error) {
+	if w := os.Getenv(wrapperEnv); w != "" {
+		if strings.Contains(filepath.ToSlash(w), "/_npx/") {
+			fmt.Fprintf(stderr, "warning: this is running from npx's cache, which can be cleared at any time, and the hook would then stop working. A permanent install avoids that: npm i -g skillreaper\n")
+		}
+		return w, nil
+	}
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return "reap", nil
+	}
+	return exe, nil
 }
 
 func cmdUninstallHook(opts options, stdout, stderr io.Writer) int {
@@ -1459,7 +1453,7 @@ func cmdNudge(opts options, stdout, stderr io.Writer) int {
 	if !hook.ShouldNudge(now, r.DeadCount, r.MuteCount, st) {
 		return 0
 	}
-	fmt.Fprintf(stderr, "skillreaper: %d skills flagged for pruning since last check. Run `reap` to review.\n", r.DeadCount)
+	fmt.Fprintf(stderr, "skillreaper: %d %s flagged for pruning since last check. Run `reap` to review.\n", r.DeadCount, report.Plural(r.DeadCount, "skill"))
 	st.LastNudgeAt = now
 	st.LastReapCount = r.DeadCount
 	st.LastMuteCount = r.MuteCount
@@ -1579,7 +1573,7 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "no item found: %s\n", args[0])
 		return 1
 	}
-	if len(matches) > 1 {
+	if !sameItemOnPlatforms(matches) {
 		fmt.Fprintf(stderr, "ambiguous: %q matches multiple items:\n", args[0])
 		for _, m := range matches {
 			fmt.Fprintf(stderr, "  %s\n", report.CanonicalName(m))
@@ -1587,40 +1581,58 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "qualify with a category, e.g. skill:<name>")
 		return 1
 	}
-	row := matches[0]
 
-	muted := false
-	if names, e := mute.List(opts.claudeDir); e == nil {
-		for _, n := range names {
-			if n == row.Name {
-				muted = true
-				break
-			}
-		}
-	}
 	cwd, _ := os.Getwd()
 	home, _ := os.UserHomeDir()
-	claudeMD := scan.ClaudeMDReferences(scan.LoadClaudeMD(cwd, home), row.Name)
-
-	e := report.BuildExplanation(row, r.Sessions, report.ExplainInput{
-		MinSessions:   opts.minSessions,
-		GraceDays:     opts.graceDays,
-		MuteThreshold: opts.muteThreshold,
-		WindowDays:    opts.days,
-		Muted:         muted,
-		ClaudeMDRef:   claudeMD,
-		Now:           clock.Now(),
-	})
-
+	claudeLines := scan.LoadClaudeMD(cwd, home, opts.claudeDir)
+	explain := func(row report.Row) report.Explanation {
+		muted, _ := mutedSet(opts.claudeDir, []scan.Item{row.Item})
+		return report.BuildExplanation(row, r.Sessions, report.ExplainInput{
+			MinSessions:   opts.minSessions,
+			GraceDays:     opts.graceDays,
+			MuteThreshold: opts.muteThreshold,
+			WindowDays:    opts.days,
+			Muted:         muted[row.Path],
+			ClaudeMDRef:   scan.ClaudeMDReferences(claudeLines, row.Name),
+			Now:           clock.Now(),
+		})
+	}
+	// One name on several platforms is several items with one answer each, and
+	// there is no finer name to ask for: show them all.
 	if opts.asJSON {
-		if err := report.RenderWhyJSON(stdout, e); err != nil {
+		var err error
+		if len(matches) == 1 {
+			err = report.RenderWhyJSON(stdout, explain(matches[0]))
+		} else {
+			all := make([]report.Explanation, len(matches))
+			for i, m := range matches {
+				all[i] = explain(m)
+			}
+			err = report.WriteJSON(stdout, all)
+		}
+		if err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			return 1
 		}
 		return 0
 	}
-	report.RenderWhy(stdout, e, colorEnabled(opts, stdout))
+	for _, m := range matches {
+		if len(matches) > 1 {
+			fmt.Fprintf(stdout, "%s: %s\n", m.Platform, m.Path)
+		}
+		report.RenderWhy(stdout, explain(m), colorEnabled(opts, stdout))
+	}
 	return 0
+}
+
+// sameItemOnPlatforms reports rows that differ only in where they live.
+func sameItemOnPlatforms(rows []report.Row) bool {
+	for _, r := range rows {
+		if r.Category != rows[0].Category || r.Name != rows[0].Name {
+			return false
+		}
+	}
+	return true
 }
 
 func cmdShare(opts options, stdout, stderr io.Writer) int {
@@ -1629,14 +1641,25 @@ func cmdShare(opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	total := r.DeadTokensPerSession + r.MuteTokensPerSession
+	could := r.DeadTokensPerSession + r.MuteTokensPerSession
+	cut := 0
+	if entries, err := prune.LoadManifest(opts.claudeDir); err == nil {
+		for _, e := range entries {
+			if !e.Restored {
+				cut += e.Tokens
+			}
+		}
+	}
 	switch {
 	case opts.asJSON:
-		report.RenderShareJSON(stdout, total)
+		if err := report.RenderShareJSON(stdout, cut, could); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
 	case opts.asMarkdown:
-		report.RenderShareMarkdown(stdout, total)
+		report.RenderShareMarkdown(stdout, cut, could)
 	default:
-		report.RenderShareText(stdout, total)
+		report.RenderShareText(stdout, cut, could)
 	}
 	return 0
 }
@@ -1645,45 +1668,79 @@ func cmdShare(opts options, stdout, stderr io.Writer) int {
 // no measurement of its own: the payload is exactly what --json prints, so a
 // snapshot can never disagree with the run that produced it.
 func cmdSnapshot(opts options, stdout, stderr io.Writer) int {
-	r, err := gather(opts)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
-	path, err := snapshot.Save(opts.claudeDir, r, clock.Now())
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
-	fmt.Fprintf(stdout, "snapshot written: %s\n", path)
-	return 0
-}
-
-// cmdDiff compares two snapshots. With no arguments it takes the newest two,
-// which is the question people actually have; naming both is for going further
-// back. Snapshots are never taken automatically - unasked-for state is the
-// disease this tool treats - so an empty history says how to start one rather
-// than reporting nothing.
-func cmdDiff(opts options, args []string, stdout, stderr io.Writer) int {
-	var from, to string
-	switch len(args) {
-	case 0, 1:
+	if opts.listKeep {
 		saved, err := snapshot.List(opts.claudeDir)
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			return 1
 		}
-		if len(saved) < 2 {
-			fmt.Fprintf(stderr, "need two snapshots to compare, found %d. take one with: reap snapshot\n", len(saved))
+		for _, p := range saved {
+			fmt.Fprintln(stdout, snapshot.Name(p))
+		}
+		return 0
+	}
+	r, err := gather(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	path, err := snapshot.Save(opts.claudeDir, r, clock.Now(), snapshotSettings(opts))
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if opts.asJSON {
+		if err := report.WriteJSON(stdout, map[string]string{"path": path, "name": snapshot.Name(path)}); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	fmt.Fprintf(stdout, "snapshot written: %s\n", path)
+	return 0
+}
+
+// snapshotSettings are the options that decide a verdict, kept with a snapshot so
+// a diff can say when two were judged differently.
+func snapshotSettings(opts options) map[string]string {
+	return map[string]string{
+		"--days":            strconv.Itoa(opts.days),
+		"--min-sessions":    strconv.Itoa(opts.minSessions),
+		"--grace-days":      strconv.Itoa(opts.graceDays),
+		"--min-tokens":      strconv.Itoa(opts.minTokens),
+		"--mute-threshold":  trimFloat(opts.muteThreshold),
+		"--mute-min-tokens": strconv.Itoa(opts.muteMinTokens),
+	}
+}
+
+// cmdDiff compares two snapshots. With no arguments it takes the newest two,
+// which is the question people actually have; naming both is for going further
+// back. A name is what the diff itself prints, or a path. Snapshots are never
+// taken automatically - unasked-for state is the disease this tool treats - so
+// an empty history says how to start one rather than reporting nothing.
+func cmdDiff(opts options, args []string, stdout, stderr io.Writer) int {
+	var from, to string
+	if len(args) == 2 {
+		from, to = snapshot.Resolve(opts.claudeDir, args[0]), snapshot.Resolve(opts.claudeDir, args[1])
+	} else {
+		want := 2 - len(args)
+		saved, skipped, err := snapshot.Newest(opts.claudeDir, want, clock.Now())
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
+		for _, msg := range skipped {
+			fmt.Fprintf(stderr, "warning: skipped %s\n", msg)
+		}
+		if len(saved) < want {
+			fmt.Fprintf(stderr, "need %d %s to compare, found %d. take one with: reap snapshot\n", want, report.Plural(want, "more snapshot"), len(saved))
 			return 1
 		}
 		if len(args) == 1 {
-			from, to = args[0], saved[len(saved)-1]
+			from, to = snapshot.Resolve(opts.claudeDir, args[0]), saved[0]
 		} else {
-			from, to = saved[len(saved)-2], saved[len(saved)-1]
+			from, to = saved[0], saved[1]
 		}
-	default:
-		from, to = args[0], args[1]
 	}
 
 	a, err := snapshot.Load(from)
@@ -1697,7 +1754,8 @@ func cmdDiff(opts options, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	d := snapshot.Compare(a, b, from, to, snapshot.PrunedKeys(opts.claudeDir))
+	d := snapshot.Compare(a.Report, b.Report, from, to, snapshot.PrunedAt(opts.claudeDir))
+	d.Warnings = snapshot.Warnings(a, b)
 	if opts.asJSON {
 		if err := snapshot.RenderJSON(stdout, d); err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
@@ -1734,15 +1792,6 @@ func tryShowShareHint(opts options, stdout io.Writer, color bool) {
 	st.LastShareHintAt = now
 	st.ShareHintCount++
 	_ = hook.SaveNudgeState(opts.claudeDir, st)
-}
-
-func humanTok(n int) string {
-	switch {
-	case n >= 1000:
-		return fmt.Sprintf("%.1fk", float64(n)/1000)
-	default:
-		return fmt.Sprintf("%d", n)
-	}
 }
 
 // isNudgeDisabled checks whether the user has opted out of the star-CTA

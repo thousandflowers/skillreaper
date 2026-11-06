@@ -47,14 +47,13 @@ func TestVerdictRareIsNotDead(t *testing.T) {
 		}
 	})
 
-	t.Run("an item that only ever errored is still broken", func(t *testing.T) {
+	t.Run("a history of real use outranks errors", func(t *testing.T) {
 		opts := base
 		opts.ErrorCount = 4
 		opts.HistoricalUses = 9
-		// Step 2 comes first: concrete evidence of failure outranks history.
 		v, r := Verdict(0, 20, 500, installed, opts)
-		if v != VerdictReap || r != ReasonBroken {
-			t.Errorf("got %s(%s), want REAP(broken)", v, r)
+		if v != VerdictReview || r != ReasonRare {
+			t.Errorf("got %s(%s), want REVIEW(rare)", v, r)
 		}
 	})
 
@@ -89,6 +88,34 @@ func TestHistoryOnlyEverSpares(t *testing.T) {
 			if a != VerdictReap && b == VerdictReap {
 				t.Errorf("uses=%d hist=%d: history turned %s into REAP", uses, hist, a)
 			}
+		}
+	}
+}
+
+func TestBrokenNeedsRepeatedFailuresAndComesAfterTheGates(t *testing.T) {
+	cutoff := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	old := cutoff.AddDate(-1, 0, 0)
+	base := VerdictOpts{MinSessions: 10, GraceDays: 14, MinTokens: 3, WindowDays: 30, Cutoff: cutoff}
+	with := func(f func(*VerdictOpts)) VerdictOpts {
+		o := base
+		f(&o)
+		return o
+	}
+	cases := []struct {
+		name     string
+		sessions int
+		opts     VerdictOpts
+		verdict  string
+		reason   string
+	}{
+		{"one error says little", 50, with(func(o *VerdictOpts) { o.ErrorCount = 1 }), VerdictReap, ReasonUnused},
+		{"two errors are broken", 50, with(func(o *VerdictOpts) { o.ErrorCount = 2 }), VerdictReap, ReasonBroken},
+		{"thin evidence first", 1, with(func(o *VerdictOpts) { o.ErrorCount = 5 }), VerdictReview, ReasonNeedsData},
+		{"history first", 50, with(func(o *VerdictOpts) { o.ErrorCount = 5; o.HistoricalUses = 1 }), VerdictReview, ReasonRare},
+	}
+	for _, c := range cases {
+		if v, r := Verdict(0, c.sessions, 100, old, c.opts); v != c.verdict || r != c.reason {
+			t.Errorf("%s: %s(%s), want %s(%s)", c.name, v, r, c.verdict, c.reason)
 		}
 	}
 }

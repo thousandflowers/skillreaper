@@ -49,7 +49,7 @@ func ScanHooks(dir, platformID string) ([]Item, []Warning) {
 						Platform:    platformID,
 						Source:      base,
 						Path:        path,
-						Description: h.Command,
+						Description: RedactSecrets(h.Command),
 						Removable:   false,
 					})
 					n++

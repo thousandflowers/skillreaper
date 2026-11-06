@@ -2,7 +2,6 @@ package report
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -71,7 +70,7 @@ func TestRenderSourceTotals(t *testing.T) {
 		sourceRow("personal", 5, true),
 	}
 	var b bytes.Buffer
-	RenderSourceTotals(&b, SourceTotals(rows), len(rows), func(n int) string { return fmt.Sprint(n) })
+	RenderSourceTotals(&b, SourceTotals(rows), len(rows))
 	out := b.String()
 
 	// A source reap cannot touch has to say so, or the summary points at the
@@ -93,8 +92,7 @@ func TestRenderSourceTotals(t *testing.T) {
 // above the list it summarises is noise.
 func TestRenderSourceTotalsSilentBelowTwo(t *testing.T) {
 	var b bytes.Buffer
-	RenderSourceTotals(&b, SourceTotals([]Row{sourceRow("personal", 1, true)}), 1,
-		func(n int) string { return fmt.Sprint(n) })
+	RenderSourceTotals(&b, SourceTotals([]Row{sourceRow("personal", 1, true)}), 1)
 	if b.Len() != 0 {
 		t.Errorf("want no output for a single source, got:\n%s", b.String())
 	}

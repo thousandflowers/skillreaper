@@ -131,11 +131,14 @@ mute, or hook edit leaves the original file intact, never a half-written mix.
 
 <sub><sup>1</sup> The only files a read-only command writes are skillreaper's
 own: <code>~/.claude/reaped/nudge-state.json</code>, which the default report
-touches so a hint it already showed you does not repeat, and the snapshot
-<code>reap snapshot</code> exists to write. Neither touches your stack. Pass
-<code>--no-nudge</code> (or set <code>SKILLREAPER_NO_NUDGE=1</code>) and not
-even that happens. No command in either column sends anything over the
-network.</sub>
+touches so a hint it already showed you does not repeat; a parsed-transcript
+cache in your user cache folder, which keeps the next run fast; an evidence
+record in your user config folder, which remembers uses older than your
+transcripts; and the snapshot <code>reap snapshot</code> exists to write. None of
+them touches your stack. <code>--no-nudge</code> (or
+<code>SKILLREAPER_NO_NUDGE=1</code>) turns off the first and
+<code>--no-cache</code> the second. No command in either column sends anything
+over the network.</sub>
 
 <br>
 
@@ -320,10 +323,15 @@ Upgrading, uninstalling, and platform-specific tips →
 reap                          # scan + report (read-only)
 reap gap                      # loaded-vs-fired utilization + MCP payload quality
 reap prune                    # quarantine REAP items (reversible)
+reap prune <name>             # quarantine that one item, whatever its verdict
 reap mute <name>              # strip description, keep skill available
+reap delete <name>            # remove one item for good (cannot be restored)
+reap unmute                   # list what is muted
 reap unmute <name>            # restore description from backup
 reap unmute --all             # restore all muted skills
 reap keep <name>              # protect an item from pruning
+reap restore                  # list what is pruned, with ids
+reap restore <id>             # undo one prune
 reap restore --all            # undo every prune
 reap why <name>               # explain in detail why an item got its verdict
 reap by-project               # skills bucketed by the project that fired them
@@ -688,6 +696,11 @@ Tracked as issues, grouped by the problem they solve.
   corpus ([#53](https://github.com/thousandflowers/skillreaper/issues/53));
   measuring wrong-tool picks
   ([#55](https://github.com/thousandflowers/skillreaper/issues/55)).
+- **Act on more than one stack shape** - group skills by domain and language,
+  then act on a group
+  ([#101](https://github.com/thousandflowers/skillreaper/issues/101)); move a
+  skill between user and workspace scope
+  ([#102](https://github.com/thousandflowers/skillreaper/issues/102)).
 - **Teams** - shared policy with verdicts that stay on each machine
   ([#89](https://github.com/thousandflowers/skillreaper/issues/89)), and a
   hosted view of them

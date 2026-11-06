@@ -28,7 +28,7 @@ import (
 // fixed value keeps piped output byte-stable between runs, which is what makes
 // it diffable.
 const (
-	minWidth      = 60
+	minWidth      = 40
 	maxWidth      = 100
 	fallbackWidth = 80
 )

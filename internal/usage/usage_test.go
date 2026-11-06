@@ -2,6 +2,7 @@ package usage
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,13 +45,12 @@ func TestParse(t *testing.T) {
 	writeTranscript(t, old,
 		`{"type":"assistant","timestamp":"2025-01-01T00:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"ancient"}}]}}`,
 	)
-	past := time.Now().AddDate(0, -6, 0)
+	past := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	if err := os.Chtimes(old, past, past); err != nil {
 		t.Fatal(err)
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -30)
-	st, err := Parse(dir, cutoff, 30)
+	st, err := Parse(dir, time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC), 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestParseOverlongLineMarksEvidenceIncomplete(t *testing.T) {
 		overlong,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestParseErrorTracking(t *testing.T) {
 		`{"type":"user","timestamp":"2026-06-01T10:01:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"ok"}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestParseSuccessfulResultMentioningErrorIsNotBroken(t *testing.T) {
 		`{"type":"user","timestamp":"2026-06-01T10:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"no error found in your code"}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestParseSkillProjects(t *testing.T) {
 		`{"type":"assistant","timestamp":"2026-06-03T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"shared-skill"}}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +297,7 @@ func TestParseUnreadableSubdirMarksEvidenceIncomplete(t *testing.T) {
 	}
 	defer os.Chmod(unreadable, 0o755)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -326,7 +326,7 @@ func TestParseMCPToolPrefixForms(t *testing.T) {
 		`{"type":"assistant","timestamp":"2026-06-01T10:03:00Z","message":{"content":[{"type":"tool_use","name":"mcp__claude_ai_Figma__get_metadata","input":{}}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +358,7 @@ func TestParseResumesAfterAnOverlongLine(t *testing.T) {
 		`{"type":"assistant","timestamp":"2026-06-01T10:02:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"after-skill"}}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,7 +437,7 @@ func TestParseMCPWeight(t *testing.T) {
 		`{"type":"attachment","timestamp":"2026-06-02T10:00:00Z","attachment":{"type":"deferred_tools_delta","addedNames":["mcp__blender__a","mcp__blender__bb","mcp__claude_ai_Figma__x"]}}`,
 		`{"type":"attachment","timestamp":"2026-06-02T10:00:01Z","attachment":{"type":"mcp_instructions_delta","addedNames":["claude.ai Figma"],"addedBlocks":["0123456789"]}}`,
 	)
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +484,7 @@ func TestParseSkillWeight(t *testing.T) {
 			"long", "ecc:plan", "ecc:x"),
 		listing("2026-06-02T10:05:00Z", false, "- late: added", "late"),
 	)
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,7 +513,7 @@ func TestParseCountsCommandNameOnlyInUserMessages(t *testing.T) {
 		`{"type":"assistant","timestamp":"2026-06-01T10:02:00Z","message":{"content":[{"type":"text","text":"<command-name>/saidbyassistant</command-name>"}]}}`,
 		`{"type":"api-request-blob","timestamp":"2026-06-01T10:03:00Z","message":{"content":[{"type":"text","text":"<command-name>/inblob</command-name>"}]}}`,
 	)
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,45 +526,125 @@ func TestParseCountsCommandNameOnlyInUserMessages(t *testing.T) {
 
 // A skill asked for in words is recorded apart from its uses. Only what the user
 // wrote counts: a subagent's prompt, pasted text and tool output do not.
-func TestParseRecordsRequestsByName(t *testing.T) {
-	dir := t.TempDir()
-	line := func(extra, content string) string {
-		b, err := json.Marshal(content)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return `{"type":"user","timestamp":"2026-06-01T10:00:00Z",` + extra + `"message":{"content":` + string(b) + `}}`
+
+// "N uses in 30 days" goes by each event's own time. A resumed session keeps old
+// lines in a file modified today: they stay out of the count and stay available
+// to the durable record. An event with no time has only its file's date.
+func TestWindowGoesByEachEventsOwnTime(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "p")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
-		line("", "usa graphify su questa cartella"),
-		line("", "lancia la skill Ponytail, grazie"),
-		line("", "please use `ecc:plan` here"),
-		line("", "the deploy skill is what I want"),
-		line("", "usa graphify e poi basta"),
-		line("", "graphify ha un bug nel parser"),
-		line("", "because reviewer is slow"),
-		line(`"isSidechain":true,`, "use subagentonly now"),
-		line(`"isMeta":true,`, "use metaonly now"),
-		line("", "guarda <pasted_content id=\"1\">use pastedonly now</pasted_content>"),
-		line("", "guarda\n```\nuse fencedonly now\n```"),
-		`{"type":"user","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"t","content":"use resultonly now"}]}}`,
-	)
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	now := time.Now().UTC()
+	line := func(skill, ts string) string {
+		field := ""
+		if ts != "" {
+			field = `"timestamp":"` + ts + `",`
+		}
+		return `{"type":"assistant","sessionId":"s",` + field + `"message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"` + skill + `"}}]}}` + "\n"
+	}
+	old := now.AddDate(0, 0, -60).Format(time.RFC3339)
+	recent := now.AddDate(0, 0, -2).Format(time.RFC3339)
+	body := line("oldfire", old) + line("both", old) + line("both", recent) + line("undated", "")
+	if err := os.WriteFile(filepath.Join(dir, "s.jsonl"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var observed *Stats
+	st, err := ParseObserving(dir, now.AddDate(0, 0, -30), 30, func(string) bool { return true },
+		func(_ string, one *Stats) { observed = one })
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]int{"graphify": 2, "ponytail": 1, "ecc:plan": 1, "deploy": 1}
-	for name, n := range want {
-		if got := st.Requests[name]; got != n {
-			t.Errorf("%s requests = %d, want %d", name, got, n)
+	uses := st.Uses[scan.CatSkill]
+	if uses["oldfire"] != 0 || !st.Last[scan.CatSkill]["oldfire"].IsZero() {
+		t.Errorf("oldfire counted: %d, last %v", uses["oldfire"], st.Last[scan.CatSkill]["oldfire"])
+	}
+	if uses["both"] != 1 || st.Last[scan.CatSkill]["both"].Format(time.RFC3339) != recent {
+		t.Errorf("both = %d, last %v", uses["both"], st.Last[scan.CatSkill]["both"])
+	}
+	if uses["undated"] != 1 {
+		t.Errorf("undated = %d, want it counted on its file's date", uses["undated"])
+	}
+	if len(st.SkillProjects["oldfire"]) != 0 {
+		t.Errorf("oldfire attributed to a project: %v", st.SkillProjects["oldfire"])
+	}
+	olderUses, olderLast := observed.OlderUses()
+	if olderUses[scan.CatSkill]["oldfire"] != 1 || olderUses[scan.CatSkill]["both"] != 1 {
+		t.Errorf("history lost older events: %v", olderUses)
+	}
+	if olderLast[scan.CatSkill]["oldfire"].Format(time.RFC3339) != old {
+		t.Errorf("older date = %v", olderLast[scan.CatSkill]["oldfire"])
+	}
+}
+
+// A call that was refused or interrupted never ran, in the wordings real
+// transcripts carry; one that ran and failed is an error.
+func TestRefusalsAreNeitherUsesNorErrors(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "p")
+	result := func(id, content string, isError bool) string {
+		c, _ := json.Marshal(content)
+		return fmt.Sprintf(`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":%q,"is_error":%v,"content":%s}]}}`, id, isError, c)
+	}
+	call := func(id, skill string) string {
+		return fmt.Sprintf(`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","id":%q,"name":"Skill","input":{"skill":%q}}]}}`, id, skill)
+	}
+	refusals := []string{
+		"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file)",
+		"Permission to use Skill has been denied.",
+		"Permission for this action was denied by the Claude Code auto mode classifier. Reason: [x].",
+		"[Request interrupted by user for tool use]",
+		"PreToolUse:Skill hook error: [x]",
+	}
+	var lines []string
+	for i, text := range refusals {
+		id := fmt.Sprintf("r%d", i)
+		lines = append(lines, call(id, "refused"), result(id, text, true))
+	}
+	lines = append(lines, call("e", "failed"), result("e", "Skill failed: no such file", true))
+	lines = append(lines, call("o", "fine"), result("o", "The user doesn't want to proceed is what this skill prints", false))
+	writeTranscript(t, filepath.Join(dir, "s.jsonl"), lines...)
+	st, err := Parse(dir, time.Time{}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Uses[scan.CatSkill]["refused"] != 0 || st.Errors[scan.CatSkill]["refused"] != 0 {
+		t.Errorf("refused: uses %d errors %d", st.Uses[scan.CatSkill]["refused"], st.Errors[scan.CatSkill]["refused"])
+	}
+	if st.Errors[scan.CatSkill]["failed"] != 1 {
+		t.Errorf("failed: errors %d", st.Errors[scan.CatSkill]["failed"])
+	}
+	if st.Uses[scan.CatSkill]["fine"] != 1 {
+		t.Errorf("fine: uses %d", st.Uses[scan.CatSkill]["fine"])
+	}
+}
+
+// MCP calls the same way: refused is no use, failed and unanswered are.
+func TestRefusedMCPCallsAreNotUses(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "p")
+	call := func(id, server string) string {
+		return fmt.Sprintf(`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","id":%q,"name":"mcp__%s__do","input":{}}]}}`, id, server)
+	}
+	result := func(id, content string, isError bool) string {
+		c, _ := json.Marshal(content)
+		return fmt.Sprintf(`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":%q,"is_error":%v,"content":%s}]}}`, id, isError, c)
+	}
+	writeTranscript(t, filepath.Join(dir, "s.jsonl"),
+		call("a", "refused"), result("a", "The user doesn't want to proceed with this tool use. The tool use was rejected", true),
+		call("b", "failed"), result("b", "connection reset", true),
+		call("c", "fine"), result("c", "ok", false),
+		call("d", "unanswered"),
+	)
+	st, err := Parse(dir, time.Time{}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{"refused": 0, "failed": 1, "fine": 1, "unanswered": 1}
+	for server, n := range want {
+		if got := st.Uses[scan.CatMCP][server]; got != n {
+			t.Errorf("%s uses = %d, want %d", server, got, n)
 		}
 	}
-	for _, name := range []string{"reviewer", "subagentonly", "metaonly", "pastedonly", "fencedonly", "resultonly"} {
-		if got := st.Requests[name]; got != 0 {
-			t.Errorf("%s requests = %d, want 0", name, got)
-		}
-	}
-	if got := st.Uses[scan.CatSkill]["graphify"]; got != 0 {
-		t.Errorf("a request must not count as a use, got %d", got)
+	if _, scored := st.MCPPayload["mcp__refused__do"]; scored {
+		t.Error("a refused call's text was scored as its payload")
 	}
 }

@@ -40,3 +40,40 @@ some groups could not be selected: those with no unused items. Now they act on a
 n must clear selections. The small graph in the list does not work or is not understood: now labelled USED with a percent, uses on items.
 n must clear selections; list graph labelled. 
 already muted: grey [m], chosen now: green (A, to try, user unsure).
+apply is now shift+enter (read via CGEventSourceFlagsState, Terminal sends plain enter); a fills in reap's suggestion on the row, group or selection, never over a choice already made.
+apply: A chosen for the group columns, one phrase. a and space now act on boxes already holding a state.
+(m) removed: no marker for already muted, box shows only what you chose.
+already muted: B, count on the group and the word muted on the row.
+a pressed again undoes reap's choice and puts back what the boxes held.
+reinvest: B, a step after the receipt, no key of its own in the menu.
+list now grouped by suggestion first: suggest to prune / mute / not sure / lock / already muted. g cycles to by source and flat. a on keep sets lock.
+clicks reached only groups with unused items; now every row acts like the keyboard.
+click sets reap's suggestion, prune where it has none. Big number shows any currency symbol.
+amounts use the currency set on the Mac (currency.py), rate fixed in rates.json from ECB.
+receipt: only y, n, esc answer, arrows do nothing. After y: done line, then the reinvest offer.
+reinvest is a credit, not a payment: removing earns, a new skill spends, tab switches tokens/currency. Trying combos by weight vs by topic (reinvest_views.py).
+reinvest credit: combos name what you ALREADY removed, as a reward (earned by pruning: a + b), never a further action. No m, no earns.
+enter opens the skill's page (skills.sh), space takes it. Written ones have no page.
+reinvest source by need: online if something fits, else written. shift+enter adds what was taken, with a confirm.
+reinvest install animation: rows run one by one with spinner and steps, bar fills, amount counts up, esc stops.
+security line per proposal: reinvest's regex rules on the cached SKILL.md, not a guarantee. Laya not fit (reaction, relevance, duplicates), engine still to decide.
+launch: skillreaper opens this menu; reap prune/mute stay on the command line with [y/N], --yes skips the question (A).
+
+2026-11-05: a on "not sure, you decide" takes the same choice a click takes (own items prune, plugin skills and agents mute), so the whole group can be chosen at once. Read-only rows stay out. Space on a group works when its unused rows cannot be chosen.
+
+2026-11-05: space, click and a all take reap's own choice; already muted rows change only by key: u undoes the mute (also a lock), p prunes.
+
+2026-11-05: single plugin items stay unprunable (choice A): prune and delete off on them, the message says what works instead. Legend says space choose.
+2026-11-06: rule: the user can choose any action on any group or single row (plugin items, links, shared folders); only reap's suggestions stay as they were, and the only refusals left are physical.
+
+2026-11-06: reinvest keeps its own small memory of sessions (sessions_memory.json, about 1 KB each) because Claude Code deletes old transcripts.
+
+2026-11-06: reinvest offers both ways for the same work: the closest online skill that is safe, with why it may not fit, and one written from your sessions. A security refusal is never offered.
+
+2026-11-06: an already pruned group lists what is in quarantine; u brings it back. The word on screen for taking back a mute, lock or prune is undo.
+
+2026-11-06: the line under the list adds up every choice by action in a fixed order (prune, mute, delete, plugin off, lock, undo); a refusal or warning takes its place until the next key.
+
+2026-11-06: when a key on a group leaves rows out, the message says how many and why with the key that works instead, and those rows show a tag like cannot mute until the next key.
+
+2026-11-06: the reinvest screen proposes only what Claude read and passed, best fit first, each with its reason in full, plus one written from your sessions. Skills that merely share a word are not shown.

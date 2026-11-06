@@ -52,7 +52,7 @@ func TestBackupNameUniquePerName(t *testing.T) {
 	// file, or muting both would clobber the first's backup.
 	seen := map[string]string{}
 	for _, name := range []string{"a:b", "a/b", "a-b", "a\\b"} {
-		bn := backupName(name)
+		bn := backupName(name, "/same/path")
 		if prev, ok := seen[bn]; ok {
 			t.Errorf("backupName(%q) collides with backupName(%q) = %q", name, prev, bn)
 		}
@@ -95,7 +95,7 @@ func TestMuteUnmuteRoundtrip(t *testing.T) {
 		t.Error("muting an already-muted skill should error")
 	}
 
-	if err := Unmute(claudeDir, "heavy"); err != nil {
+	if _, err := Unmute(claudeDir, "heavy"); err != nil {
 		t.Fatalf("Unmute: %v", err)
 	}
 	b, _ = os.ReadFile(skillPath)
@@ -208,7 +208,7 @@ func TestUnmuteRefusesTamperedStateOutsidePaths(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Unmute(claudeDir, "tampered"); err == nil {
+	if _, err := Unmute(claudeDir, "tampered"); err == nil {
 		t.Fatal("expected Unmute to refuse outside state paths")
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -246,7 +246,7 @@ func TestUnmuteRefusesTamperedStateToNonSkillFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Unmute(claudeDir, "tampered"); err == nil {
+	if _, err := Unmute(claudeDir, "tampered"); err == nil {
 		t.Fatal("expected Unmute to refuse a non-skill restore target")
 	}
 	got, err := os.ReadFile(settings)
@@ -288,7 +288,7 @@ func TestUnmuteRefusesTamperedStateToPluginRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Unmute(claudeDir, "tampered"); err == nil {
+	if _, err := Unmute(claudeDir, "tampered"); err == nil {
 		t.Fatal("expected Unmute to refuse plugin registry restore target")
 	}
 	got, err := os.ReadFile(registry)
@@ -310,12 +310,12 @@ func TestUnmuteAll(t *testing.T) {
 	if err := Mute(claudeDir, claudeDir, "b", b); err != nil {
 		t.Fatal(err)
 	}
-	n, err := UnmuteAll(claudeDir)
+	res, err := UnmuteAll(claudeDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 2 {
-		t.Errorf("UnmuteAll = %d, want 2", n)
+	if len(res.Restored) != 2 {
+		t.Errorf("UnmuteAll restored %d, want 2", len(res.Restored))
 	}
 	for _, p := range []string{a, b} {
 		got, _ := os.ReadFile(p)
@@ -340,8 +340,8 @@ func TestMuteRollbackOnStateFailure(t *testing.T) {
 		t.Errorf("skill was stripped but mute not recorded — should have rolled back:\n%s", b)
 	}
 	// Rollback must also drop the orphan backup so no state-less copy lingers.
-	if _, err := os.Stat(filepath.Join(mutedDir(claudeDir), backupName("heavy"))); err == nil {
-		t.Error("orphan backup should be removed when saveState fails")
+	if left, _ := filepath.Glob(filepath.Join(mutedDir(claudeDir), "*.bak")); len(left) != 0 {
+		t.Errorf("orphan backup should be removed when saveState fails: %v", left)
 	}
 }
 
@@ -356,7 +356,12 @@ func TestUnmuteAllPersistsPartialProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Break "b"'s restore by removing its backup; "a" (sorted first) restores.
-	if err := os.Remove(filepath.Join(mutedDir(claudeDir), backupName("b"))); err != nil {
+	before, err := loadState(claudeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedB, _ := filepath.EvalSymlinks(b)
+	if err := os.Remove(before.Muted[resolvedB].Backup); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := UnmuteAll(claudeDir); err == nil {
@@ -366,11 +371,8 @@ func TestUnmuteAllPersistsPartialProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := s.Muted["a"]; ok {
-		t.Error("\"a\" restored but progress not persisted before the error")
-	}
-	if _, ok := s.Muted["b"]; !ok {
-		t.Error("\"b\" failed to restore but was dropped from state")
+	if len(s.Muted) != 1 || s.Muted[resolvedB].Name != "b" {
+		t.Errorf("want only b left muted, got %+v", s.Muted)
 	}
 }
 
@@ -402,7 +404,7 @@ func TestListAfterMute(t *testing.T) {
 
 func TestUnmuteNotMuted(t *testing.T) {
 	claudeDir := filepath.Join(t.TempDir(), ".claude")
-	if err := Unmute(claudeDir, "never-muted"); err == nil {
+	if _, err := Unmute(claudeDir, "never-muted"); err == nil {
 		t.Error("expected error for not-muted skill")
 	}
 }
@@ -460,7 +462,7 @@ func TestUnmuteKeepsEditsMadeAfterTheMute(t *testing.T) {
 
 	t.Run("edit to the body stays, description returns", func(t *testing.T) {
 		claudeDir, path := mutedAndEdited(t, func(s string) string { return s + "added later\n" })
-		if err := Unmute(claudeDir, "x"); err != nil {
+		if _, err := Unmute(claudeDir, "x"); err != nil {
 			t.Fatal(err)
 		}
 		got := read(t, path)
@@ -478,7 +480,7 @@ func TestUnmuteKeepsEditsMadeAfterTheMute(t *testing.T) {
 		claudeDir, path := mutedAndEdited(t, func(s string) string {
 			return strings.Replace(s, "name: x\n", "name: x\ndescription: mine now\n", 1)
 		})
-		if err := Unmute(claudeDir, "x"); err != nil {
+		if _, err := Unmute(claudeDir, "x"); err != nil {
 			t.Fatal(err)
 		}
 		got := read(t, path)
@@ -490,7 +492,7 @@ func TestUnmuteKeepsEditsMadeAfterTheMute(t *testing.T) {
 	t.Run("no header to put it in: stops, names the copy, changes nothing", func(t *testing.T) {
 		const noHeader = "the header is gone\n"
 		claudeDir, path := mutedAndEdited(t, func(string) string { return noHeader })
-		err := Unmute(claudeDir, "x")
+		_, err := Unmute(claudeDir, "x")
 		if err == nil || !strings.Contains(err.Error(), ".bak") {
 			t.Fatalf("err = %v, want one naming the backup", err)
 		}
@@ -504,7 +506,7 @@ func TestUnmuteKeepsEditsMadeAfterTheMute(t *testing.T) {
 
 	t.Run("unchanged file comes back byte for byte", func(t *testing.T) {
 		claudeDir, path := mutedAndEdited(t, func(s string) string { return s })
-		if err := Unmute(claudeDir, "x"); err != nil {
+		if _, err := Unmute(claudeDir, "x"); err != nil {
 			t.Fatal(err)
 		}
 		if got := read(t, path); got != original {

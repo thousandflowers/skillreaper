@@ -131,11 +131,14 @@ mute, or hook edit leaves the original file intact, never a half-written mix.
 
 <sub><sup>1</sup> The only files a read-only command writes are skillreaper's
 own: <code>~/.claude/reaped/nudge-state.json</code>, which the default report
-touches so a hint it already showed you does not repeat, and the snapshot
-<code>reap snapshot</code> exists to write. Neither touches your stack. Pass
-<code>--no-nudge</code> (or set <code>SKILLREAPER_NO_NUDGE=1</code>) and not
-even that happens. No command in either column sends anything over the
-network.</sub>
+touches so a hint it already showed you does not repeat; a parsed-transcript
+cache in your user cache folder, which keeps the next run fast; an evidence
+record in your user config folder, which remembers uses older than your
+transcripts; and the snapshot <code>reap snapshot</code> exists to write. None of
+them touches your stack. <code>--no-nudge</code> (or
+<code>SKILLREAPER_NO_NUDGE=1</code>) turns off the first and
+<code>--no-cache</code> the second. No command in either column sends anything
+over the network.</sub>
 
 <br>
 
@@ -322,6 +325,7 @@ reap gap                      # loaded-vs-fired utilization + MCP payload qualit
 reap prune                    # quarantine REAP items (reversible)
 reap prune <name>             # quarantine that one item, whatever its verdict
 reap mute <name>              # strip description, keep skill available
+reap delete <name>            # remove one item for good (cannot be restored)
 reap unmute                   # list what is muted
 reap unmute <name>            # restore description from backup
 reap unmute --all             # restore all muted skills

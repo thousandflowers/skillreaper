@@ -55,7 +55,7 @@ func crowdedReport() *Report {
 // regardless of what shared the line. Nothing may now be wider than the
 // measure it was given, at any measure.
 func TestTextReportNeverExceedsMeasure(t *testing.T) {
-	for _, width := range []int{60, 72, 80, 96, 100, 120, 200} {
+	for _, width := range []int{40, 50, 60, 72, 80, 96, 100, 120, 200} {
 		t.Run(strconv.Itoa(width), func(t *testing.T) {
 			t.Setenv("COLUMNS", strconv.Itoa(width))
 			// Below minWidth the report holds at its floor rather than

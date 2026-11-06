@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 
@@ -20,7 +21,7 @@ func showPruned(claudeDir string, stdout io.Writer) (int, error) {
 	}
 	var pruned []prune.Entry
 	for _, e := range entries {
-		if !e.Restored {
+		if !e.Restored && !prune.NeverMoved(e) {
 			pruned = append(pruned, e)
 		}
 	}
@@ -38,18 +39,28 @@ func showPruned(claudeDir string, stdout io.Writer) (int, error) {
 // listMuted prints the skills whose description is stripped. Their weight drops
 // to almost nothing, so the report alone gives no sign they were ever muted.
 func listMuted(claudeDir string, stdout, stderr io.Writer) int {
-	names, err := mute.List(claudeDir)
+	entries, err := mute.Entries(claudeDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	if len(names) == 0 {
+	if len(entries) == 0 {
 		fmt.Fprintln(stdout, "Nothing is muted.")
 		return 0
 	}
-	sort.Strings(names)
-	for _, name := range names {
-		fmt.Fprintf(stdout, "  %s\n", name)
+	copies := map[string]int{}
+	for _, e := range entries {
+		copies[e.Name]++
+	}
+	for _, e := range entries {
+		line := e.Name
+		if copies[e.Name] > 1 {
+			line += "  " + e.Path
+		}
+		if mute.Strippable(e.Path) {
+			line += "  (mute lost: its description came back)"
+		}
+		fmt.Fprintf(stdout, "  %s\n", line)
 	}
 	fmt.Fprintln(stdout, "\nreap unmute <name> brings one description back, reap unmute --all brings back all of them.")
 	return 0
@@ -74,5 +85,9 @@ func resolveMuted(names []string, name string) (string, error) {
 		return matches[0], nil
 	}
 	sort.Strings(matches)
+	// Copies of one item on several platforms are one name, not an ambiguity.
+	if matches = slices.Compact(matches); len(matches) == 1 {
+		return matches[0], nil
+	}
 	return "", fmt.Errorf("%s is ambiguous, use the full name: %s", name, strings.Join(matches, ", "))
 }

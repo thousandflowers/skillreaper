@@ -159,6 +159,9 @@ type Observation struct {
 	Errors map[string]map[string]int
 	// At is the transcript's timestamp, used to widen First and Last.
 	At time.Time
+	// Last is when each use last happened, where that is known. A transcript can
+	// span months, and its date is not the date of what fired early in it.
+	Last map[string]map[string]time.Time
 }
 
 // Add folds one transcript in, keyed by its identity. Adding the same identity
@@ -176,7 +179,11 @@ func (d *Digest) Add(id string, o Observation) {
 
 	for cat, byName := range o.Uses {
 		for name, n := range byName {
-			d.bump(cat, name, n, 0, o.At, true)
+			at := o.At
+			if t := o.Last[cat][name]; !t.IsZero() {
+				at = t
+			}
+			d.bump(cat, name, n, 0, at, true)
 		}
 	}
 	for cat, byName := range o.Errors {

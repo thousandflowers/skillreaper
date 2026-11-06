@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """The proposal: Gauge's bar + Receipt's strike-out + Table's columns. Read-only: nothing is ever run."""
-import curses, datetime, os, textwrap
-from reap_proto import DATA, DEAD, ROWS, WHY, C, DIM, HL, put, window
+import collections, curses, datetime, os, textwrap
+from reap_proto import DATA, DEAD, ROWS, WHY, C, DIM, HL, narrow, put, window
 from reap_proto2 import EXTRA, HEALTH, PRICE, grad, setup, spark, src
 
 RAMP = list(reversed(HEALTH))
-TODAY = datetime.datetime.now(datetime.timezone.utc)
 MODES = ["by source", "by action", "flat"]
 ACTION_NAMES = [("Your items you never use", lambda r: r["Verdict"] == "REAP" and r["Removable"]),
                 ("Heavy skills you rarely fire", lambda r: r["Verdict"] == "MUTE"),
@@ -20,16 +19,69 @@ def dead(r):
     return r["Verdict"] in ("REAP", "MUTE")
 
 
+def is_plugin(r):
+    return r["Source"].startswith("plugin:")
+
+
+def pruned(r):
+    return r.get("Reason") == "pruned"
+
+
+def read_only(r):
+    """Nothing can take it away: the file holds more than this row, or reap cannot edit it. It can only be locked."""
+    if pruned(r):
+        return False
+    return r["Category"] not in ("skill", "agent", "mcp") or (r["Category"] == "mcp" and not r["Removable"] and not is_plugin(r))
+
+
+def own(r):
+    """What a bulk reap prune takes, and so what reap suggests pruning."""
+    return r["Removable"] and not is_plugin(r) and not read_only(r) and not r.get("ViaLink")
+
+
+def link_leads_outside(r):
+    """Go's mute edits through a link only into the folders it knows; prune and delete take the link wherever it leads."""
+    target, root = r.get("ViaLink"), r.get("RootDir") or ""
+    if not target:
+        return False
+    known = (os.path.join(root, "skills"), os.path.join(root, "plugins"), os.path.join(root, "skills-reinvest"), os.path.join(os.path.dirname(root), ".agents", "skills"))
+    real = os.path.realpath(target)
+    return not any(real.startswith(os.path.realpath(k) + os.sep) for k in known)
+
+
+def why_not(r, act):
+    """Why a row physically cannot take a verb, in one sentence; None when it can. The only refusals there are."""
+    if pruned(r):
+        return "it is pruned: u brings it back"
+    if act == "disable":
+        return None if is_plugin(r) else "it is not in a plugin"
+    if act == "lock":
+        return None
+    if act in ("prune", "delete"):
+        if r.get("FolderLink"):
+            return "the link it comes through is its whole skills folder: removing it would take every skill there"
+        return f"reap cannot edit it: remove it by hand from {r.get('Path') or 'its file'}" if read_only(r) else None
+    if r.get("Reason") == "muted":
+        return "it is muted already"
+    if r["Category"] == "mcp":
+        return "an MCP server has nothing to mute, p prunes it"
+    if read_only(r):
+        return f"reap cannot edit it: remove it by hand from {r.get('Path') or 'its file'}"
+    if not r.get("Description"):
+        return "it has no description to strip"
+    return "its link leads outside the folders reap may edit: p takes the link" if link_leads_outside(r) else None
+
+
 def can(r, act):
-    if act == "prune":
-        return True
-    if act == "mute":
-        return r.get("Reason") != "muted" and r["Category"] in ("skill", "agent")
-    return True
+    """What Go can carry out on this row. Plugin off is the whole plugin's, and only that."""
+    if pruned(r):
+        return False  # it is not in the stack: u brings it back, and then anything applies
+    return why_not(r, act) is None
 
 
 def key(r):
-    return (r["Category"], r["Name"], r.get("Platform"))
+    """A row's identity. Go refuses a bare name two items share, so a real apply must pass it the row's Path."""
+    return (r["Category"], r["Name"], r.get("Platform"), r.get("Source"), r.get("Path"))
 
 
 def last(r):
@@ -37,18 +89,32 @@ def last(r):
     if s.startswith("0001") or not s:
         return "never"
     try:
-        d = (TODAY - datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))).days
+        used = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
     except ValueError:
         return "?"
-    return "today" if d == 0 else f"{d}d ago"
+    # A date with no zone is read as UTC. Days are the reader's calendar days, and a clock in the future is today.
+    used = used if used.tzinfo else used.replace(tzinfo=datetime.timezone.utc)
+    try:
+        d = (datetime.date.today() - used.astimezone().date()).days
+    except (OverflowError, OSError):
+        return "?"
+    return "today" if d <= 0 else f"{d}d ago"
+
+
+def source_label(source, label, taken):
+    """Two sources that read the same stay apart: the marketplace or folder is named only when they collide."""
+    if taken[label] < 2:
+        return label
+    return f"{label} · {source.split('@')[-1] if source.startswith('plugin:') else os.path.basename(source)}"
 
 
 def groups(mode):
     if mode == 0:
         by = {}
         for r in ROWS:
-            by.setdefault(src(r), []).append(r)
-        out = [(n, its) for n, its in by.items()]
+            by.setdefault(r["Source"], []).append(r)
+        taken = collections.Counter(src(its[0]) for its in by.values())
+        out = [(source_label(s, src(its[0]), taken), its) for s, its in by.items()]
     elif mode == 1:
         out = [(n, [r for r in ROWS if t(r)]) for n, t in ACTION_NAMES]
     else:
@@ -58,6 +124,8 @@ def groups(mode):
 
 
 def strike(s):
+    if narrow():  # the mark cannot be drawn: each one would become a blank cell and push the row apart
+        return s
     return "".join(c + "̶" if c != " " else c for c in s)
 
 
@@ -85,7 +153,7 @@ def details(w, r, plan, set_plan):
         grad(w, 6, 3, 40, min(1, r["Tokens"] / 300), RAMP)
         put(w, 8, 3, "Use", DIM())
         put(w, 9, 3, f"{r['Uses']} uses in {DATA.get('WindowDays', 30)} days of {DATA.get('Sessions', 0)} sessions · last used {last(r)}")
-        put(w, 10, 3, f"asked for by name {r.get('Requests', 0)} times · {r.get('ErrorCount', 0)} errors")
+        put(w, 10, 3, f"{r.get('ErrorCount', 0)} errors")
         vals = EXTRA["byday"].get(r["Name"])
         if vals:
             spark(w, 11, 3, vals, RAMP)

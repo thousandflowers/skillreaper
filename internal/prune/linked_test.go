@@ -123,3 +123,61 @@ func TestASharedLinkedSkillIsNotWritten(t *testing.T) {
 		t.Fatal("a shared linked skill must not count as written")
 	}
 }
+
+// TestChosenStaysInsideItsRoots: naming an item lifts Removable and nothing else.
+func TestChosenStaysInsideItsRoots(t *testing.T) {
+	home := t.TempDir()
+	claudeDir := filepath.Join(home, ".claude")
+	outside := filepath.Join(home, "elsewhere", "x")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := filepath.Join(outside, "SKILL.md")
+	if err := os.WriteFile(md, []byte("---\nname: x\ndescription: d\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	it := scan.Item{Category: scan.CatSkill, Name: "x", Path: md, RootDir: claudeDir}
+	if _, err := QuarantineChosen(claudeDir, it); err == nil {
+		t.Error("prune took an item outside its root")
+	}
+	if err := DeleteItem(it); err == nil {
+		t.Error("delete took an item outside its root")
+	}
+	// A link living outside the root.
+	link := filepath.Join(home, "elsewhere", "l")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skip(err)
+	}
+	via := scan.Item{Category: scan.CatSkill, Name: "l", Path: filepath.Join(link, "SKILL.md"), RootDir: claudeDir, ViaLink: outside}
+	if _, err := QuarantineChosen(claudeDir, via); err == nil {
+		t.Error("prune moved a link outside its root")
+	}
+	if err := DeleteItem(via); err == nil {
+		t.Error("delete removed a link outside its root")
+	}
+	if _, err := os.Stat(md); err != nil {
+		t.Fatalf("target touched: %v", err)
+	}
+}
+
+// TestQuarantineItemStillRefusesWhatIsNotRemovable: the door of a bulk run.
+func TestQuarantineItemStillRefusesWhatIsNotRemovable(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	dir := filepath.Join(claudeDir, "plugins", "cache", "m", "p", "1", "skills", "x")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := filepath.Join(dir, "SKILL.md")
+	if err := os.WriteFile(md, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := QuarantineItem(claudeDir, scan.Item{Category: scan.CatSkill, Name: "p:x", Path: md, RootDir: claudeDir, Source: "plugin:p@m"}); err == nil {
+		t.Fatal("expected refusal: not removable")
+	}
+	if _, err := os.Stat(md); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -231,50 +231,19 @@ func TestBuildHookLoadedProtection(t *testing.T) {
 	}
 }
 
-// A skill asked for by name and never started stays, and its uses stay at zero:
-// the request is reported apart. Any spelling of its name counts.
-func TestBuildRequestedProtection(t *testing.T) {
-	st := usage.NewStats(30)
-	st.Sessions = 60
-	st.Requests["wanted"] = 2
-	st.Requests["bare"] = 1
-
-	items := []scan.Item{
-		{Category: scan.CatSkill, Name: "wanted", Source: "personal", DescChars: 370, Removable: true},
-		{Category: scan.CatSkill, Name: "p:bare", Source: "plugin:p@m", DescChars: 370},
-		{Category: scan.CatSkill, Name: "cold", Source: "personal", DescChars: 370, Removable: true},
-	}
-	r := Build(items, st, nil, Opts{MinSessions: 10, Cutoff: time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC)})
-
-	byName := map[string]Row{}
-	for _, row := range r.Rows {
-		byName[row.Name] = row
-	}
-	w := byName["wanted"]
-	if w.Verdict != VerdictKeep || w.Reason != ReasonRequested || w.Requests != 2 || w.Uses != 0 {
-		t.Errorf("wanted = %s(%s) requests=%d uses=%d", w.Verdict, w.Reason, w.Requests, w.Uses)
-	}
-	if b := byName["p:bare"]; b.Reason != ReasonRequested {
-		t.Errorf("p:bare = %s(%s)", b.Verdict, b.Reason)
-	}
-	if v := byName["cold"].Verdict; v != VerdictReap {
-		t.Errorf("cold = %s, want REAP", v)
-	}
-}
-
 // A muted skill has lost the description that makes it fire, so its zero uses
 // prove nothing: it is out of REAP and of the dead weight, and only counted.
 func TestBuildSetsMutedSkillsApart(t *testing.T) {
 	st := usage.NewStats(30)
 	st.Sessions = 60
 	items := []scan.Item{
-		{Category: scan.CatSkill, Name: "muted", Source: "personal", DescChars: 370, Removable: true},
+		{Category: scan.CatSkill, Name: "muted", Source: "personal", Path: "/skills/muted/SKILL.md", DescChars: 370, Removable: true},
 		{Category: scan.CatSkill, Name: "cold", Source: "personal", DescChars: 370, Removable: true},
 	}
 	r := Build(items, st, nil, Opts{
 		MinSessions: 10,
 		Cutoff:      time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC),
-		Muted:       map[string]bool{"muted": true, "pruned-long-ago": true},
+		Muted:       map[string]bool{"/skills/muted/SKILL.md": true, "/skills/pruned-long-ago/SKILL.md": true},
 	})
 
 	byName := map[string]Row{}
@@ -369,11 +338,9 @@ func TestBuildManifest(t *testing.T) {
 	if m.UsageWindow.Uses != 5 || m.UsageWindow.Projects != 1 {
 		t.Errorf("usage window = %+v", m.UsageWindow)
 	}
-	if len(m.Hooks) != 1 || m.Hooks[0] != "echo hi" {
+	// A record that ships with a release names the event and never the command.
+	if len(m.Hooks) != 1 || strings.Contains(m.Hooks[0], "echo") {
 		t.Errorf("hooks = %v", m.Hooks)
-	}
-	if !strings.Contains(m.RestorePath, "muted") {
-		t.Errorf("restore path = %s", m.RestorePath)
 	}
 	if _, ok := BuildManifest(r, "nope", "/x/.claude", ""); ok {
 		t.Error("expected not-found for unknown skill")
@@ -734,7 +701,7 @@ func TestListedSkillWeightFollowsAMuteMadeSince(t *testing.T) {
 func TestHeadlineSplitsWhatPruneCanRemove(t *testing.T) {
 	r := &Report{Rows: []Row{
 		{Item: scan.Item{Removable: true}, Verdict: VerdictReap, Tokens: 1470},
-		{Item: scan.Item{Removable: false}, Verdict: VerdictReap, Tokens: 7160},
+		{Item: scan.Item{Removable: false, Source: "plugin:p@m"}, Verdict: VerdictReap, Tokens: 7160},
 		{Item: scan.Item{Removable: true}, Verdict: VerdictKeep, Tokens: 999},
 	}}
 	if got, want := NewHeadline(r).Split(), "~1,470 removable with reap prune, ~7,160 inside plugins"; got != want {

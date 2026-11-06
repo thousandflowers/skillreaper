@@ -8,5 +8,5 @@
   ───────────────────────────────────────────────────────────────
   total        378      7    1%  ▏▱▱▱▱▱▱▱▱▱   ~22,998+?     278+?
 
-  ~  MUTE — 2 heavy low-use skills, ~102 tok/session recoverable with reap mute
+  ~  MUTE — 2 heavy low-use skills, ~94 tok/session recoverable with reap mute
 

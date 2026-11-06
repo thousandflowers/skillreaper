@@ -15,6 +15,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -24,7 +25,9 @@ MAX_MUTED_PER_SWAP = 3
 STEP_TIMEOUT = 120  # `skills add` on a repo that is gone clones forever, even with git prompts off
 # Install for Claude Code only: without -a, `skills add` installs for every agent it knows (~20), and exits 0
 # even when one of them fails.
-SKILLS_ADD = ["npx", "-y", "skills", "add"]
+# Pinned: `npx -y skills` would run whatever was published last, as the user.
+SKILLS_CLI = ["npx", "-y", "skills@1.7.6"]
+SKILLS_ADD = [*SKILLS_CLI, "add"]
 SKILLS_FLAGS = ["-g", "-y", "-a", "claude-code"]
 # MCP servers installed with nothing muted, because their weight was unknown. Once reap has seen one load, the next
 # run offers the mute that should have gone with it.
@@ -96,7 +99,16 @@ def verb(c: dict) -> str:
 
 
 def kind_text(c: dict) -> str:
-    return "✎ new · written from your sessions" if c.get("created") else c["kind"]
+    if c.get("created"):
+        return "✎ new · written from your sessions"
+    if c["kind"] == "mcp":
+        return f"MCP server, {c['where']}" if c.get("where") else "MCP server"
+    return f"{c['kind']} · {c['source']}" if c.get("source") else c["kind"]
+
+
+def named(c: dict) -> str:
+    """The name, with the repo it really comes from: a registry name is free text and can claim to be anyone."""
+    return f"{c['name']} ({c['source']})" if c.get("source") else c["name"]
 
 
 def toggle_mute(s: dict):
@@ -109,9 +121,9 @@ def preview(c: dict):
     """The whole SKILL.md (or README) in the user's pager, before anything is accepted."""
     pager = shlex.split(os.environ.get("PAGER") or "less")
     try:
-        subprocess.run(pager, input=f"{c['name']} · {kind_text(c)}\n\n{c.get('doc', '')}", text=True)
+        subprocess.run(pager, input=sources.printable(f"{c['name']} · {kind_text(c)}\n\n{c.get('doc', '')}"), text=True)
     except OSError:
-        subprocess.run(["more"], input=c.get("doc", ""), text=True)
+        subprocess.run(["more"], input=sources.printable(c.get("doc", "")), text=True)
 
 
 # ---------------------------------------------------------------------------
@@ -270,21 +282,25 @@ def mcp_name(c: dict) -> str:
 
 
 def install_command(c: dict) -> list[str] | None:
-    """The command that installs a candidate, or None when it needs manual setup (keys, env vars)."""
+    """The command that installs a candidate, or None when it needs manual setup (keys, env vars) or when what the
+    registry gave cannot safely go on a command line."""
     if c["kind"] == "skill":
-        return [*SKILLS_ADD, c["source"], "-s", c["slug"], *SKILLS_FLAGS] if c.get("source") and c.get("slug") else None
-    server, name = c.get("server") or {}, mcp_name(c)
-    for pkg in server.get("packages") or []:
-        if pkg.get("environmentVariables"):
+        if not (sources.SOURCE_RE.fullmatch(c.get("source") or "") and sources.SLUG_RE.fullmatch(c.get("slug") or "")):
             return None
-        runner = {"npm": ["npx", "-y"], "pypi": ["uvx"]}.get(pkg.get("registryType"))
-        if runner and pkg.get("identifier"):
-            return ["claude", "mcp", "add", "-s", "user", name, "--", *runner, pkg["identifier"]]
-    for remote in server.get("remotes") or []:
-        transport = {"streamable-http": "http", "sse": "sse"}.get(remote.get("type"))
-        if transport and remote.get("url"):
-            return ["claude", "mcp", "add", "-s", "user", "--transport", transport, name, remote["url"]]
-    return None
+        return [*SKILLS_ADD, c["source"], "-s", c["slug"], *SKILLS_FLAGS]
+    server, name = c.get("server") or {}, mcp_name(c)
+    target = sources.install_target(server)
+    if not target or not sources.SLUG_RE.fullmatch(name):
+        return None
+    if "remote" in target:
+        remote = target["remote"]
+        return ["claude", "mcp", "add", "-s", "user", "--transport", sources.TRANSPORTS[remote["type"]], name, remote["url"]]
+    pkg = target["package"]
+    if pkg.get("environmentVariables"):
+        return None
+    spec = sources.PACKAGES[pkg["registryType"]]
+    return ["claude", "mcp", "add", "-s", "user", name, "--", *spec["runner"],
+            spec["pin"].format(id=pkg["identifier"], v=pkg["version"])]
 
 
 def skills_dir() -> Path:
@@ -330,7 +346,7 @@ def remove_written(c: dict) -> str | None:
 
 def uninstall_command(c: dict) -> list[str]:
     if c["kind"] == "skill":
-        return ["npx", "-y", "skills", "remove", c["slug"], *SKILLS_FLAGS]
+        return [*SKILLS_CLI, "remove", c["slug"], *SKILLS_FLAGS]
     return ["claude", "mcp", "remove", "-s", "user", mcp_name(c)]
 
 
@@ -341,11 +357,33 @@ def installed(c: dict) -> bool:
     return (skills_dir() / c["slug"] / "SKILL.md").is_file()
 
 
+def unchecked_files(c: dict) -> list[str]:
+    """Files now in the skill's folder that are not, byte for byte, what the verifier read. `skills add` takes whatever
+    the repo holds at that moment, so this is what ties the install to the check."""
+    root, doc = skills_dir() / c["slug"], c.get("doc", "")
+    out = []
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        rel = path.relative_to(root).as_posix()
+        try:
+            with path.open(encoding="utf-8", newline="") as f:
+                text = f.read()
+        except (OSError, ValueError):
+            out.append(rel)
+            continue
+        same = doc.startswith(text + "\n") or doc == text if rel == sources.SKILL_FILE \
+            else f"{sources.FILE_MARK.format(rel)}\n{text}" in doc
+        if not same:
+            out.append(rel)
+    return out
+
+
 def run(cmd: list[str]) -> str | None:
-    """Run one step; None on success, else why it failed."""
+    """Run one step from an empty folder, so no folder the user happens to be in can supply the program (npx prefers a
+    local node_module/.bin). None on success, else why it failed."""
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=STEP_TIMEOUT,
-                             env={**os.environ, "GIT_TERMINAL_PROMPT": "0"}, stdin=subprocess.DEVNULL)
+        with tempfile.TemporaryDirectory() as cwd:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=STEP_TIMEOUT, cwd=cwd,
+                                 env={**os.environ, "GIT_TERMINAL_PROMPT": "0"}, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         return f"no answer in {STEP_TIMEOUT} s"
     except OSError as e:
@@ -367,9 +405,17 @@ def apply_one(s: dict) -> list[str]:
         install = install_command(c)
         if install is None:
             return [f"  ✗  {c['name']}: needs manual setup, nothing muted · {c.get('id', '')}"]
+        target = skills_dir() / c["slug"] if c["kind"] == "skill" else None
+        if target and (target.exists() or target.is_symlink()):  # the user's: never replaced, never rolled back
+            return [f"  ✗  {c['name']}: a skill named {c['slug']} already exists in {skills_dir()} · nothing muted"]
         err = run(install) or (None if installed(c) else "installed, but not for Claude Code")
         if err:
             return [f"  ✗  {c['name']}: {err} · nothing muted"]
+        changed = unchecked_files(c) if target else []
+        if changed:
+            removed = run(uninstall_command(c)) is None
+            return [f"  ✗  {c['name']}: not what was checked ({', '.join(changed[:3])}) · "
+                    + ("removed again" if removed else "still installed, remove it by hand") + " · nothing muted"]
         log.append(f"  ✓  installed {c['name']}")
         if c["kind"] == "mcp" and not s["mute"]:
             remember(c)

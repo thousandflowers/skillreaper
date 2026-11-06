@@ -70,9 +70,12 @@ type APMReport struct {
 // last-segments already declared in the --diff target; when non-nil, BuildAPM
 // annotates each dep with a diff status and computes drop suggestions.
 func BuildAPM(r *Report, cwd string, lock map[string]string, declared map[string]bool, diffPath string) APMReport {
-	repoKey := encodeProject(cwd)
+	root := repoRoot(cwd)
+	repoKeys := repoBuckets(r, root, cwd)
 	out := APMReport{
-		Repo:       cwd, // verbatim — the encoded key is lossy and not round-trippable
+		// The base name: this text goes into a file meant to be committed, and
+		// the absolute path would publish the local home directory.
+		Repo:       filepath.Base(root),
 		WindowDays: r.WindowDays,
 		Sessions:   r.Sessions,
 		Diff:       declared != nil,
@@ -96,7 +99,10 @@ func BuildAPM(r *Report, cwd string, lock map[string]string, declared map[string
 		if row.Verdict == VerdictReap {
 			continue // dead weight — omit from the manifest
 		}
-		uses := repoUses(r, row.Name, repoKey)
+		uses := 0
+		for key := range repoKeys {
+			uses += repoUses(r, row.Name, key)
+		}
 		if uses == 0 {
 			continue // didn't fire in this repo within the window
 		}
@@ -125,10 +131,54 @@ func BuildAPM(r *Report, cwd string, lock map[string]string, declared map[string
 		return out.Deps[i].Name < out.Deps[j].Name
 	})
 
-	if declared != nil {
-		out.Drop = computeDrop(out.Deps, declared, reviewProtected)
+	// A drop needs evidence: sessions to judge by, and an installed item the
+	// declaration can be matched to. Anything else is merely unknown here.
+	if declared != nil && r.Sessions > 0 {
+		out.Drop = computeDrop(out.Deps, inventoryOnly(declared, r), reviewProtected)
 	}
 	return out
+}
+
+// inventoryOnly keeps the declared segments that name an installed skill.
+func inventoryOnly(declared map[string]bool, r *Report) map[string]bool {
+	out := map[string]bool{}
+	for _, row := range r.Rows {
+		if row.Category != scan.CatSkill {
+			continue
+		}
+		for _, key := range []string{row.Name, bareSuffix(row.Name)} {
+			if declared[key] {
+				out[key] = true
+			}
+		}
+	}
+	return out
+}
+
+// repoRoot walks up from cwd to the folder holding .git, or returns cwd.
+func repoRoot(cwd string) string {
+	for dir := cwd; dir != ""; dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		if dir == filepath.Dir(dir) {
+			break
+		}
+	}
+	return cwd
+}
+
+// repoBuckets is every project bucket belonging to the repo: the root's, cwd's,
+// and any whose recorded path sits inside the root, so a session started in a
+// subfolder counts and the answer is the same anywhere in the repo.
+func repoBuckets(r *Report, root, cwd string) map[string]bool {
+	keys := map[string]bool{encodeProject(root): true, encodeProject(cwd): true}
+	for key, path := range r.ProjectPaths {
+		if path == root || strings.HasPrefix(path, root+string(filepath.Separator)) {
+			keys[key] = true
+		}
+	}
+	return keys
 }
 
 // computeDrop returns the declared coordinate segments that no surviving,
@@ -208,12 +258,19 @@ func LoadAPMManifest(path string) (declared map[string]bool, lock map[string]str
 	}
 	declared = map[string]bool{}
 	lock = map[string]string{}
+	section := ""
 	for _, raw := range strings.Split(string(data), "\n") {
 		// Only dependency list items carry coordinates. Skipping non-list lines
 		// keeps slashes in comments, the "# repo:" header, URLs, and the literal
 		// "owner/repo/path" placeholder hint out of the declared/lock sets.
 		line := stripYAMLComment(raw)
-		if !strings.HasPrefix(strings.TrimSpace(line), "-") {
+		trimmed := strings.TrimSpace(line)
+		if key, _, ok := strings.Cut(trimmed, ":"); ok && !strings.HasPrefix(trimmed, "-") {
+			section = key
+		}
+		// Skills only, like the rest of this first cut: an mcp: or other list
+		// names something the report holds no evidence about.
+		if !strings.HasPrefix(trimmed, "-") || apmOtherSection[section] {
 			continue
 		}
 		for _, m := range apmCoordRe.FindAllString(line, -1) {
@@ -254,6 +311,9 @@ func stripYAMLComment(line string) string {
 	return line
 }
 
+// apmOtherSection names the dependency lists that are not skills.
+var apmOtherSection = map[string]bool{"mcp": true, "scripts": true, "targets": true, "agents": true}
+
 // LoadAPMContext gathers everything BuildAPM needs from disk: the declared
 // coordinate set (diff mode only, non-nil when diffPath is set) and a
 // name→coordinate lock map recovered from the diff file and/or a sibling
@@ -261,6 +321,11 @@ func stripYAMLComment(line string) string {
 func LoadAPMContext(diffPath, cwd string) (declared map[string]bool, lock map[string]string, err error) {
 	lock = map[string]string{}
 	if diffPath != "" {
+		// Only the sibling lock file is optional. A --diff target that is not
+		// there is a typo, not a manifest declaring nothing.
+		if _, e := os.Stat(diffPath); e != nil {
+			return nil, nil, e
+		}
 		d, l, e := LoadAPMManifest(diffPath)
 		if e != nil {
 			return nil, nil, e
@@ -447,7 +512,7 @@ func RenderAPMMarkdown(w io.Writer, m APMReport) {
 		if status == "" {
 			status = "include"
 		}
-		fmt.Fprintf(w, "| %s | %s | %d | %s |\n", d.Name, coord, d.Uses, status)
+		fmt.Fprintf(w, "| %s | %s | %d | %s |\n", mdCell(d.Name), mdCell(coord), d.Uses, status)
 	}
 	if len(m.Drop) > 0 {
 		fmt.Fprintf(w, "\n## Declared but cold here (suggest dropping)\n\n")

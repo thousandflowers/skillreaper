@@ -67,11 +67,15 @@ the new one. Tested for real (skill and MCP, success and rollback) with `HOME` p
    With `--online`: skills.sh results ranked by position in that gap's searches (≥20 installs), plus MCP
    servers from the official registry (single-word searches). SKILL.md / README fetched only for these.
 4. **Verification** — every (gap, candidate) read in full by Claude, alone, with the skills you use and the
-   installed skills closest to it. Rejects: written for another project or agent, paid service or ad, wrong
+   installed skills closest to the task. A skill means its whole folder: SKILL.md and every bundled file; a candidate
+   too long to read in full (`DOC_CHARS`) or holding a file that is not text is rejected unread. It is also a security
+   gate: everything but the instructions is untrusted data inside a marker the document cannot guess, an answer with
+   no security statement is not kept, any reported risk rejects, and that rejection stays with the document's hash
+   (`denied.json`) whatever the task. After install the folder is compared with what was read, and removed on a mismatch. Rejects: written for another project or agent, paid service or ad, wrong
    platform, generic advice, wraps standard CLI tools, narrow special case, duplicate of what you have, and
    MCP servers that run arbitrary commands or scripts (also caught before Claude by tool-name patterns).
    Each candidate is verified twice and kept only if both runs keep it; verdicts are cached for a week, keyed
-   by everything the verifier read, so the same inputs give the same answer. A written skill is told it is
+   by everything the verifier read and how the model was run, so the same inputs give the same answer. A written skill is told it is
    yours (your tools and habits are fine) but is rejected when a step holds for only one of your projects.
 5. **Swaps** — the best fit per gap (the verifier's 1–5 fit, then the lighter), max 3, paired with 1–3 REAP
    skills of about the same weight. Skill weight uses reap's own formula (matches reap on all 301 installed

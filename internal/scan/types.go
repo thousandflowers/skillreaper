@@ -34,12 +34,15 @@ type Item struct {
 	// scanned at once, anchoring everything to the Claude directory refused
 	// every item that legitimately lives somewhere else. Empty means "assume
 	// the Claude directory", which is what a directly constructed Item gets.
-	RootDir     string
-	Description string    // text injected into context (skills/agents) or display string
-	DescChars   int       // chars injected every session
-	BodyChars   int       // chars loaded on invocation (SKILL.md body)
-	InstalledAt time.Time // zero when unknown
-	Removable   bool      // safe to prune automatically
+	RootDir string
+	// FrontmatterName is the name: field when it differs from the key. Claude
+	// Code can fire an item under it, so it is also a usage key.
+	FrontmatterName string
+	Description     string    // text injected into context (skills/agents) or display string
+	DescChars       int       // chars injected every session
+	BodyChars       int       // chars loaded on invocation (SKILL.md body)
+	InstalledAt     time.Time // zero when unknown
+	Removable       bool      // safe to prune automatically
 	// HookLoaded is set on a plugin skill its SessionStart hook injects: it
 	// works in every session and no transcript records an invocation.
 	HookLoaded bool
@@ -52,6 +55,13 @@ type Item struct {
 	// LinkTarget is set when a personal skill directory is a symlink into one
 	// of safepath.LinkedSkillHomes: prune moves the link, never its target.
 	LinkTarget string
+	// ViaLink is where a skill really is when a link outside the known skill
+	// folders leads to it. Removable is false, so no bulk run takes it. Named, prune
+	// and delete take the link and never what it leads to.
+	ViaLink string `json:",omitempty"`
+	// FolderLink marks a skill whose whole skills folder is a link. There is no
+	// link of its own to take: removing that one would take every skill there.
+	FolderLink bool `json:",omitempty"`
 }
 
 // Written reports whether the item is a skill reinvest wrote: linked from

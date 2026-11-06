@@ -3,8 +3,9 @@
 
       [1m371[0m  items never fired, of 378 loaded
   [1m~22,720[0m  dead tokens per session
-   [1m~$2.32[0m  per month at your usage
+   [1m~$2.39[0m  per month, $3.00/M assumed
 [2m  371 of them marked REAP[0m
+[2m  monthly figures are extrapolated from 29 days of history[0m
 [2m  a floor, not a total: 11 unused items (MCP servers, hooks) carry weight that[0m
 [2m  was never measured[0m
 
@@ -72,7 +73,7 @@
 
   [36m── DO ────────────────────────────────────────────────────────────────────────[0m
     [1mreap prune[0m   371 items · ~22,720 tok/session reclaimed
-    [1mreap mute[0m    2 skills · ~102 tok · audit-invoice, audit-dataset
+    [1mreap mute[0m    362 items · ~21,151 tok · import-timesheet, render-playlist, r…
 
 [2m  All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all[0m
 [2m  Analysis is local: only files on this machine were read, nothing was sent over[0m

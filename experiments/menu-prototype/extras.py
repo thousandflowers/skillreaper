@@ -4,14 +4,20 @@ cut=time.time()-30*86400
 rx=re.compile(r'<command-name>/?([^<\s]+)</command-name>')
 day=collections.defaultdict(lambda:{'sessions':0,'messages':0,'cache':0,'fires':0})
 fires=collections.Counter();byday=collections.defaultdict(collections.Counter)
+def local_day(stamp):
+    """The reader's calendar day of a transcript time: the day list below is local too."""
+    if not isinstance(stamp,str): return None
+    try: return datetime.datetime.fromisoformat(stamp.replace('Z','+00:00')).astimezone().date().isoformat()
+    except (ValueError,OverflowError,OSError): return None
 for f in glob.glob(os.path.expanduser('~/.claude/projects/**/*.jsonl'),recursive=True):
     if os.path.getmtime(f)<cut: continue
     seen=set()
-    for l in open(f,errors='ignore'):
+    for l in open(f,encoding='utf-8',errors='ignore'):
         if '"timestamp"' not in l: continue
         try:e=json.loads(l)
-        except: continue
-        ts=e.get('timestamp','')[:10]
+        except ValueError: continue
+        if not isinstance(e,dict): continue
+        ts=local_day(e.get('timestamp'))
         if not ts or e.get('type') not in('user','assistant'): continue
         if ts not in seen and '/subagents/' not in f:
             seen.add(ts);day[ts]['sessions']+=1
@@ -34,5 +40,5 @@ for f in glob.glob(os.path.expanduser('~/.claude/projects/**/*.jsonl'),recursive
             if n: fires[n]+=1;byday[n][ts]+=1;day[ts]['fires']+=1
 today=datetime.date.today()
 dates=[(today-datetime.timedelta(days=i)).isoformat() for i in range(29,-1,-1)]
-json.dump({'dates':dates,'days':[day[d] for d in dates],'fires':fires.most_common(20),'byday':{k:[v.get(d,0) for d in dates] for k,v in byday.items()}},open(out,'w'))
-d=json.load(open(out));print('sessions/day',[x['sessions'] for x in d['days']]);print(d['fires'][:10]);print('cache total %.2gB'%(sum(x['cache'] for x in d['days'])/1e9))
+json.dump({'dates':dates,'days':[day[d] for d in dates],'fires':fires.most_common(20),'byday':{k:[v.get(d,0) for d in dates] for k,v in byday.items()}},open(out,'w',encoding='utf-8'))
+d=json.load(open(out,encoding='utf-8'));print('sessions/day',[x['sessions'] for x in d['days']]);print(d['fires'][:10]);print('cache total %.2gB'%(sum(x['cache'] for x in d['days'])/1e9))

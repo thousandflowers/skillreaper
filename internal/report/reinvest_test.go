@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The plain report points at reinvest's last proposals with one line, using
@@ -13,6 +14,10 @@ import (
 func TestRenderReinvestHint(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "swaps.json")
+	// The date is shown in local time; pin it so any timezone passes.
+	local := time.Local
+	time.Local = time.UTC
+	t.Cleanup(func() { time.Local = local })
 	for name, c := range map[string]struct{ file, want string }{
 		"two swaps": {`{"at":"2026-10-02T10:00:00Z","command":"python3 reinvest.py","swaps":[{},{}]}`,
 			"  reinvest · 2 swaps ready (from 2026-10-02)\n           run `python3 reinvest.py` to review them\n\n"},

@@ -4,13 +4,13 @@
   1. sessions   the ones you wrote (no `claude -p`, no subagents, not the open one)
   2. kinds      Claude groups them by kind of work; kinds a skill already covers drop out: what is left are gaps
   3. write      for each gap Claude writes a skill from your own sessions: the steps you repeat, the rules you
-                had to repeat (with --online: search skills.sh and the official MCP registry instead)
+                had to repeat (with --online: search skills.sh instead, with --mcp the official MCP registry too)
   4. verify     every (gap, candidate) read in full by Claude, alone; most are rejected, with a reason
   5. swaps      each fit is paired with REAP skills of about the same weight; pick them with the arrow keys,
                 then reinvest installs the new one and runs `reap mute` on the old ones (reversible)
 
 Weights and verdicts come from `reap --json`, so the numbers match the reap report.
-Usage:  python3 reinvest.py [--dry-run] [--regroup] [--online [--no-mcp]] [--days N]
+Usage:  python3 reinvest.py [--dry-run] [--regroup] [--online [--mcp]] [--days N]
 """
 from __future__ import annotations
 
@@ -32,11 +32,15 @@ from sessions import canon, cut, read_sessions, week
 
 REGROUP_EVERY = 7 * 86400  # a full regroup changes the groups (0-18% overlap run to run), so it runs weekly;
                            # in between, only new sessions are placed into the groups that exist
+MEMORY_SESSIONS = 1000  # about 1 MB at most: what the file keeps of each session is capped below
+MEMORY_PROMPTS = 10
+MEMORY_PROMPT_CHARS = 500
 MIN_SESSIONS = 3      # a kind of work seen fewer times is not recurring
 MAX_GAPS = 6
-CANDIDATES_PER_GAP = 10
+CANDIDATES_PER_GAP = 20
 MIN_INSTALLS = 20     # skills.sh: fewer installs than this is too little signal to trust
 VERDICTS_TTL = 7 * 86400  # a verdict is keyed by everything it read, so it only goes stale with the candidate
+DENIED_FILE = "denied.json"  # documents a verifier flagged, by hash: a risk belongs to the text, whatever the task
 VERIFY_RUNS = 2       # a candidate is kept only if every run keeps it: borderline ones flipped between runs
 WRITE_SESSIONS = 8    # sessions a written skill is drawn from: the longest ones, where corrections pile up
 TERM = sys.__stdout__  # progress lines and the result go here; everything else goes to the run log
@@ -59,7 +63,7 @@ def reap_tokens(slug: str, doc: str) -> int:
     if any(l.split(":", 1)[0] == "disable-model-invocation" and l.split(":", 1)[1].strip().lower() == "true"
            for l in header if ":" in l):
         return 0  # run only by hand: Claude Code never lists it, as reap counts it
-    chars = len((slug + description(header)).encode("utf-8"))
+    chars = len((slug + description(header)).encode("utf-8", "replace"))  # JSON escapes can decode to a lone surrogate
     return (chars * 10 + 36) // 37
 
 
@@ -113,6 +117,11 @@ def block(lines: list[str], style: str, chomp: str) -> str:
     return out + ("" if chomp == "-" else "\n" * (trailing + 1) if chomp == "+" else "\n")
 
 
+def failed(msg: str):
+    TERM.write(("\r\033[K" if TERM.isatty() else "") + f"  ✗ {msg}\n")
+    TERM.flush()
+
+
 def step(msg: str, done: bool = False):
     if done:
         TERM.write(("\r\033[K" if TERM.isatty() else "") + f"  ✓ {msg}\n")
@@ -139,6 +148,25 @@ def reap_state() -> dict:
             "reap": [s for s in skills if s["verdict"] == "REAP"], "dead": data.get("DeadTokensPerSession", 0)}
 
 
+def remember_sessions(current: list[dict]) -> list[dict]:
+    """The sessions on disk plus those already remembered: Claude Code deletes old transcripts, the work they show stays."""
+    path = sources.STATE / "sessions_memory.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = []
+    good = lambda r: isinstance(r, dict) and isinstance(r.get("id"), str) and isinstance(r.get("prompts"), list) \
+        and all(isinstance(p, str) for p in r["prompts"])
+    old = {r["id"]: {"tools": 0, "errors": 0, "interrupts": 0, "tokens": 0, "ts": "", **r, "skills": set(r.get("skills") or [])}
+           for r in (raw if isinstance(raw, list) else []) if good(r)}
+    known = {s["id"]: s for s in current}
+    merged = [*current, *(r for i, r in old.items() if i not in known)]
+    trim = lambda s: {**s, "skills": sorted(s["skills"]), "prompts": [p[:MEMORY_PROMPT_CHARS] for p in s["prompts"][:MEMORY_PROMPTS]]}
+    newest = sorted(merged, key=lambda s: str(s["ts"]), reverse=True)[:MEMORY_SESSIONS]
+    sources.write_private(path, json.dumps([trim(s) for s in newest], ensure_ascii=False))
+    return merged
+
+
 def load_groups(sessions: list[dict], regroup: bool) -> list[dict]:
     cache = sources.CACHE / "groups.json"
     try:
@@ -146,16 +174,18 @@ def load_groups(sessions: list[dict], regroup: bool) -> list[dict]:
     except (OSError, ValueError):
         saved = None
     if regroup or not isinstance(saved, dict) or time.time() - saved.get("at", 0) >= REGROUP_EVERY:
-        groups, at, seen = llm.group_sessions(sessions), time.time(), {s["id"] for s in sessions}
+        fresh = llm.group_sessions(sessions)
+        if fresh is None:  # a call that never answered is not an answer: nothing saved, the next run asks again
+            failed("grouping your work got no answer · trying again next run")
+            return saved["groups"] if isinstance(saved, dict) and isinstance(saved.get("groups"), list) else []
+        groups, at, seen = fresh, time.time(), {s["id"] for s in sessions}
     else:
         groups, at, seen = saved["groups"], saved["at"], set(saved.get("seen", []))
         new = [s for s in sessions if s["id"] not in seen]
         placed = llm.assign_sessions(groups, new) if new else groups
         if placed is not None:  # a call that never answered leaves the new sessions for the next run
             groups, seen = placed, seen | {s["id"] for s in new}
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps({"at": at, "groups": groups, "seen": sorted(seen)}, ensure_ascii=False),
-                     encoding="utf-8")
+    sources.write_private(cache, json.dumps({"at": at, "groups": groups, "seen": sorted(seen)}, ensure_ascii=False))
     return groups
 
 
@@ -169,8 +199,10 @@ def kinds_of_work(groups: list[dict], sessions: list[dict]) -> list[dict]:
         fired = Counter(k for s in ss for k in s["skills"])
         top, n = fired.most_common(1)[0] if fired else (None, 0)
         kinds.append({
-            "name": str(g.get("name", "")), "task": str(g.get("task", "")), "delegable": bool(g.get("delegable")),
-            "queries": g.get("queries") or [], "mcp_queries": g.get("mcp_queries") or [],
+            "name": sources.one_line(str(g.get("name", ""))), "task": sources.one_line(str(g.get("task", ""))),
+            "delegable": g.get("delegable") is True,
+            "queries": sources.search_queries(g),
+            "mcp_queries": [q for q in g.get("mcp_queries") or [] if isinstance(q, str)],
             "ids": [s["id"] for s in ss], "sessions": len(ss), "weeks": len({week(s["ts"]) for s in ss}),
             "tokens": sum(s["tokens"] for s in ss), "median_tokens": int(statistics.median(s["tokens"] for s in ss)),
             "friction": sum(s["errors"] + 3 * s["interrupts"] for s in ss),
@@ -182,9 +214,11 @@ def kinds_of_work(groups: list[dict], sessions: list[dict]) -> list[dict]:
 def find_gaps(kinds: list[dict], installed: list[dict]) -> list[dict]:
     """Recurring, delegable kinds of work that no skill covers, used or merely installed (that is `reap reuse`)."""
     open_ = [k for k in kinds if k["sessions"] >= MIN_SESSIONS and k["delegable"] and k["task"] and not k["covered_by"]]
-    for k, name in zip(open_, llm.covering_skills(open_, installed)):
-        k["covered_by"] = name
-    gaps = [k for k in open_ if not k["covered_by"]]
+    covering = llm.covering_skills(open_, installed)
+    if covering is None:  # not knowing what covers this work is not the same as nothing covering it
+        failed("checking your installed skills got no answer · nothing proposed this run")
+        return []
+    gaps = [k for k, name in zip(open_, covering) if not name]
     score = lambda k: k["sessions"] * (1 + k["friction"] / k["sessions"]) * (1 + k["median_tokens"] / 200_000)
     return sorted(gaps, key=score, reverse=True)[:MAX_GAPS]
 
@@ -193,30 +227,48 @@ def find_gaps(kinds: list[dict], installed: list[dict]) -> list[dict]:
 # Candidates
 # ---------------------------------------------------------------------------
 
-def candidates_for(gap: dict, found: list[dict], no_mcp: bool) -> list[dict]:
-    """Skills ranked by their best position in this gap's searches (installs reward off-topic skills), then MCP."""
+def namespaced(m: dict) -> dict:
+    """A registry title is the server's own to choose: 'GitHub' from anyone. Its namespace is shown beside it."""
+    return {**m, "name": m["name"] if m["name"] == m["id"] or "/" not in m["id"] else f"{m['name']} ({m['id'].split('/')[0]})"}
+
+
+def candidates_for(gap: dict, found: list[dict], no_mcp: bool, refused: list | None = None) -> list[dict]:
+    """Skills ranked by their best position in this gap's searches (installs reward off-topic skills), then MCP.
+    What the rules turn down goes in refused, as (id, name, reason), so the report can say so."""
+    refused = refused if refused is not None else []
     mine = set(gap["queries"])
     ranked = sorted((c for c in found if mine & set(c["hits"]) and c["installs"] >= MIN_INSTALLS),
-                    key=lambda c: (min(r for q, r in c["hits"].items() if q in mine), -c["installs"]))
+                    key=lambda c: (-len(mine & set(c["hits"])), min(r for q, r in c["hits"].items() if q in mine), -c["installs"]))
     ranked = ranked[:CANDIDATES_PER_GAP]
     with ThreadPoolExecutor(10) as ex:
         docs = list(ex.map(sources.skill_doc, ranked))
     out = []
     for c, doc in zip(ranked, docs):
         desc = sources.frontmatter(doc).get("description", "")
-        if len(desc) >= 40 and not sources.risks(doc):
+        found_risks = sources.risks(doc) if len(desc) >= 40 else []
+        if found_risks:
+            refused.append((c["id"], c["name"], f"{llm.SECURITY}{', '.join(found_risks)}"))
+        elif len(desc) >= 40 and reap_tokens(c["slug"], doc) == 0:
+            # Weighs nothing because Claude never lists it: it cannot take over any work, and any document can claim this.
+            refused.append((c["id"], c["name"], "runs only by hand: Claude could never start it"))
+        elif len(desc) >= 40:
             out.append({**c, "doc": doc, "desc": desc, "cost": reap_tokens(c["slug"], doc)})
     if not no_mcp:
         # cost None: an MCP server's weight is its tool schemas, known only once it runs (reap reports it as unknown
         # too); running an unreviewed server to measure it is not acceptable before the user said yes
-        out += [{**m, "cost": None} for m in sources.search_mcp(gap["mcp_queries"])
-                if not sources.risks(m["doc"], mcp=True)]
+        for m in sources.search_mcp(gap["mcp_queries"]):
+            found_risks = sources.risks(m["doc"], mcp=True)
+            if found_risks:
+                refused.append((m["id"], m["name"], f"{llm.SECURITY}{', '.join(found_risks)}"))
+            else:
+                out.append({**namespaced(m), "cost": None})
     return [{**c, "gap": f"{gap['name']} ({gap['sessions']} sessions)", "task": gap["task"]} for c in out]
 
 
-def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict]) -> list[dict]:
+def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict], refused: list | None = None) -> list[dict]:
     """One skill written per gap. Cached by the gap, its sessions and the prompt: rewritten only when one changes,
-    so its verdicts stay cached too."""
+    so its verdicts stay cached too. A cached one the rules flag leaves the cache, so the next run writes it again."""
+    refused = refused if refused is not None else []
     cache_file = sources.CACHE / "written.json"
     try:
         cache = json.loads(cache_file.read_text(encoding="utf-8"))
@@ -234,11 +286,13 @@ def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict]) -
         for (k, _), out in zip(todo, ex.map(lambda kg: write(kg[1]), todo)):
             if out:  # an unusable answer is not cached: the next run tries again
                 cache[k] = list(out)
-    cache_file.write_text(json.dumps({k: cache[k] for k in keys if k in cache}, ensure_ascii=False),
-                          encoding="utf-8")
+    flagged = {k: sources.risks(cache[k][1]) for k in keys if k in cache and sources.risks(cache[k][1])}
+    refused.extend((f"new:{cache[k][0]}", cache[k][0], f"{llm.SECURITY}{', '.join(r)}") for k, r in flagged.items())
+    sources.write_private(cache_file, json.dumps({k: cache[k] for k in keys if k in cache and k not in flagged}, ensure_ascii=False))
+    taken = {canon(s["name"]) for s in installed}  # a cached skill may share a name with one installed since
     out = []
     for k, g in zip(keys, gaps):
-        if k in cache:
+        if k in cache and k not in flagged and canon(cache[k][0]) not in taken:
             slug, doc = cache[k]
             out.append({"id": f"new:{slug}", "name": slug, "slug": slug, "doc": doc, "kind": "skill",
                         "created": True, "desc": sources.frontmatter(doc).get("description", ""),
@@ -247,45 +301,95 @@ def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict]) -
     return out
 
 
+def reason_rank(reason: str) -> int:
+    """Which reason to keep: a security finding first, a call that never answered last."""
+    return 0 if reason.startswith(llm.SECURITY) else 2 if reason == llm.FAILED else 1
+
+
 def combine(runs: list[dict]) -> dict:
-    """Several verdicts on one candidate -> one: kept only if every run kept it, with the lowest fit."""
-    no = next((v for v in runs if not v.get("keep")), None)
+    """Several verdicts on one candidate -> one: kept only if every run kept it, with the lowest fit. A security
+    finding in any run is the reason, whatever the other runs said, and so it is cached."""
+    no = [v for v in runs if v.get("keep") is not True]
     if no:
-        return {"keep": False, "reason": no.get("reason", "")}
-    return {**runs[0], "fit": min(int(v.get("fit") or 1) for v in runs)}
+        return {"keep": False, "reason": min((v.get("reason", "") for v in no), key=reason_rank)}
+    if not all(llm.valid_fit(v.get("fit")) for v in runs):
+        return {"keep": False, "reason": llm.FAILED}
+    return {**runs[0], "fit": min(v["fit"] for v in runs)}
+
+
+def load_cache(path) -> dict:
+    """A JSON object from the cache, or nothing: a cache that is damaged or not ours is ignored, not trusted."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def usable_verdict(v) -> bool:
+    if not isinstance(v, dict) or not isinstance(v.get("at"), (int, float)) or time.time() - v["at"] >= VERDICTS_TTL:
+        return False
+    if v.get("keep") is False:
+        return isinstance(v.get("reason", ""), str)
+    return v.get("keep") is True and llm.valid_fit(v.get("fit")) and isinstance(v.get("use", ""), str) \
+        and isinstance(v.get("reason", ""), str)
+
+
+def identity(c: dict) -> str:
+    """Who a candidate says it is and what installing it runs: the verifier checks these against the document."""
+    if c.get("created"):
+        return ""
+    if c["kind"] == "mcp":
+        return json.dumps({"registry name": c["id"], "installs": sources.install_target(c.get("server") or {})})
+    return f"named {c['name']}, from the repo {c.get('source', '')}, folder {c.get('slug', '')}"
+
+
+def doc_hash(doc: str) -> str:
+    return hashlib.sha256(doc.encode("utf-8", "replace")).hexdigest()
+
+
+def rejection_lines(rejected: dict) -> list[tuple[str, str]]:
+    """Per candidate, every reason once, the most serious first."""
+    return [(name, "; ".join(sorted(dict.fromkeys(reasons), key=reason_rank))) for name, reasons in rejected.values()]
 
 
 def verify_all(cands: list[dict], state: dict) -> tuple[list[dict], list[tuple[str, str]]]:
-    """Each candidate verified VERIFY_RUNS times; verdicts cached by everything the verifier read."""
-    cache_file = sources.CACHE / "verdicts.json"
-    try:
-        cache = json.loads(cache_file.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        cache = {}
-    context = "\n".join(sorted(s["name"] for s in state["installed"])) + "\n" + \
-              "\n".join(sorted(s["name"] for s in state["used"]))
-    keys = [hashlib.sha256("\0".join((c["task"], c["id"], c["doc"], context)).encode()).hexdigest() for c in cands]
-    verdicts = {k: cache[k] for k in keys if k in cache and time.time() - cache[k]["at"] < VERDICTS_TTL}
-    todo = list({k: c for k, c in zip(keys, cands) if k not in verdicts}.items())
+    """Each candidate verified VERIFY_RUNS times; verdicts cached by everything the verifier read. A document flagged
+    once stays flagged: one lucky roll on another task or another day must not pass it."""
+    cache_file, denied_file = sources.CACHE / "verdicts.json", sources.CACHE / DENIED_FILE
+    cache = {k: v for k, v in load_cache(cache_file).items() if usable_verdict(v)}
+    denied = {k: v for k, v in load_cache(denied_file).items() if isinstance(v, str)}
+    keys = [llm.verify_key(c["task"], c["doc"], state["used"], state["installed"], c.get("created", False), identity(c))
+            for c in cands]
+    verdicts = {k: cache[k] for k in keys if k in cache}
+    todo = list({k: c for k, c in zip(keys, cands) if k not in verdicts and doc_hash(c["doc"]) not in denied}.items())
     with ThreadPoolExecutor(8) as ex:
         runs = list(ex.map(lambda kc: llm.verify(kc[1]["task"], kc[1]["doc"], state["used"], state["installed"],
-                                             own=kc[1].get("created", False)),
+                                                 own=kc[1].get("created", False), about=identity(kc[1])),
                            [kc for kc in todo for _ in range(VERIFY_RUNS)]))
     for i, (k, _) in enumerate(todo):
         verdicts[k] = {**combine(runs[i * VERIFY_RUNS:(i + 1) * VERIFY_RUNS]), "at": time.time()}
         if verdicts[k].get("reason") != llm.FAILED:  # a call that never answered is not a verdict: not cached
             cache[k] = verdicts[k]
-    cache_file.write_text(json.dumps({k: v for k, v in cache.items() if time.time() - v["at"] < VERDICTS_TTL}),
-                          encoding="utf-8")
+    sources.write_private(cache_file, json.dumps(cache))
+    for k, c in zip(keys, cands):
+        reason = verdicts.get(k, {}).get("reason", "")
+        if reason.startswith(llm.SECURITY):
+            denied.setdefault(doc_hash(c["doc"]), reason)
+    sources.write_private(denied_file, json.dumps(denied))
     passing, rejected = [], {}
     for k, c in zip(keys, cands):
-        v = verdicts[k]
-        if not v.get("keep"):
-            rejected[c["name"]] = v.get("reason", "")
+        v = verdicts.get(k, {})
+        reason = denied.get(doc_hash(c["doc"])) or v.get("reason", "")
+        if c["kind"] == "mcp" and not sources.install_target(c.get("server") or {}):
+            reason = reason or "no safe way to install it"
+            v = {"keep": False}
+        if doc_hash(c["doc"]) in denied or v.get("keep") is not True:
+            rejected.setdefault(c["id"], (c["name"], []))[1].append(reason)
             continue
-        kind = f"MCP server, {sources.mcp_where(c['server'])}" if c["kind"] == "mcp" else "skill"
-        passing.append({**c, "kind": kind, "fit": int(v.get("fit") or 1), "why": v.get("use") or v.get("reason", "")})
-    return passing, list(rejected.items())
+        where = {"where": sources.mcp_where(c["server"])} if c["kind"] == "mcp" else {}
+        passing.append({**c, **where, "fit": v["fit"], "why": v.get("use") or v.get("reason", "")})
+    return passing, rejection_lines(rejected)
 
 
 def best_per_gap(passing: list[dict], limit: int) -> list[dict]:
@@ -328,7 +432,20 @@ def write_report(kinds: list[dict], gaps: list[dict], passing: list[dict], rejec
         f"- {c['name']} ({swaps.kind_text(c)}, {swaps.weight(c['cost'])}, fit {c['fit']}/5) for {c['gap']}: {c['why']}"
         for c in passing]
     lines += ["", "## Rejected", ""] + [f"- {n}: {r}" for n, r in rejected]
-    REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    sources.write_private(REPORT, "\n".join(lines) + "\n")
+    sources.write_private(sources.CACHE / "verified.json", json.dumps(
+        [{"id": c.get("id"), "name": c["name"], "gap": c["gap"].rsplit(" (", 1)[0], "fit": c["fit"], "why": c["why"],
+          "cost": c["cost"], "installs": c.get("installs", 0)} for c in passing], ensure_ascii=False))
+
+
+def refusal_lines(rejected: list[tuple[str, str]]) -> list[str]:
+    """What the user is told about refusals: a failed check is not the same as nothing fitting."""
+    failed = sum(1 for _, reason in rejected if llm.FAILED in reason)
+    unsafe = [(n, r) for n, r in rejected if llm.SECURITY in r]
+    lines = [f"  refused for security: {sources.printable(n)}: {sources.printable(r)}" for n, r in unsafe]
+    if failed:
+        lines.append(f"  the check could not run for {failed} · they count as not checked, not as no fit")
+    return lines + ([f"  details: {REPORT}"] if rejected else [])
 
 
 def choose_and_apply(swap_list: list[dict], dry_run: bool):
@@ -337,7 +454,7 @@ def choose_and_apply(swap_list: list[dict], dry_run: bool):
         print("  nothing accepted · nothing changed")
         return
     for s in chosen:
-        print(f"  {s['cands'][s['idx']]['name']}  in place of  {swaps.names(s['mute'])}")
+        print(f"  {swaps.named(s['cands'][s['idx']])}  in place of  {swaps.names(s['mute'])}")
     if not dry_run and input("  apply? installs the new ones, mutes the old ones (reap unmute undoes) [y/N] "
                              ).strip().lower() != "y":
         print("  nothing changed")
@@ -355,9 +472,11 @@ def main():
                                                           "recurring work needs history)")
     ap.add_argument("--max", type=int, default=3, help="swaps proposed at most")
     ap.add_argument("--regroup", action="store_true", help="group every session from scratch now, instead of weekly")
-    ap.add_argument("--online", action="store_true", help="search skills.sh and the MCP registry instead of "
+    ap.add_argument("--online", action="store_true", help="search skills.sh instead of "
                                                           "writing skills from your sessions")
-    ap.add_argument("--no-mcp", action="store_true", help="with --online: skills only")
+    ap.add_argument("--mcp", action="store_true", help="with --online: also offer MCP servers. Off by default: the registry "
+                                                       "gives no signal of trust, and a server runs code")
+    ap.add_argument("--no-mcp", action="store_true", help=argparse.SUPPRESS)  # what was once needed to get today's default
     ap.add_argument("--dry-run", action="store_true", help="pick swaps but only print what would run: installs and mutes nothing")
     args = ap.parse_args()
     sources.CACHE.mkdir(parents=True, exist_ok=True)
@@ -365,9 +484,10 @@ def main():
 
     step("reading sessions")
     state = reap_state()
-    sessions = read_sessions(args.days, {canon(s["name"]) for s in state["installed"]})
+    sessions = remember_sessions(read_sessions(args.days, {canon(s["name"]) for s in state["installed"]}))
     step(f"{len(sessions)} sessions read", done=True)
 
+    refused = []  # what the rules turned down before any verifier saw it
     step("grouping your work")
     kinds = kinds_of_work(load_groups(sessions, args.regroup), sessions)
     gaps = find_gaps(kinds, state["installed"])
@@ -378,15 +498,16 @@ def main():
         queries = sorted({q for g in gaps for q in g["queries"]})
         found = sources.search_skills(queries, {canon(s["name"]) for s in state["installed"]})
         with ThreadPoolExecutor(max(1, len(gaps))) as ex:
-            cands = [c for cs in ex.map(lambda g: candidates_for(g, found, args.no_mcp), gaps) for c in cs]
+            cands = [c for cs in ex.map(lambda g: candidates_for(g, found, args.no_mcp or not args.mcp, refused), gaps) for c in cs]
         step(f"{len(cands)} candidates", done=True)
     else:
         step(f"writing a skill for {len(gaps)} gaps from your sessions")
-        cands = created_for(gaps, sessions, state["installed"])
+        cands = created_for(gaps, sessions, state["installed"], refused)
         step(f"{len(cands)} skills written", done=True)
 
     step(f"verifying {len(cands)} candidates")
     passing, rejected = verify_all(cands, state)
+    rejected = rejected + rejection_lines({i: (n, [r]) for i, n, r in refused})
     step(f"{len(passing)} fit", done=True)
 
     write_report(kinds, gaps, passing, rejected)
@@ -397,8 +518,11 @@ def main():
     sys.stdout = sys.__stdout__
     swaps.save_proposals(swap_list)
     print()
+    told = refusal_lines(rejected)
+    if told:
+        print("\n".join(told))
     if not swap_list:
-        print(f"  no swaps: nothing verified for your gaps · details: {REPORT}")
+        print("  no swaps: nothing verified for your gaps" + ("" if told else f" · details: {REPORT}"))
     elif sys.stdin.isatty() and TERM.isatty():
         choose_and_apply(swap_list, args.dry_run)
     else:

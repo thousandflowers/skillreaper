@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
 """Round 2: five different concepts, gradient bars, more data. Read-only: nothing is ever run."""
 import collections, curses, json, locale, os, sys, textwrap
-from reap_proto import DATA, DEAD, MONEY, ROWS, WHY, C, DIM, HL, put, window
+import reap_proto
+from reap_proto import DATA, DEAD, MONEY, ROWS, WHY, C, DIM, HL, load_json, pair, put, window
 
-EXTRA = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "extras.json")))
-M = DATA.get("Measured", {})
+
+def load_extras():
+    """The day counts are decoration: anything odd in them is left out, never fatal."""
+    raw = load_json("extras.json", {})
+    raw = raw if isinstance(raw, dict) else {}
+    byday = raw.get("byday") if isinstance(raw.get("byday"), dict) else {}
+    return {"dates": [], "days": [], "fires": [], **raw,
+            "byday": {k: v for k, v in byday.items() if isinstance(v, list) and all(type(n) is int and n >= 0 for n in v)}}
+
+
+EXTRA = load_extras()
+M = DATA["Measured"] if isinstance(DATA.get("Measured"), dict) else {}
 SESSIONS = DATA.get("Sessions", 0)
 PRICE = MONEY / DEAD if DEAD else 0
 WARM = [57, 93, 129, 165, 201, 205, 209, 215, 221, 227]
@@ -13,20 +24,14 @@ RAMP_BASE = {}
 
 
 def setup():
-    locale.setlocale(locale.LC_ALL, "")
-    curses.use_default_colors()
-    curses.curs_set(0)
-    for i, c in enumerate([curses.COLOR_RED, curses.COLOR_YELLOW, curses.COLOR_MAGENTA, curses.COLOR_CYAN, curses.COLOR_GREEN, curses.COLOR_BLUE], 1):
-        curses.init_pair(i, c, -1)
-    curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_CYAN)
-    curses.init_pair(8, curses.COLOR_WHITE, -1)
-    pair = 20
-    if curses.COLORS >= 256:
+    reap_proto.setup()
+    next_pair = 20
+    if getattr(curses, "COLORS", 0) >= 256:
         for c in WARM + HEALTH:
-            curses.init_pair(pair, c, -1)
-            curses.init_pair(pair + 100, 16, c)
-            RAMP_BASE[c] = pair
-            pair += 1
+            pair(next_pair, c)
+            pair(next_pair + 100, 16, c)
+            RAMP_BASE[c] = next_pair
+            next_pair += 1
 
 
 def rc(ramp, t, bg=False):
@@ -358,5 +363,7 @@ def main(w, fn):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] not in VERSIONS:
+        sys.exit(f"usage: {sys.argv[0]} {{{'|'.join(VERSIONS)}}}")
     os.environ.setdefault("ESCDELAY", "25")
     curses.wrapper(main, VERSIONS[sys.argv[1]])

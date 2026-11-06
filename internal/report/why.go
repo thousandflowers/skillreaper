@@ -114,7 +114,7 @@ func BuildExplanation(row Row, sessions int, in ExplainInput) Explanation {
 		Sessions:     sessions,
 		Uses:         row.Uses,
 		Errors:       row.ErrorCount,
-		LastSeen:     dateOrNever(row.LastUsed),
+		LastSeen:     lastSeen(row),
 		Installed:    dateOrUnknown(row.InstalledAt),
 		GraceDays:    in.GraceDays,
 		KeepList:     row.Kept,
@@ -165,15 +165,16 @@ func summaryFor(row Row) string {
 	case ReasonNeedsData:
 		return "not enough sessions yet to make a confident call"
 	case ReasonNoEvidence:
-		return "this platform's transcripts can't be parsed yet — no usage evidence"
+		if row.EvidenceNote != "" {
+			return "no usage evidence: " + row.EvidenceNote
+		}
+		return "no usage evidence for this platform"
 	case ReasonUserKeep:
 		return "manually protected via the keep-list"
 	case ReasonClaudeMDRef:
 		return "referenced in CLAUDE.md — protected from pruning"
 	case ReasonMuted:
 		return "you muted it, so it cannot fire on its own and its uses prove nothing"
-	case ReasonRequested:
-		return fmt.Sprintf("you asked for it by name %d time(s) and it never started", row.Requests)
 	case ReasonHookLoaded:
 		return "injected every session by its plugin's hook — in use without being invoked"
 	default:
@@ -182,8 +183,23 @@ func summaryFor(row Row) string {
 }
 
 func recommendationFor(row Row, sessions int, in ExplainInput) string {
+	if row.PruneLost {
+		return "prune lost: you pruned it and a plugin update brought it back. run: reap prune " + CanonicalName(row) + " to take it again"
+	}
 	switch row.Verdict {
 	case VerdictReap:
+		if row.ViaLink != "" {
+			return "unused, reached through a link to " + row.ViaLink + ". run: reap prune " + CanonicalName(row) + " takes the link and leaves that"
+		}
+		if row.Category == scan.CatSkill && !row.Removable && !IsPluginSource(row.Source) {
+			return "unused, in a shared folder other tools read. run: reap prune " + CanonicalName(row) + " takes it from them too"
+		}
+		if !row.Removable && !IsPluginSource(row.Source) {
+			return "unused, but reap cannot edit it. remove it by hand from " + row.Path
+		}
+		if !row.Removable {
+			return "unused, inside a plugin. disable it via /plugin, or run: reap prune " + CanonicalName(row) + " (an update can bring it back)"
+		}
 		if row.Reason == ReasonBroken {
 			return "broken — safe to prune. run: reap prune"
 		}
@@ -201,7 +217,7 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 			}
 			return fmt.Sprintf("wait — %d day(s) left in the %d-day grace period", left, in.GraceDays)
 		case ReasonNoEvidence:
-			return "judge manually until this platform's transcripts are parseable"
+			return "judge it yourself: reap has no record of its use on this platform"
 		default:
 			need := in.MinSessions - sessions
 			if need < 1 {
@@ -223,6 +239,20 @@ func (in ExplainInput) daysSinceInstall(row Row) int {
 		return 0
 	}
 	return d
+}
+
+// lastSeen is the most that is known of when an item last fired. Uses with no
+// date are not "never", and a use before the window has its date from history.
+func lastSeen(row Row) string {
+	switch {
+	case !row.LastUsed.IsZero():
+		return row.LastUsed.Format("2006-01-02")
+	case row.Uses > 0:
+		return "unknown (its events have no date)"
+	case !row.HistoricalLast.IsZero():
+		return row.HistoricalLast.Format("2006-01-02") + " (before this window)"
+	}
+	return "never"
 }
 
 func dateOrNever(t time.Time) string {

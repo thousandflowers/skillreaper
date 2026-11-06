@@ -7,14 +7,28 @@ import (
 	"strings"
 )
 
+// trimBOM drops the UTF-8 byte order mark some Windows editors save, which would
+// otherwise hide the opening "---".
+func trimBOM(b []byte) []byte {
+	return bytes.TrimPrefix(b, []byte("\xef\xbb\xbf"))
+}
+
+// newLineScanner reads lines of any length readCapped lets through. A smaller
+// limit stops the scan at the first long line and loses what follows it.
+func newLineScanner(b []byte) *bufio.Scanner {
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	sc.Buffer(make([]byte, 0, 64*1024), maxFileSize+1)
+	return sc
+}
+
 // parseFrontmatter extracts the name and description from a Markdown
 // file with YAML frontmatter delimited by "---" lines. It returns the
 // number of characters in the body (everything after the closing
 // delimiter). Files without frontmatter yield empty name/description
 // and the whole file as body.
 func parseFrontmatter(b []byte) (name, description string, bodyChars int) {
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	b = trimBOM(b)
+	sc := newLineScanner(b)
 
 	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
 		return "", "", len(b)
@@ -48,8 +62,7 @@ func parseFrontmatter(b []byte) (name, description string, bodyChars int) {
 // frontmatterValue returns the single-line value of key in a Markdown file's
 // YAML frontmatter, and whether the key was present.
 func frontmatterValue(b []byte, key string) (string, bool) {
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	sc := newLineScanner(trimBOM(b))
 	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
 		return "", false
 	}

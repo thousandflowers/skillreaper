@@ -23,6 +23,14 @@ func TestMain(m *testing.M) {
 	if err := os.Setenv(evidence.StateDirEnv, dir); err != nil {
 		panic(err)
 	}
+	// The corpus cache hashes a temp directory that differs every run, so a real
+	// cache directory would gain files that nothing ever removes.
+	if err := os.Setenv("HOME", dir); err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("XDG_CACHE_HOME", dir); err != nil {
+		panic(err)
+	}
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

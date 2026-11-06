@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -29,21 +30,23 @@ const maxLineBytes = 10 * 1024 * 1024
 
 var commandNameRe = regexp.MustCompile(`<command-name>/?([^<\s]+)</command-name>`)
 
-var (
-	// quotedRe matches a tagged block or a code fence.
-	quotedRe = regexp.MustCompile("(?s)<[a-z][\\w-]*\\b[^>]*>.*?</[a-z][\\w-]*>|```.*?```")
-	// afterVerbRe matches "usa graphify", "run the skill x", "use `/x`".
-	afterVerbRe = regexp.MustCompile("(?i)(?:^|[^\\pL\\pN:_-])(?:usa|lancia|avvia|use|run|skill)\\s+(?:(?:la|il|lo|the|a)\\s+)?(?:skill\\s+)?[`*/]*([\\pL\\pN_:-]+)")
-	// beforeSkillRe matches "the graphify skill".
-	beforeSkillRe = regexp.MustCompile("(?i)([\\pL\\pN_:-]+)[`*]*\\s+skill\\b")
-)
+// commandNames returns the commands a user entry ran. Claude Code writes a
+// command block at the very start of the entry; the same tags further into a
+// message are text the user pasted.
+func commandNames(text string) []string {
+	t := strings.TrimSpace(text)
+	if !strings.HasPrefix(t, "<command-name>") && !strings.HasPrefix(t, "<command-message>") {
+		return nil
+	}
+	var names []string
+	for _, m := range commandNameRe.FindAllStringSubmatch(t, -1) {
+		names = append(names, m[1])
+	}
+	return names
+}
 
 // Stats aggregates invocation counts per category and invocation key.
 type Stats struct {
-	// Requests counts how often the user asked for a skill in words, by the
-	// lowercased name they wrote. Apart from Uses: nothing started. It holds
-	// every word that followed a verb; only names that match an item are read.
-	Requests     map[string]int
 	Sessions     int
 	FilesScanned int
 	// MalformedLines is the total across every failure kind below, kept as a
@@ -70,6 +73,11 @@ type Stats struct {
 	OldestTranscript time.Time
 	NewestTranscript time.Time
 	SkippedByCutoff  int
+	// ModelUse counts assistant messages in the window by model id.
+	ModelUse map[string]int `json:",omitempty"`
+	// windowStart is the earliest event that counts as use. Zero counts all.
+	windowStart time.Time
+	older       olderUses
 
 	// Measured is the provider's own token accounting, summed over every
 	// assistant message in the window. It measures whole requests and can
@@ -120,7 +128,42 @@ type Stats struct {
 	// injected. Past a size budget the listing keeps only some descriptions and
 	// names the rest, so the SKILL.md alone overstates most skills.
 	SkillWeight map[string]Injected
+
+	// ProjectPaths maps a project bucket to the cwd its transcripts recorded,
+	// the only real path: the bucket name itself cannot be decoded.
+	ProjectPaths map[string]string
+
+	// ToolCalls counts tool names whose server cannot be told from the name
+	// alone, because a server's name can contain the separator. They are matched
+	// against the configured servers at join time. ToolSep is the separator.
+	ToolCalls map[string]int
+	ToolLast  map[string]time.Time
+	ToolSep   string
+
+	// PositiveOnly means a fire in this history is proof of use, but no fire is
+	// not proof of disuse: the format was not confirmed for every way an item
+	// can be used. Such a platform never yields REAP or MUTE.
+	PositiveOnly bool
 }
+
+// ToolSepDefault is how Claude Code joins server and tool in mcp__server__tool.
+const ToolSepDefault = "__"
+
+func (s *Stats) recordTool(name string, ts time.Time) {
+	if s.beforeWindow(ts) {
+		return
+	}
+	if s.ToolCalls == nil {
+		s.ToolCalls, s.ToolLast = map[string]int{}, map[string]time.Time{}
+	}
+	s.ToolCalls[name]++
+	if ts.After(s.ToolLast[name]) {
+		s.ToolLast[name] = ts
+	}
+}
+
+// MCPServerKey is the form of a server's name that its tool names carry.
+func MCPServerKey(name string) string { return mcpServerKey(name) }
 
 // Injected is what one item put into the prompt in the latest session that
 // loaded it. Latest, not average: tool lists and listings change over time.
@@ -190,7 +233,6 @@ func NewStats(windowDays int) *Stats {
 		LastAttempt: map[scan.Category]map[string]time.Time{
 			scan.CatSkill: {}, scan.CatAgent: {}, scan.CatMCP: {},
 		},
-		Requests:      map[string]int{},
 		SkillProjects: map[string]map[string]int{},
 		MCPPayload:    map[string]PayloadStat{},
 		MCPWeight:     map[string]Injected{},
@@ -216,14 +258,54 @@ func (s *Stats) recordSkillProject(key, project string) {
 	if key == "" || project == "" {
 		return
 	}
+	key, project = scan.SafeText(key), scan.SafeText(project)
 	if s.SkillProjects[key] == nil {
 		s.SkillProjects[key] = map[string]int{}
 	}
 	s.SkillProjects[key][project]++
 }
 
+// beforeWindow reports an event older than the window. A session resumed today
+// keeps its old lines in a file modified today, so the file's date says nothing
+// about them: "N uses in 30 days" goes by each event's own time. An event with
+// no time at all has only its file's date to go on, and stays in.
+func (s *Stats) beforeWindow(ts time.Time) bool {
+	return !s.windowStart.IsZero() && !ts.IsZero() && ts.Before(s.windowStart)
+}
+
+// olderUses are the uses seen before the window. They do not count as use in the
+// window, but they are real history and the durable record keeps them.
+type olderUses struct {
+	Uses map[scan.Category]map[string]int
+	Last map[scan.Category]map[string]time.Time
+}
+
+func (o *olderUses) add(cat scan.Category, key string, ts time.Time) {
+	if o.Uses == nil {
+		o.Uses, o.Last = map[scan.Category]map[string]int{}, map[scan.Category]map[string]time.Time{}
+	}
+	if o.Uses[cat] == nil {
+		o.Uses[cat], o.Last[cat] = map[string]int{}, map[string]time.Time{}
+	}
+	o.Uses[cat][key]++
+	if ts.After(o.Last[cat][key]) {
+		o.Last[cat][key] = ts
+	}
+}
+
+// OlderUses returns the uses this Stats saw before its window, by category and
+// name, and when they last happened.
+func (s *Stats) OlderUses() (map[scan.Category]map[string]int, map[scan.Category]map[string]time.Time) {
+	return s.older.Uses, s.older.Last
+}
+
 func (s *Stats) record(cat scan.Category, key string, ts time.Time) {
 	if key == "" {
+		return
+	}
+	key = scan.SafeText(key)
+	if s.beforeWindow(ts) {
+		s.older.add(cat, key, ts)
 		return
 	}
 	s.Uses[cat][key]++
@@ -239,6 +321,10 @@ func (s *Stats) recordError(cat scan.Category, key string, ts time.Time) {
 	if key == "" {
 		return
 	}
+	key = scan.SafeText(key)
+	if s.beforeWindow(ts) {
+		return
+	}
 	s.Errors[cat][key]++
 	if ts.After(s.LastAttempt[cat][key]) {
 		s.LastAttempt[cat][key] = ts
@@ -251,14 +337,46 @@ type entry struct {
 	Timestamp string `json:"timestamp"`
 	// IsMeta marks text the harness added, IsSidechain a subagent's transcript,
 	// where the "user" is Claude writing a prompt.
-	IsMeta      bool `json:"isMeta"`
-	IsSidechain bool `json:"isSidechain"`
-	Message     struct {
-		Content json.RawMessage `json:"content"`
-		Usage   *usageBlock     `json:"usage"`
-	} `json:"message"`
-	Init       *initPayload `json:"init,omitempty"`
-	Attachment *attachment  `json:"attachment,omitempty"`
+	IsMeta      bool   `json:"isMeta"`
+	IsSidechain bool   `json:"isSidechain"`
+	SessionID   string `json:"sessionId"`
+	Cwd         string `json:"cwd"`
+	// Decoded on their own, so one field of an unexpected type loses that field
+	// and not the tool uses on the same line.
+	Message    json.RawMessage `json:"message"`
+	Init       json.RawMessage `json:"init,omitempty"`
+	Attachment json.RawMessage `json:"attachment,omitempty"`
+}
+
+// message is the part of an entry's message this parser reads.
+type message struct {
+	Model   string          `json:"model"`
+	Content json.RawMessage `json:"content"`
+	Usage   json.RawMessage `json:"usage"`
+}
+
+// decodeLenient decodes raw into v when it can, and reports whether it did.
+func decodeLenient(raw json.RawMessage, v any) bool {
+	return len(raw) > 0 && json.Unmarshal(raw, v) == nil
+}
+
+// decodeBlocks decodes a message's blocks one at a time, so a block of an
+// unknown shape does not take its siblings with it. A dropped block that held a
+// tool use is evidence lost, and the caller is told.
+func decodeBlocks(raw json.RawMessage) (blocks []contentBlock, lostToolUse bool) {
+	var parts []json.RawMessage
+	if json.Unmarshal(raw, &parts) != nil {
+		return nil, bytes.Contains(raw, []byte(`"tool_use"`))
+	}
+	for _, p := range parts {
+		var b contentBlock
+		if json.Unmarshal(p, &b) != nil {
+			lostToolUse = lostToolUse || bytes.Contains(p, []byte(`"tool_use"`))
+			continue
+		}
+		blocks = append(blocks, b)
+	}
+	return blocks, lostToolUse
 }
 
 // attachment is the part of a Claude Code context attachment that says what
@@ -402,9 +520,96 @@ func TranscriptID(path string, size, modUnix int64) string {
 //
 // Both callbacks may be nil, which is the plain Parse path.
 func ParseObserving(projectsDir string, cutoff time.Time, windowDays int, needs func(id string) bool, observe func(id string, one *Stats)) (*Stats, error) {
+	return parseTree(projectsDir, cutoff, windowDays, needs, observe, parseFile)
+}
+
+// transcriptRoot is one tree to walk. project names the bucket when the tree is
+// a linked project folder; empty means take it from the path under the root.
+type transcriptRoot struct {
+	dir, project string
+}
+
+// transcriptRoots returns dir plus any project folder directly under it that is
+// a symlink to a directory, such as a history moved to another disk. WalkDir does
+// not descend into those, and what fired there would read as never fired.
+func transcriptRoots(dir string) []transcriptRoot {
+	roots := []transcriptRoot{{dir: dir}}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return roots
+	}
+	seen := map[string]bool{}
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		seen[real] = true
+	}
+	for _, e := range entries {
+		if e.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		target, err := filepath.EvalSymlinks(filepath.Join(dir, e.Name()))
+		if err != nil || seen[target] {
+			continue
+		}
+		if info, err := os.Stat(target); err == nil && info.IsDir() {
+			seen[target] = true
+			roots = append(roots, transcriptRoot{dir: target, project: e.Name()})
+		}
+	}
+	return roots
+}
+
+// isSubagentPath reports a transcript written by a subagent inside a session.
+func isSubagentPath(path string) bool {
+	return strings.Contains(filepath.ToSlash(path), "/subagents/")
+}
+
+// transcriptInfo returns a file's stat when it can be read as a transcript. A
+// FIFO would block the open forever. A symlink is judged by what it points to.
+func transcriptInfo(path string, d fs.DirEntry) (fs.FileInfo, error, bool) {
+	info, err := d.Info()
+	if err != nil {
+		return nil, err, false
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		if info, err = os.Stat(path); err != nil {
+			return nil, err, false
+		}
+	}
+	return info, nil, info.Mode().IsRegular()
+}
+
+// parseTree walks one transcript tree. parseOne reads a file into a Stats and
+// returns its session id, or "" when the file holds no session of its own: a
+// subagent's transcript, an empty file, or lines this parser cannot recognise.
+// Each session counts once, however many files carry it.
+func parseTree(dir string, cutoff time.Time, windowDays int, needs func(id string) bool, observe func(id string, one *Stats), parseOne func(path, project string, st *Stats) string) (*Stats, error) {
 	st := NewStats(windowDays)
-	err := filepath.WalkDir(projectsDir, func(path string, d fs.DirEntry, err error) error {
+	st.windowStart = cutoff
+	sessions := map[string]bool{}
+	var walkErr error
+	for _, root := range transcriptRoots(dir) {
+		if err := walkTranscripts(root, st, sessions, cutoff, windowDays, needs, observe, parseOne); err != nil {
+			walkErr = err
+		}
+	}
+	st.Sessions = len(sessions)
+	return st, walkErr
+}
+
+func walkTranscripts(root transcriptRoot, st *Stats, sessions map[string]bool, cutoff time.Time, windowDays int, needs func(id string) bool, observe func(id string, one *Stats), parseOne func(path, project string, st *Stats) string) error {
+	projectOf := func(path string) string {
+		if root.project != "" {
+			return root.project
+		}
+		return projectFor(root.dir, path)
+	}
+	return filepath.WalkDir(root.dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			// No such folder is the state of a machine with no sessions yet, and
+			// no evidence was lost.
+			if path == root.dir && errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			// Walk handed us a read/stat error for this path. Skip it but flag
 			// that evidence is missing — a whole subtree may be unreadable.
 			st.IncompleteEvidence = true
@@ -413,42 +618,87 @@ func ParseObserving(projectsDir string, cutoff time.Time, windowDays int, needs 
 		if d.IsDir() || !strings.HasSuffix(path, ".jsonl") {
 			return nil
 		}
-		info, ierr := d.Info()
+		info, ierr, regular := transcriptInfo(path, d)
 		if ierr != nil {
 			st.IncompleteEvidence = true
+			return nil
+		}
+		if !regular {
 			return nil
 		}
 		// Bracket the whole corpus before the window is applied: the file the
 		// cutoff is about to discard is the one that says how far back the
 		// evidence actually reaches.
 		st.observeTranscript(info.ModTime())
+		id := TranscriptID(path, info.Size(), info.ModTime().Unix())
 		if info.ModTime().Before(cutoff) {
 			st.SkippedByCutoff++
+			// Nothing in it counts for the window, but it is history, and the
+			// retention sweep will delete it. Read once, for the durable record, so
+			// a skill last used 40 days ago does not read as never used.
+			if observe != nil && needs != nil && needs(id) {
+				one := NewStats(windowDays)
+				one.windowStart = cutoff
+				parseOne(path, projectOf(path), one)
+				observe(id, one)
+			}
 			return nil
 		}
 		st.FilesScanned++
-		st.Sessions++
-		id := TranscriptID(path, info.Size(), info.ModTime().Unix())
+		note := func(session string) {
+			if session != "" {
+				sessions[session] = true
+			}
+		}
 		if observe == nil || (needs != nil && !needs(id)) {
-			parseFile(path, projectFor(projectsDir, path), st)
+			note(parseOne(path, projectOf(path), st))
 			return nil
 		}
 		// Parse into a per-file Stats so the observer sees this transcript
 		// alone, then fold it in. The aggregate is identical either way.
 		one := NewStats(windowDays)
-		parseFile(path, projectFor(projectsDir, path), one)
+		one.windowStart = cutoff
+		note(parseOne(path, projectOf(path), one))
 		observe(id, one)
 		MergeInto(st, one)
 		return nil
 	})
-	return st, err
 }
 
 // MergeInto folds src into dst. Counts add, timestamps take the later, and
 // incomplete evidence is sticky: a partial read anywhere means the whole
 // result is partial.
 func MergeInto(dst, src *Stats) {
+	for model, n := range src.ModelUse {
+		if dst.ModelUse == nil {
+			dst.ModelUse = map[string]int{}
+		}
+		dst.ModelUse[model] += n
+	}
 	dst.MalformedLines += src.MalformedLines
+	dst.UnreadableFiles += src.UnreadableFiles
+	dst.TruncatedReads += src.TruncatedReads
+	dst.OversizedLines += src.OversizedLines
+	dst.UnparsableLines += src.UnparsableLines
+	dst.PositiveOnly = dst.PositiveOnly || src.PositiveOnly
+	if dst.ToolSep == "" {
+		dst.ToolSep = src.ToolSep
+	}
+	for project, path := range src.ProjectPaths {
+		if dst.ProjectPaths == nil {
+			dst.ProjectPaths = map[string]string{}
+		}
+		dst.ProjectPaths[project] = path
+	}
+	for name, n := range src.ToolCalls {
+		if dst.ToolCalls == nil {
+			dst.ToolCalls, dst.ToolLast = map[string]int{}, map[string]time.Time{}
+		}
+		dst.ToolCalls[name] += n
+		if t := src.ToolLast[name]; t.After(dst.ToolLast[name]) {
+			dst.ToolLast[name] = t
+		}
+	}
 	dst.IncompleteEvidence = dst.IncompleteEvidence || src.IncompleteEvidence
 	dst.Measured.Merge(src.Measured)
 	for cat, uses := range src.Uses {
@@ -474,9 +724,6 @@ func MergeInto(dst, src *Stats) {
 				dst.LastAttempt[cat][key] = ts
 			}
 		}
-	}
-	for name, n := range src.Requests {
-		dst.Requests[name] += n
 	}
 	for key, projects := range src.SkillProjects {
 		if dst.SkillProjects[key] == nil {
@@ -518,25 +765,29 @@ func projectFor(projectsDir, path string) string {
 	return parts[0]
 }
 
-func parseFile(path, project string, st *Stats) {
+func parseFile(path, project string, st *Stats) string {
 	f, err := os.Open(path)
 	if err != nil {
 		st.MalformedLines++
 		st.UnreadableFiles++
-		return
+		return ""
 	}
+	sessionID := ""
+	subagent := isSubagentPath(path)
 	defer f.Close()
 
 	// recSkill records a successful skill firing and its project bucket.
 	recSkill := func(key string, ts time.Time) {
 		st.record(scan.CatSkill, key, ts)
-		st.recordSkillProject(key, project)
+		if !st.beforeWindow(ts) {
+			st.recordSkillProject(key, project)
+		}
 	}
 
 	declared := map[string]int{}
 	used := map[string]bool{}
 	pending := map[string]pendingSkill{}
-	mcpPending := map[string]string{}
+	mcpPending := map[string]pendingMCP{}
 	parsedInit := false
 	// Injected MCP context in this session: tool names per server, and the
 	// latest instructions per server (a re-add replaces, never adds).
@@ -572,6 +823,8 @@ func parseFile(path, project string, st *Stats) {
 			if bytes.Contains(line, []byte(`"tool_use"`)) || bytes.Contains(line, []byte(`<command-name>`)) {
 				st.MalformedLines++
 				st.UnparsableLines++
+				// A use may be on this line, so a zero for its item proves nothing.
+				st.IncompleteEvidence = true
 			}
 			continue
 		}
@@ -579,25 +832,51 @@ func parseFile(path, project string, st *Stats) {
 		if ts.After(lastTS) {
 			lastTS = ts
 		}
-		if a := e.Attachment; e.Type == "attachment" && a != nil {
-			recordInjectedMCP(a, mcpTools, mcpInstr)
-			if a.Type == "skill_listing" {
-				recordSkillListing(a, skillChars)
+		if (e.Type == "user" || e.Type == "assistant") && !e.IsSidechain && !subagent && sessionID == "" {
+			sessionID = e.SessionID
+			if sessionID == "" {
+				sessionID = "file:" + path // older transcripts carry no id
+			}
+		}
+		if e.Cwd != "" && project != "" && st.ProjectPaths[project] == "" {
+			if st.ProjectPaths == nil {
+				st.ProjectPaths = map[string]string{}
+			}
+			st.ProjectPaths[project] = scan.SafeText(e.Cwd)
+		}
+		if e.Type == "attachment" {
+			var a attachment
+			if decodeLenient(e.Attachment, &a) {
+				recordInjectedMCP(&a, mcpTools, mcpInstr)
+				if a.Type == "skill_listing" {
+					recordSkillListing(&a, skillChars)
+				}
 			}
 			continue
 		}
+
+		var msg message
+		_ = decodeLenient(e.Message, &msg)
 
 		// Counted before any type or content check: the accounting is attached
 		// to the message regardless of what the message did, and skipping the
 		// ones that fired no tool would undercount exactly the turns where
 		// resident context was re-read for nothing.
-		if e.Message.Usage != nil {
-			st.Measured.Add(*e.Message.Usage)
+		var u usageBlock
+		if e.Type == "assistant" && msg.Model != "" && !st.beforeWindow(ts) {
+			if st.ModelUse == nil {
+				st.ModelUse = map[string]int{}
+			}
+			st.ModelUse[msg.Model]++
+		}
+		if string(msg.Usage) != "null" && decodeLenient(msg.Usage, &u) {
+			st.Measured.Add(u)
 		}
 
-		if !parsedInit && e.Type == "init" && e.Init != nil {
+		var init initPayload
+		if !parsedInit && e.Type == "init" && decodeLenient(e.Init, &init) {
 			parsedInit = true
-			for _, t := range e.Init.Tools {
+			for _, t := range init.Tools {
 				w := len(t.Name) + len(t.Description) + len(t.InputSchema)
 				if w < len(t.Name) {
 					w = len(t.Name)
@@ -610,22 +889,17 @@ func parseFile(path, project string, st *Stats) {
 		hasToolResult := bytes.Contains(line, []byte(`"tool_result"`))
 
 		if e.Type == "user" {
-			text := userText(e.Message.Content)
-			for _, m := range commandNameRe.FindAllStringSubmatch(text, -1) {
-				recSkill(m[1], ts)
-			}
-			if !e.IsMeta && !e.IsSidechain {
-				for _, name := range requestedNames(text) {
-					st.Requests[name]++
-				}
+			text := userText(msg.Content)
+			for _, name := range commandNames(text) {
+				recSkill(name, ts)
 			}
 		}
 		if !hasToolUse && !hasToolResult {
 			continue
 		}
-		var blocks []contentBlock
-		if err := json.Unmarshal(e.Message.Content, &blocks); err != nil {
-			continue
+		blocks, lost := decodeBlocks(msg.Content)
+		if lost {
+			st.IncompleteEvidence = true
 		}
 		recordBlocks(st, blocks, ts, project, pending, mcpPending, used)
 	}
@@ -635,6 +909,9 @@ func parseFile(path, project string, st *Stats) {
 	// evidence of an error.
 	for _, ps := range pending {
 		recSkill(ps.key, ps.ts)
+	}
+	for _, call := range mcpPending {
+		recordMCPCall(st, call.tool, call.ts)
 	}
 
 	for name, weight := range declared {
@@ -658,6 +935,17 @@ func parseFile(path, project string, st *Stats) {
 	for key, n := range skillChars {
 		st.SkillWeight = recordInjected(st.SkillWeight, key, Injected{Chars: n, At: lastTS})
 	}
+	return sessionID
+}
+
+// skillKey reduces what the Skill tool was given to the name alone: the slash
+// path already drops the "/", and a caller may pass arguments after the name.
+func skillKey(s string) string {
+	fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(s), "/"))
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimPrefix(fields[0], "/")
 }
 
 // userText returns a user message's own text. The tags that mark a command also
@@ -680,25 +968,6 @@ func userText(content json.RawMessage) string {
 		}
 	}
 	return text
-}
-
-// requestedNames returns the names asked for in a message, once each: the word
-// after a verb of starting or the word "skill", or the word before "skill".
-// Tagged blocks and code fences are text the user quoted, not what they asked.
-func requestedNames(text string) []string {
-	text = quotedRe.ReplaceAllString(text, " ")
-	seen := map[string]bool{}
-	var names []string
-	for _, re := range []*regexp.Regexp{afterVerbRe, beforeSkillRe} {
-		for _, m := range re.FindAllStringSubmatch(text, -1) {
-			name := strings.ToLower(strings.TrimRight(m[1], ":-"))
-			if name != "" && !seen[name] {
-				seen[name] = true
-				names = append(names, name)
-			}
-		}
-	}
-	return names
 }
 
 // recordSkillListing measures each skill's entry in one injected listing.
@@ -763,10 +1032,12 @@ func recordInjectedMCP(a *attachment, tools map[string]map[string]bool, instr ma
 // tool_use with its tool_result (so an errored invocation is not counted as a
 // use). project (""-ok) attributes a successful skill firing to a repo. used
 // (nil-ok) records every tool name seen, for JSONL dead-tool weight.
-func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string, pending map[string]pendingSkill, mcpPending map[string]string, used map[string]bool) {
+func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string, pending map[string]pendingSkill, mcpPending map[string]pendingMCP, used map[string]bool) {
 	rec := func(key string, t time.Time) {
 		st.record(scan.CatSkill, key, t)
-		st.recordSkillProject(key, project)
+		if !st.beforeWindow(t) {
+			st.recordSkillProject(key, project)
+		}
 	}
 	for _, b := range blocks {
 		switch b.Type {
@@ -792,9 +1063,9 @@ func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string
 					// invocation is not mistaken for a successful use. Blocks
 					// with no id (older transcripts, tests) count immediately.
 					if b.ID == "" {
-						rec(in.Skill, ts)
+						rec(skillKey(in.Skill), ts)
 					} else {
-						pending[b.ID] = pendingSkill{key: in.Skill, ts: ts}
+						pending[b.ID] = pendingSkill{key: skillKey(in.Skill), ts: ts}
 					}
 				}
 			case b.Name == "Task" || b.Name == "Agent":
@@ -804,28 +1075,36 @@ func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string
 				if json.Unmarshal(b.Input, &in) == nil {
 					st.record(scan.CatAgent, in.SubagentType, ts)
 				}
-			case strings.HasPrefix(b.Name, "mcp__"):
-				rest := b.Name[len("mcp__"):]
-				if i := strings.Index(rest, "__"); i > 0 {
-					st.record(scan.CatMCP, rest[:i], ts)
-				} else {
-					st.record(scan.CatMCP, rest, ts)
+			case b.Name == "ListMcpResourcesTool" || b.Name == "ReadMcpResourceTool":
+				var in struct {
+					Server string `json:"server"`
 				}
-				// Defer payload scoring until this call's tool_result arrives.
-				// A result-less call (session ended mid-call) is simply never
-				// scored — absence of a result is not evidence of noise.
+				if json.Unmarshal(b.Input, &in) == nil {
+					st.record(scan.CatMCP, mcpServerKey(in.Server), ts)
+				}
+			case strings.HasPrefix(b.Name, "mcp__"):
+				// Held until this call's tool_result arrives: a refused call is not
+				// a use, and the payload is scored then. A result-less call (session
+				// ended mid-call) counts as a use when the file ends, and is never
+				// scored: absence of a result is not evidence of noise.
 				if mcpPending != nil && b.ID != "" {
-					mcpPending[b.ID] = b.Name
+					mcpPending[b.ID] = pendingMCP{tool: b.Name, ts: ts}
+				} else {
+					recordMCPCall(st, b.Name, ts)
 				}
 			}
 		case "tool_result":
 			// Score the matching MCP call's payload, if any. Independent of the
 			// skill-result correlation below: MCP and Skill never share an id.
 			if mcpPending != nil {
-				if tool, ok := mcpPending[b.ToolUseID]; ok {
-					total, noise := classifyPayload(b.Content)
-					st.recordPayload(tool, total, noise)
+				if call, ok := mcpPending[b.ToolUseID]; ok {
 					delete(mcpPending, b.ToolUseID)
+					if b.IsError && isRefusal(b.Content) {
+						continue
+					}
+					recordMCPCall(st, call.tool, call.ts)
+					total, noise := classifyPayload(b.Content)
+					st.recordPayload(call.tool, total, noise)
 				}
 			}
 			ps, ok := pending[b.ToolUseID]
@@ -837,13 +1116,73 @@ func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string
 			// A substring scan for "error" in the content misfires on successful
 			// output that merely mentions the word (e.g. a linter reporting
 			// "no errors found"), wrongly marking a working skill as broken.
-			if b.IsError {
+			switch {
+			case b.IsError && isRefusal(b.Content):
+				// Someone or something said no before the skill ran. That says
+				// nothing about the skill: not a use, and not a failure.
+			case b.IsError:
 				st.recordError(scan.CatSkill, ps.key, ps.ts)
-			} else {
+			default:
 				rec(ps.key, ps.ts)
 			}
 		}
 	}
+}
+
+// pendingMCP is an MCP call waiting for its tool_result.
+type pendingMCP struct {
+	tool string
+	ts   time.Time
+}
+
+// recordMCPCall counts one call of mcp__server__tool.
+func recordMCPCall(st *Stats, name string, ts time.Time) {
+	rest := strings.TrimPrefix(name, "mcp__")
+	i := strings.Index(rest, "__")
+	if i <= 0 {
+		st.record(scan.CatMCP, rest, ts)
+		return
+	}
+	st.record(scan.CatMCP, rest[:i], ts)
+	// A server can itself be named a__b: only the configured
+	// names can settle where the server ends, at join time.
+	if strings.Contains(rest[i+2:], "__") {
+		st.recordTool(scan.SafeText(rest), ts)
+	}
+}
+
+// refusalPrefixes begin the tool_result text of a call that never ran, as Claude
+// Code writes them in real transcripts: the user clicking no, a denied
+// permission, an interrupt, and a hook or the harness blocking the call.
+var refusalPrefixes = []string{
+	"The user doesn't want to proceed",
+	"Permission to use ",
+	"Permission for this action was denied",
+	"[Request interrupted by user",
+	"PreToolUse:",
+	"<tool_use_error>Blocked:",
+}
+
+// isRefusal reports a tool_result that holds one of them. The content is a string
+// or a list of text blocks.
+func isRefusal(content json.RawMessage) bool {
+	var text string
+	if json.Unmarshal(content, &text) != nil {
+		var blocks []struct {
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(content, &blocks) != nil || len(blocks) == 0 {
+			return false
+		}
+		text = blocks[0].Text
+	}
+	text = strings.TrimSpace(text)
+	for _, prefix := range refusalPrefixes {
+		if strings.HasPrefix(text, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // readDelim returns the next record from br, without its delimiter. A record

@@ -40,9 +40,6 @@ const (
 	ReasonClaudeMDRef = "claude-md-ref"
 	// ReasonMuted sets apart a skill the user muted: reap has no evidence on it.
 	ReasonMuted = "muted"
-	// ReasonRequested holds a skill at KEEP because the user asked for it by name
-	// and it never started: a wish with no invocation on record.
-	ReasonRequested = "requested"
 	// ReasonHookLoaded holds a skill at KEEP because its plugin's SessionStart
 	// hook injects it: it is in use with no invocation on record.
 	ReasonHookLoaded = "hook-loaded"
@@ -85,14 +82,18 @@ type VerdictOpts struct {
 //
 // Logic (in order):
 //  1. Used → KEEP(used), or MUTE(heavy-rare) when heavy and rarely fired
-//  2. Invoked but only errored → REAP(broken)
 //  3. Tiny weight → KEEP(tiny)
 //  4. Installed within grace period → REVIEW(grace)
 //  5. No sessions → REVIEW(needs-data)
 //  6. Proportional minSessions if installed mid-window
 //  7. Not enough sessions → REVIEW(needs-data)
 //  8. Fired before the window, per the durable record → REVIEW(rare)
-//  9. Unused with enough evidence → REAP(unused)
+//  9. Invoked, and only ever errored, more than once → REAP(broken)
+//  10. Unused with enough evidence → REAP(unused)
+//
+// minErrorsForBroken is how many real failures it takes to call an item broken.
+const minErrorsForBroken = 2
+
 func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts) (string, string) {
 	// 1. Used — keep items that have been invoked, unless the item is heavy
 	//    and fires in too few sessions to justify the per-session weight.
@@ -103,12 +104,6 @@ func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts
 			return VerdictMute, ReasonHeavyRare
 		}
 		return VerdictKeep, ReasonUsed
-	}
-
-	// 2. Broken-cold — invoked but only ever errored. The error is concrete
-	//    evidence the item is dead weight, independent of session volume.
-	if opts.ErrorCount > 0 {
-		return VerdictReap, ReasonBroken
 	}
 
 	// 3. Tiny weight — negligible cost, not worth pruning
@@ -168,6 +163,13 @@ func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts
 		return VerdictReview, ReasonRare
 	}
 
-	// 9. Unused with sufficient evidence → safe to reap
+	// 9. Broken — invoked and only ever failed, more than once. One failure can
+	//    be a bad day. It comes after the gates above because a new item, thin
+	//    evidence or a history of real use each outrank it.
+	if opts.ErrorCount >= minErrorsForBroken {
+		return VerdictReap, ReasonBroken
+	}
+
+	// 10. Unused with sufficient evidence → safe to reap
 	return VerdictReap, ReasonUnused
 }

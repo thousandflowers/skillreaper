@@ -31,7 +31,7 @@ func TestMuteEditsALinkedSkillInItsSkillHome(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(target, "SKILL.md")); string(b) == skillMD {
 		t.Fatal("description not stripped")
 	}
-	if err := Unmute(claudeDir, "heavy"); err != nil {
+	if _, err := Unmute(claudeDir, "heavy"); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(target, "SKILL.md")); string(b) != skillMD {

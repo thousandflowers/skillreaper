@@ -143,7 +143,7 @@ func routeCategory(r *Report, name string) (catName, source string) {
 	if projs := skillProjects(r, name); len(projs) > 0 {
 		top := sortedProjects(projs)
 		if len(top) > 0 {
-			return prettyProject(top[0].name), "project"
+			return projectLabel(r, top[0].name), "project"
 		}
 	}
 	return "misc", "misc"
@@ -235,7 +235,7 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 	fmt.Fprintf(w, "\n  %s  %s\n", paint(cBold, "ROUTED"),
 		paint(cDim, fmt.Sprintf("loaded on demand · ~%s tok deferred", HumanCount(plan.RoutedTok))))
 	if len(plan.Categories) == 0 {
-		for _, l := range wrap("(none — every surviving skill fires often enough to stay exposed)",
+		for _, l := range wrap("(none — every surviving skill is frequent or has no evidence yet)",
 			width, "     ", "     ") {
 			fmt.Fprintln(w, paint(cDim, l))
 		}

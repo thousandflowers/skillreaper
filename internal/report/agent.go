@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // AgentMaxRows is the default cap on the dead-item table in the agent format.
@@ -89,7 +91,7 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 			if row.WeightUnknown {
 				tok = "?"
 			}
-			tw.row(tok, string(row.Category), row.Name, row.Verdict, row.Reason)
+			tw.row(tok, string(row.Category), agentName(row.Name), row.Verdict, row.Reason)
 		}
 		tw.flush()
 		if len(dead) > top {
@@ -104,6 +106,20 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 	}
 
 	fmt.Fprintf(w, "\n%s\n", agentSignature)
+}
+
+// agentName quotes a name that could pass for more than one table cell, so a name
+// can only ever read as a name when this output is pasted to an agent.
+func agentName(name string) string {
+	if strings.ContainsAny(name, " \t|`") {
+		return strconv.Quote(name)
+	}
+	return name
+}
+
+// mdCell makes text safe inside a Markdown table cell or code span.
+func mdCell(s string) string {
+	return strings.NewReplacer("|", `\|`, "`", "'").Replace(s)
 }
 
 // deadRows returns the REAP rows heaviest first. Ties break on name so the

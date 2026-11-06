@@ -1,8 +1,6 @@
 package scan
 
 import (
-	"bufio"
-	"bytes"
 	"io/fs"
 	"path/filepath"
 	"regexp"
@@ -80,8 +78,7 @@ func readMemoryFile(path, home string, seen map[string]bool, depth int) []string
 		return nil
 	}
 	var lines []string
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	sc := newLineScanner(b)
 	for sc.Scan() {
 		line := sc.Text()
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {

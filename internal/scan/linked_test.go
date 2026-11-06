@@ -57,7 +57,9 @@ func TestScanSkillsReadsLinkedSkillsFromSkillHomesOnly(t *testing.T) {
 			t.Errorf("%s: LinkTarget=%q Description=%q DescChars=%d", name, it.LinkTarget, it.Description, it.DescChars)
 		}
 	}
-	if _, ok := got["stray"]; ok {
-		t.Error("a skill linked from outside the skill homes must stay refused")
+	// Anywhere else a link is reported and read-only.
+	stray, ok := got["stray"]
+	if !ok || stray.Removable || stray.ViaLink == "" || stray.LinkTarget != "" {
+		t.Errorf("a skill linked from outside the skill homes must be a read-only row: %+v, %v", stray, ok)
 	}
 }

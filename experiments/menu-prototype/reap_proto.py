@@ -1,11 +1,107 @@
 #!/usr/bin/env python3
 """Five read-only layout prototypes for an interactive reap. Nothing is ever run."""
-import curses, json, locale, os, sys, textwrap
+import curses, json, locale, math, os, sys, textwrap, unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = json.load(open(os.path.join(HERE, "data.json")))
+MAX_MARKS = 2  # combining marks kept per character: more only hide what follows
+PLACEHOLDER = "\ufffd"
+UNSAFE = ("Cc", "Cf", "Cs", "Zl", "Zp")  # control, bidi and zero-width: what a name must not do to the screen
+NAME_FIELDS = ("Category", "Name", "Platform", "Source", "Reason", "Verdict", "LastUsed", "HistoricalLast", "Path", "RootDir", "EvidenceNote", "LinkTarget", "ViaLink")
+COUNT_FIELDS = ("Tokens", "Uses", "ErrorCount")
+
+
+def load_json(name, default=None):
+    """A file the prototypes read. With no default, a missing or broken one ends in one line saying what to do."""
+    try:
+        with open(os.path.join(HERE, name), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError) as e:
+        if default is None:
+            sys.exit(f"cannot read {name}: {e}. Run ./snapshot.sh first.")
+        return default
+
+
+def positive(v):
+    """A finite number above zero from data that may hold anything, or 0."""
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0 else 0
+
+
+def count(v):
+    return int(positive(v))
+
+
+def visible(s):
+    """A string from outside, safe to lay out: what could move the cursor or hide text becomes a mark you can see."""
+    if not isinstance(s, str):
+        return ""
+    if s.isascii() and s.isprintable():
+        return s
+    out, marks = [], 0
+    for c in s:
+        cat = unicodedata.category(c)
+        marks = marks + 1 if cat[0] == "M" else 0
+        if marks <= MAX_MARKS:
+            out.append(PLACEHOLDER if cat in UNSAFE else c)
+    return "".join(out)
+
+
+def prose(s):
+    """Running text: line breaks and tabs are spaces, invisible characters go."""
+    if not isinstance(s, str):
+        return ""
+    if s.isascii() and s.isprintable():
+        return s
+    return " ".join("".join(" " if c.isspace() or unicodedata.category(c) in UNSAFE else c for c in s).split())
+
+
+def clean_row(raw):
+    """One row as the menu may rely on it, or None if it is not a row."""
+    if not isinstance(raw, dict):
+        return None
+    row = {**raw, **{f: visible(raw.get(f)) for f in NAME_FIELDS}, **{f: count(raw.get(f)) for f in COUNT_FIELDS}}
+    return {**row, "Name": row["Name"] or "(no name)", "Description": prose(raw.get("Description")),
+            "Removable": raw.get("Removable") is True, "WeightUnknown": raw.get("WeightUnknown") is True,
+            "Kept": raw.get("Kept") is True, "MuteLost": raw.get("MuteLost") is True}
+
+
+def clean_warnings(raw):
+    """What the report warns about, the ones that say the numbers are wrong first."""
+    found = [w for w in raw if isinstance(w, dict) and isinstance(w.get("Msg"), str)] if isinstance(raw, list) else []
+    return [prose(f"{os.path.basename(str(w.get('Path') or ''))}: {w['Msg']}".lstrip(": ")) for w in sorted(found, key=lambda w: w.get("Advisory") is True)]
+
+
+def load_data():
+    raw = load_json("data.json")
+    if not isinstance(raw, dict):
+        sys.exit("cannot read data.json: it does not hold a report. Run ./snapshot.sh first.")
+    rows = raw.get("Rows") if isinstance(raw.get("Rows"), list) else []
+    totals = {f: count(raw.get(f)) for f in ("DeadTokensPerSession", "Sessions", "WindowDays")}
+    per_month = {"SessionsPerMonth": count(raw["SessionsPerMonth"])} if "SessionsPerMonth" in raw else {}
+    platforms = raw.get("PlatformSessionsPerMonth")
+    per_platform = {"PlatformSessionsPerMonth": {k: count(v) for k, v in platforms.items()}} if isinstance(platforms, dict) else {}
+    return {**raw, **totals, **per_month, **per_platform, "MoneyPerMonth": positive(raw.get("MoneyPerMonth")), "Warnings": clean_warnings(raw.get("Warnings")),
+            "Rows": [r for r in map(clean_row, rows) if r]}
+
+
+def load_pruned():
+    raw = load_json("pruned.json", {})
+    entries = raw.get("entries") if isinstance(raw, dict) else None
+    return [e for e in entries if isinstance(e, dict) and not e.get("restored")] if isinstance(entries, list) else []
+
+
+DATA = load_data()
 ROWS = [r for r in DATA["Rows"] if r["Category"] in ("skill", "agent", "mcp")]
-PRUNED = [e for e in json.load(open(os.path.join(HERE, "pruned.json"))).get("entries", []) if not e.get("restored")]
+PRUNED = load_pruned()
+
+
+def pruned_row(e):
+    """A manifest entry as a list row: it left the stack, so it weighs nothing and nothing has used it since."""
+    return {**dict.fromkeys(DATA["Rows"][0] if DATA["Rows"] else ()), "Category": e.get("category") or "skill", "Name": str(e.get("name")),
+            "Platform": e.get("platform") or "claude-code", "Source": "quarantine", "Path": e.get("quarantinePath") or str(e.get("id")),
+            "Verdict": "-", "Reason": "pruned", "Tokens": 0, "Uses": 0, "Removable": False, "Description": "", "PruneId": e.get("id")}
+
+
+ROWS = ROWS + [pruned_row(e) for e in PRUNED]
 
 WHY = {
     "unused": "Never fired, with enough sessions to judge.",
@@ -17,12 +113,18 @@ WHY = {
     "no-transcript": "This platform keeps no transcripts, so there is no evidence.",
     "rare": "Fired before this window, on a longer cadence.",
     "used": "Used in this window.",
-    "user-keep": "You protected it with reap keep.",
+    "keep": "You protected it with reap keep.",
     "claude-md-ref": "Named in your CLAUDE.md or rules.",
     "hook-loaded": "Its plugin injects it every session.",
-    "requested": "You asked for it by name, and it never started.",
     "muted": "You muted it, so its uses prove nothing.",
 }
+
+
+def why(r):
+    """Why reap says what it says about a row. A platform with no evidence says why, in reap's own words."""
+    if r.get("EvidenceNote"):
+        return f"No usage evidence: {r['EvidenceNote']}."
+    return WHY.get(r.get("Reason"), r.get("Reason") or "")
 
 
 def g(name, cmd, test, color):
@@ -48,28 +150,131 @@ def tok(group):
     return sum(r["Tokens"] for r in group["items"])
 
 
+FALLBACK = {"█": "#", "▀": "#", "▄": "#", "▌": "#", "▏": "#", "▎": "#", "▍": "#", "▋": "#", "▊": "#", "▉": "#", "▁": "_", "▂": "_", "▃": "_", "▅": "_", "▆": "#", "▇": "#",
+            "░": ".", "▒": ":", "━": "-", "┄": "-", "▸": ">", "▾": "v", "·": "-", "…": "~", "⚠": "!", "✓": "ok", "←": "<", "→": ">", "↑": "^", "↓": "v", "€": "EUR", "£": "GBP", "¥": "JPY", "⠋": "|", "⠙": "/",
+            "⠹": "-", "⠸": "\\", "⠼": "|", "⠴": "/", "⠦": "-", "⠧": "\\", "⠇": "|", "⠏": "/", PLACEHOLDER: "?"}
+
+
+class Screen:
+    codeset = None  # None while the terminal's locale can draw everything
+
+
+def narrow():
+    return Screen.codeset is not None
+
+
+def glyphs(s):
+    """What this locale can actually draw: the main figure and the warnings stay, in plain characters."""
+    if Screen.codeset is None or s.isascii():
+        return s
+    return "".join(FALLBACK.get(c, c) for c in s).encode(Screen.codeset, "replace").decode(Screen.codeset)
+
+
+def cell(c):
+    return 0 if unicodedata.category(c)[0] == "M" else 2 if unicodedata.east_asian_width(c) in "WF" else 1
+
+
+def cells(s):
+    return len(s) if s.isascii() else sum(map(cell, s))
+
+
+def cut(s, n):
+    """The start of s that fills at most n cells."""
+    if s.isascii():
+        return s[:max(0, n)]
+    used, out = 0, []
+    for c in s:
+        used += cell(c)
+        if used > n:
+            break
+        out.append(c)
+    return "".join(out)
+
+
+def pad(s, n):
+    s = cut(s, n)
+    return s + " " * (n - cells(s))
+
+
+def cut_mid(s, n):
+    """Fits s in n cells, keeping the end: long names often differ only there."""
+    if cells(s) <= n or n < 3:
+        return cut(s, n)
+    head = cut(s, (n - 1) // 2)
+    room = n - 1 - cells(head)
+    tail = []
+    for c in reversed(s):
+        room -= cell(c)
+        if room < 0:
+            break
+        tail.append(c)
+    return f"{head}…{''.join(reversed(tail))}"
+
+
 def put(w, y, x, s, a=0):
     h, wd = w.getmaxyx()
     if 0 <= y < h and 0 <= x < wd:
         try:
-            w.addnstr(y, x, s, max(0, wd - x - 1), a)
-        except curses.error:
+            w.addstr(y, x, cut(glyphs(s), wd - x - 1), a)
+        except (curses.error, ValueError):
             pass
 
 
+def too_small(w, need, hint="esc goes back"):
+    """Under the size a screen needs, it says so and no key can act on what cannot be seen."""
+    h, wd = w.getmaxyx()
+    if h >= need[0] and wd >= need[1]:
+        return False
+    w.erase()
+    put(w, 0, 0, f"window too small: needs {need[1]}x{need[0]}")
+    put(w, 1, 0, hint, curses.A_DIM)
+    w.refresh()
+    return True
+
+
+def pair(n, fg, bg=None):
+    try:
+        curses.init_pair(n, fg, Screen.background if bg is None else bg)
+    except (curses.error, ValueError):
+        pass
+
+
+def tint(n, full, basic):
+    """A colour from the 256 palette, or its nearest basic one on a smaller terminal."""
+    pair(n, full if getattr(curses, "COLORS", 0) >= 256 else basic)
+
+
 def setup():
-    locale.setlocale(locale.LC_ALL, "")
-    curses.use_default_colors()
-    curses.curs_set(0)
+    for category in (locale.LC_ALL, locale.LC_CTYPE):  # a locale forwarded over ssh may not exist here
+        try:
+            locale.setlocale(category, "")
+            break
+        except locale.Error:
+            continue
+    codeset = locale.nl_langinfo(locale.CODESET)
+    Screen.codeset = None if codeset.upper().replace("-", "") == "UTF8" else codeset
+    try:
+        "".encode(codeset)
+    except LookupError:
+        Screen.codeset = "ascii"
+    try:
+        curses.use_default_colors()
+        Screen.background = -1
+    except curses.error:
+        Screen.background = curses.COLOR_BLACK
+    try:
+        curses.curs_set(0)
+    except curses.error:
+        pass
     for i, c in enumerate([curses.COLOR_RED, curses.COLOR_YELLOW, curses.COLOR_MAGENTA, curses.COLOR_CYAN, curses.COLOR_GREEN, curses.COLOR_BLUE], 1):
-        curses.init_pair(i, c, -1)
-    curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_CYAN)
-    curses.init_pair(8, curses.COLOR_WHITE, -1)
+        pair(i, c)
+    pair(7, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    pair(8, curses.COLOR_WHITE)
 
 
 C = lambda n: curses.color_pair(n)
 DIM = lambda: curses.A_DIM
-HL = lambda: C(7) | curses.A_BOLD
+HL = lambda: (C(7) if curses.has_colors() else curses.A_REVERSE) | curses.A_BOLD
 
 
 def row_line(r, width):
@@ -411,5 +616,7 @@ def main(w, fn):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] not in VERSIONS:
+        sys.exit(f"usage: {sys.argv[0]} {{{'|'.join(VERSIONS)}}}")
     os.environ.setdefault("ESCDELAY", "25")
     curses.wrapper(main, VERSIONS[sys.argv[1]])

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 )
 
 // SourceTotal is the dead weight a single source accounts for.
@@ -90,7 +91,11 @@ func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int) {
 		if t.Removable == 0 {
 			// reap can see these and cannot touch them: they are registered by
 			// a plugin, and the host agent owns that registration.
-			notes = append(notes, "disable via /plugin")
+			if IsPluginSource(t.Source) {
+				notes = append(notes, "disable via /plugin")
+			} else {
+				notes = append(notes, "remove by hand")
+			}
 			continue
 		}
 		notes = append(notes, fmt.Sprintf("%d prunable here", t.Removable))
@@ -107,3 +112,6 @@ func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int) {
 	}
 	fmt.Fprintln(w)
 }
+
+// IsPluginSource reports a source only Claude Code's /plugin can act on.
+func IsPluginSource(source string) bool { return strings.HasPrefix(source, "plugin:") }

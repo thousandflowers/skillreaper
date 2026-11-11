@@ -27,6 +27,7 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/override"
 	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/prune"
+	"github.com/thousandflowers/skillreaper/internal/reinvest"
 	"github.com/thousandflowers/skillreaper/internal/report"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/snapshot"
@@ -90,6 +91,9 @@ Usage:
   reap restore [<id>|<name>|--all]  list pruned items, or undo a prune
   reap delete <name>        remove one item for good (cannot be restored)
   reap share [flags]        print a ready-to-share message about your savings
+  reap reinvest [--dry-run] propose a skill for work none of yours covers, written from
+                            your sessions, against mutes of the same weight (experimental,
+                            asks Claude through claude -p)
   reap snapshot             save this run's --json payload for later comparison
   reap diff [<a> [<b>]]     compare two snapshots (default: newest vs previous)
   reap install-hook         add a weekly SessionStart nudge to settings.json
@@ -161,6 +165,10 @@ func main() {
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	// reinvest has flags of its own, so it reads its own command line.
+	if len(args) > 0 && args[0] == reinvestCommand {
+		return reinvest.Run(args[1:], stdin, stdout, stderr)
+	}
 	fs := flag.NewFlagSet("reap", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var opts options

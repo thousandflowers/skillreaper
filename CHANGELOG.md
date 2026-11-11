@@ -92,10 +92,33 @@ really injected, with multi-line descriptions read in full.
 - `--dry-run` on `prune` and `mute` exits 2: they show their plan and ask
   already.
 
-### Not in this release
+### reap reinvest (experimental)
 
-`reinvest`, which proposes a skill for the work no skill of yours covers, stays
-in `experiments/` as a Python prototype.
+```bash
+reap reinvest --dry-run    # pick swaps, print what would run, change nothing
+reap reinvest              # the same, then ask before creating and muting
+```
+
+`reap` finds what you never use. `reinvest` looks at the work you actually do,
+finds the kinds of work no skill of yours covers, and proposes swaps: a skill
+for that work, written from your own sessions, against mutes of unused skills
+of about the same weight. You pick the swaps with the arrow keys.
+
+It is the Python prototype from `experiments/reinvest`, now in the binary, with
+the same cache files and the same checks. What to know before running it:
+
+- It asks Claude, through `claude -p`, to group your sessions, write the skill
+  and read every candidate: about twenty calls and a minute on a first run.
+  Nothing else reap does calls a model or the network.
+- Every candidate is read in full by Claude, twice, and by a set of risk rules
+  first; one refusal is enough, and a refused document stays refused. A swap is
+  all or nothing, and an existing skill of the same name is never replaced.
+- `--online` searches skills.sh instead of writing. Its search and its checks
+  were run against the live sites; installing what it finds was tested with
+  stand-ins only, so try it with `--dry-run` first.
+- It has run on macOS. On Linux it builds and has not been run.
+
+It is not in the menu yet.
 
 ## 0.8.0
 

@@ -135,6 +135,11 @@ item for good, says so in red, and asks first. Every write is **atomic** (temp f
 rename) and **confined** to your Claude directory, so an interrupted prune,
 mute, or hook edit leaves the original file intact, never a half-written mix.
 
+One command is not local, and it is not in the table: `reap reinvest`, which is
+experimental. It asks Claude, through `claude -p`, to read your sessions and
+write a skill for work none of yours covers, and with `--online` it searches
+skills.sh. Nothing else here calls a model or the network.
+
 <sub><sup>1</sup> The only files a read-only command writes are skillreaper's
 own: <code>~/.claude/reaped/nudge-state.json</code>, which the default report
 touches so a hint it already showed you does not repeat; a parsed-transcript
@@ -349,6 +354,7 @@ reap route                    # propose a usage-informed lazy-load routing plan 
 reap apm                      # emit a proposed APM apm.yml from this repo's firing
 reap apm --diff apm.yml       # reconcile: what to add (fired, undeclared) / drop (declared, cold)
 reap share                    # print a ready-to-paste line about what you reclaimed
+reap reinvest --dry-run       # experimental: propose a skill for work none of yours covers
 reap snapshot                 # save this run's --json payload for later comparison
 reap diff                     # compare the newest two snapshots
 reap diff <a> <b>             # compare two named snapshots
@@ -751,10 +757,10 @@ docs/           demo assets
 
 Tracked as issues, grouped by the problem they solve.
 
-- **The menu, next** - `reinvest` as its last step: what you removed becomes
-  credit for a skill that covers work none of yours does, written from your own
-  sessions (a Python prototype today, in
-  [experiments/reinvest](experiments/reinvest)); and the menu on Windows.
+- **The menu, next** - `reap reinvest` as its last step: what you removed
+  becomes credit for a skill that covers work none of yours does, written from
+  your own sessions (a command of its own today, and experimental); and the
+  menu on Windows.
 - **Better verdicts** - `--since` / `--until` and a window that respects the
   corpus ([#53](https://github.com/thousandflowers/skillreaper/issues/53));
   measuring wrong-tool picks

@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	menuCommand = "menu"
+	menuCommand     = "menu"
+	reinvestCommand = "reinvest"
 	// publicName is the name that opens the menu when typed alone. `reap` alone
 	// stays the report, for everything that reads it.
 	publicName      = "skillreaper"

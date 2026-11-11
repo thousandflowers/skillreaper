@@ -480,3 +480,47 @@ func TestHoldingSShowsWhatReapSuggests(t *testing.T) {
 		mustNotShow(t, x.final(), "apply")
 	})
 }
+
+// The headline counts what reap calls wasted. Choosing something it never
+// counted must leave it exactly where it stood, not make it spring back.
+func TestHeadlineDoesNotMoveForAChoiceItNeverCounted(t *testing.T) {
+	// Arrange: every wasted row chosen and the number landed.
+	x := open(t, flowData())
+	l := newList(x.m)
+	var outside *Row
+	for _, r := range x.m.rows {
+		switch {
+		case r.Verdict == report.VerdictReap && can(r, vPrune):
+			l.p.set(r, vPrune)
+		case outside == nil && r.Verdict != report.VerdictReap && r.Tokens > 0 && can(r, vMute):
+			outside = r
+		}
+	}
+	if outside == nil {
+		t.Skip("the fixture has no row outside the headline that can be muted")
+	}
+	settle := func() {
+		for n := 0; n < 200; n++ {
+			l.rebuild()
+			if !l.draw() {
+				return
+			}
+		}
+		t.Fatal("the headline never landed")
+	}
+	settle()
+	landed := float64(l.total) - l.shownDead
+
+	// Act: one frame after a mute of a row the headline never held.
+	l.p.set(outside, vMute)
+	l.rebuild()
+	l.draw()
+
+	// Assert
+	mustEqual(t, "the headline one frame after the mute", float64(l.total)-l.shownDead, landed)
+	settle()
+	mustEqual(t, "the headline once everything landed", float64(l.total)-l.shownDead, landed)
+	if l.shown <= float64(l.dead) {
+		t.Fatalf("the saved figure did not grow with the mute: shown %v, dead %v", l.shown, l.dead)
+	}
+}

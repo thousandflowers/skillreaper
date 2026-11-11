@@ -371,6 +371,13 @@ reap version                  # print version
 skillreaper        # or: reap menu
 ```
 
+<p align="center">
+  <img src="docs/menu-demo.gif" alt="The skillreaper menu: choosing what to prune and mute, the number falling to zero, then the receipt" width="900"><br>
+  <sub>Recorded against an invented stack
+  (<a href="docs/gif-helpers/menu-fixture.sh">menu-fixture.sh</a>), so the
+  names and numbers are the fixture's, not a real machine's.</sub>
+</p>
+
 One screen instead of three commands. The number at the top is what you re-send
 in every session, and it falls as you choose. Nothing changes until you apply:
 the receipt lists every change and asks first. A prune, a mute or a lock can be
@@ -396,8 +403,9 @@ says why on the row.
 
 What the menu does that the commands do not, all on macOS and all local:
 
-- Amounts are shown in the currency set on your Mac, at a fixed ECB reference
-  rate shipped inside the release. Nothing is fetched. A release whose table is
+- Amounts are shown in the currency set on your Mac (or the locale in `LC_ALL`
+  or `LC_MONETARY`, when you set one), at a fixed ECB reference rate shipped
+  inside the release. Nothing is fetched. A release whose table is
   more than 90 days old shows US dollars instead of a stale conversion.
 - Terminal.app sends Shift+arrows and Shift+Enter as the plain keys, so while
   the menu is open a small `/usr/bin/osascript` helper asks macOS whether Shift

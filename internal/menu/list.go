@@ -40,14 +40,15 @@ type list struct {
 	i    int
 	plat int // 0 is every platform
 	// anchor is where a selection started, -1 when there is none.
-	anchor  int
-	marking bool
-	opened  map[string]bool // by group name: groups renumber when one empties
-	msg     string
-	peek    bool
-	shown   float64
-	unit    string
-	paint   int // -1 not painting, 0 clearing, 1 setting
+	anchor    int
+	marking   bool
+	opened    map[string]bool // by group name: groups renumber when one empties
+	msg       string
+	peek      bool
+	shown     float64
+	shownDead float64 // the part of shown the headline counts
+	unit      string
+	paint     int // -1 not painting, 0 clearing, 1 setting
 	// rowmap is the list index under each screen row, for the mouse.
 	rowmap      map[int]int
 	lastPainted int
@@ -552,7 +553,7 @@ func (l *list) key(k term.Key) bool {
 		l.resetView()
 		l.built.ok = false
 		l.rebuild()
-		l.shown = float64(l.target)
+		l.shown, l.shownDead = float64(l.target), float64(l.dead)
 		l.msg = "showing " + l.platformLabel()
 		return true
 	}

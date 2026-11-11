@@ -57,22 +57,22 @@ func or(base term.Style, has bool, own term.Style) term.Style {
 func (l *list) draw() bool {
 	m := l.m
 	target := float64(l.target)
-	step := l.shown + (target-l.shown)*ease
-	if math.Abs(target-step) < snap || step == l.shown {
-		l.shown = target
-	} else {
-		l.shown = step
-	}
-	eased := 0.0
+	l.shown = easeTo(l.shown, target)
+	// The headline falls only by what it counted, the rows reap calls wasted, and
+	// at its own pace: a mute that was never in it must not make it jump.
+	l.shownDead = easeTo(l.shownDead, float64(l.dead))
+	left := math.Max(0, float64(l.total)-l.shownDead)
+	eased, deadShare := 0.0, 0.0
 	if target != 0 {
-		eased = l.shown / target // the money and the month fall with the number
+		eased = l.shown / target // the money saved rises with the number
 	}
-	// The headline falls only by what it counted: the rows reap calls wasted.
-	left := math.Max(0, float64(l.total)-float64(l.dead)*eased)
+	if l.dead != 0 {
+		deadShare = l.shownDead / float64(l.dead)
+	}
 	m.s.Erase()
 	h, wd := m.s.Size()
 	frac := left / math.Max(1, float64(l.total))
-	l.header(wd, left, frac, eased)
+	l.header(wd, left, frac, eased, deadShare)
 	if len(m.warnings) > 0 {
 		note := cut("⚠ "+m.warnings[0], wd-18)
 		if more := len(m.warnings) - 1; more > 0 {
@@ -111,11 +111,21 @@ func (l *list) draw() bool {
 	}
 	l.footer(h, wd)
 	m.s.Refresh()
-	return l.shown != target || l.animating
+	return l.shown != target || l.shownDead != float64(l.dead) || l.animating
+}
+
+// easeTo moves a shown figure part of the way to where it is going, and lands
+// it once it is close.
+func easeTo(shown, target float64) float64 {
+	step := shown + (target-shown)*ease
+	if math.Abs(target-step) < snap || step == shown {
+		return target
+	}
+	return step
 }
 
 // header is the big number and what it means, in money or in tokens.
-func (l *list) header(wd int, left, frac, eased float64) {
+func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 	m := l.m
 	green := asBold(m.tint(tintGreen))
 	switch {
@@ -124,7 +134,7 @@ func (l *list) header(wd int, left, frac, eased float64) {
 		m.put(2, 3, "the verdicts below have no evidence behind them", dim)
 	case l.unit == unitMoney:
 		savedPriced := l.targetPriced * eased
-		value := math.Max(0, l.totalPriced-l.deadPriced*eased) * m.price * m.cur.Rate
+		value := math.Max(0, l.totalPriced-l.deadPriced*deadShare) * m.price * m.cur.Rate
 		above, words := m.bigMoneyWords("wasted a month")
 		figure := m.moneyFigure(value)
 		if bigWidth(figure) > wd-5-len(words) {
@@ -146,7 +156,7 @@ func (l *list) header(wd int, left, frac, eased float64) {
 		end := m.big(1, 3, figure, frac)
 		m.put(1, end+2, words, bold)
 		if l.totalMonth > 0 {
-			month := "~" + m.short(math.Max(0, l.totalMonth-l.deadMonth*eased)) + " in a month of sessions"
+			month := "~" + m.short(math.Max(0, l.totalMonth-l.deadMonth*deadShare)) + " in a month of sessions"
 			if m.subscriber {
 				month += " · what eats your plan"
 			}

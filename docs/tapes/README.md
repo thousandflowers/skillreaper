@@ -26,3 +26,15 @@ It feeds the text block at the top of the README, regenerated with:
 
 Both fixtures stamp their files relative to today, so the report reproduces
 as long as the window does.
+
+`../gif-helpers/menu-fixture.sh` is the stack the menu is recorded on: 20 skills
+and 3 subagents over 40 sessions, with invented names, landing in the prune,
+mute and lock groups. `menu.tape` drives the menu through it and writes
+`docs/menu-demo.gif`, the one GIF the README embeds from a tape:
+
+    go build -o /tmp/reap-menu ./cmd/reap
+    cd docs/tapes && REAP=/tmp/reap-menu vhs menu.tape
+
+It records with `LC_MONETARY=en_US.UTF-8`, so the numbers read the same whatever
+the region of the Mac it is run on. Keep your hands off Shift while it runs: on
+macOS the menu asks the system whether Shift is down.

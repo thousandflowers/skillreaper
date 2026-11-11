@@ -339,3 +339,23 @@ func TestBillingTypeReadsOnlyWhatIsThere(t *testing.T) {
 		})
 	}
 }
+
+func TestTypedNameFollowsTheNpmWrapperNotTheBinary(t *testing.T) {
+	cases := []struct {
+		name, arg0, wrapper, want string
+	}{
+		{"brew: the name typed is the name run", "/opt/homebrew/bin/skillreaper", "", "skillreaper"},
+		{"brew: reap is reap", "/opt/homebrew/bin/reap", "", "reap"},
+		{"npm: reap starts the same binary and stays the report", "/pkg/bin/skillreaper", "/usr/local/bin/reap", "reap"},
+		{"npm: skillreaper opens the menu", "/pkg/bin/skillreaper", "/usr/local/bin/skillreaper", "skillreaper"},
+		{"npx: the wrapper script by its own file name", "/pkg/bin/skillreaper", "/x/_npx/1/node_modules/skillreaper/bin/skillreaper.js", "skillreaper"},
+		{"a wrapper under another name says nothing", "/tmp/build/reap", "/tmp/other-tool", "reap"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := typedName(c.arg0, c.wrapper); got != c.want {
+				t.Fatalf("typedName(%q, %q) = %q, want %q", c.arg0, c.wrapper, got, c.want)
+			}
+		})
+	}
+}

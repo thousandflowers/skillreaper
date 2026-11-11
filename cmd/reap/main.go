@@ -149,7 +149,7 @@ type options struct {
 }
 
 func main() {
-	invoked := invokedName(os.Args[0])
+	invoked := typedName(os.Args[0], os.Getenv(wrapperEnv))
 	out := &stdoutTracker{f: os.Stdout, rewrite: hintRewriter(invoked, os.Args[1:])}
 	errOut := &stdoutTracker{f: os.Stderr, rewrite: hintRewriter(invoked, nil)}
 	args := os.Args[1:]

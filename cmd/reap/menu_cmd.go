@@ -26,11 +26,25 @@ const (
 	// publicName is the name that opens the menu when typed alone. `reap` alone
 	// stays the report, for everything that reads it.
 	publicName      = "skillreaper"
+	reportName      = "reap"
 	disableTimeout  = 60 * time.Second
 	maxClaudeJSON   = 64 << 20
 	readingNotice   = "reading your stack and your sessions…"
 	errOutputHeader = "claude plugin disable: "
 )
+
+// typedName is the command as the user typed it. Under the npm wrapper the
+// binary carries one name whichever command started it, so the wrapper's own
+// path says which of the two it was: `reap` must stay the report there too.
+func typedName(arg0, wrapper string) string {
+	if wrapper != "" {
+		name := strings.TrimSuffix(strings.TrimSuffix(invokedName(wrapper), ".js"), ".cmd")
+		if name == publicName || name == reportName {
+			return name
+		}
+	}
+	return invokedName(arg0)
+}
 
 // opensMenu says a bare `skillreaper` in a terminal means the menu. Any argument,
 // a pipe or a terminal that cannot draw one means the report, as before.

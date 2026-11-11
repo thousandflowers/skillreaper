@@ -23,6 +23,7 @@ const restrictedFlags = "json md agent quiet yes all dry-run source list remove"
 
 var commandRules = map[string]commandRule{
 	"":               {0, "json md agent quiet"},
+	"menu":           {0, ""},
 	"gap":            {0, "json md agent"},
 	"by-project":     {0, "json"},
 	"route":          {0, "json md"},

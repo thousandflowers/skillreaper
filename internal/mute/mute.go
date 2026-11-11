@@ -282,6 +282,30 @@ type Result struct {
 	Cleared []Entry
 }
 
+// ErrNotMuted is returned when nothing on the muted list matches.
+var ErrNotMuted = errors.New("not muted")
+
+// UnmutePath restores the one muted file at this path, and no other copy of its
+// name: the menu lists one row and must undo exactly that row.
+func UnmutePath(claudeDir, path string) (Result, error) {
+	s, err := loadState(claudeDir)
+	if err != nil {
+		return Result{}, err
+	}
+	// A mute records the file with its links resolved.
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		real = path
+	}
+	same := func(e Entry) bool { return e.Path == path || e.Path == real }
+	for _, e := range s.Muted {
+		if same(e) {
+			return unmuteWhere(claudeDir, s, same)
+		}
+	}
+	return Result{}, fmt.Errorf("%w: %s", ErrNotMuted, path)
+}
+
 // Unmute restores every muted copy with this name. What cannot be restored stays
 // muted and is returned as an error; the others are done regardless.
 func Unmute(claudeDir, name string) (Result, error) {

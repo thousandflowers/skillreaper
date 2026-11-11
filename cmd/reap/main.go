@@ -73,6 +73,8 @@ Reads %s.
 
 Usage:
   reap [flags]              scan and report (read-only)
+  reap menu                 choose what to prune, mute, lock or delete on one screen
+                            (skillreaper with no arguments opens it too)
   reap gap [flags]          loaded-vs-fired utilization breakdown
   reap by-project [flags]   skills bucketed by the project that fired them
   reap route [flags]        propose a usage-informed lazy-load routing plan
@@ -146,7 +148,11 @@ func main() {
 	invoked := invokedName(os.Args[0])
 	out := &stdoutTracker{f: os.Stdout, rewrite: hintRewriter(invoked, os.Args[1:])}
 	errOut := &stdoutTracker{f: os.Stderr, rewrite: hintRewriter(invoked, nil)}
-	code := run(os.Args[1:], os.Stdin, out, errOut)
+	args := os.Args[1:]
+	if opensMenu(invoked, args) {
+		args = []string{menuCommand}
+	}
+	code := run(args, os.Stdin, out, errOut)
 	if code == 0 && out.err != nil {
 		fmt.Fprintf(os.Stderr, "error: could not write the output: %v\n", out.err)
 		code = 1
@@ -263,6 +269,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		// to the surfaces a user looks at, never in front of working output.
 		// The usage text is the only call site.
 		return cmdReport(opts, stdout, stderr)
+	case menuCommand:
+		return cmdMenu(opts, stdout, stderr)
 	case "gap":
 		return cmdGap(opts, stdout, stderr)
 	case "by-project":

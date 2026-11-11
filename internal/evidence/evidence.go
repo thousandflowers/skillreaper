@@ -159,6 +159,9 @@ type Observation struct {
 	Errors map[string]map[string]int
 	// At is the transcript's timestamp, used to widen First and Last.
 	At time.Time
+	// Last is when each use last happened, where that is known. A transcript can
+	// span months, and its date is not the date of what fired early in it.
+	Last map[string]map[string]time.Time
 }
 
 // Add folds one transcript in, keyed by its identity. Adding the same identity
@@ -176,7 +179,11 @@ func (d *Digest) Add(id string, o Observation) {
 
 	for cat, byName := range o.Uses {
 		for name, n := range byName {
-			d.bump(cat, name, n, 0, o.At, true)
+			at := o.At
+			if t := o.Last[cat][name]; !t.IsZero() {
+				at = t
+			}
+			d.bump(cat, name, n, 0, at, true)
 		}
 	}
 	for cat, byName := range o.Errors {
@@ -218,25 +225,4 @@ func (d *Digest) Lookup(cat, name string) (Record, bool) {
 	}
 	r, ok := byName[name]
 	return r, ok
-}
-
-// SpanDays is how many days separate the earliest and latest observation held.
-// This is the number that can exceed the retention horizon, and the whole
-// reason the digest exists.
-func (d *Digest) SpanDays() int {
-	var first, last time.Time
-	for _, byName := range d.Items {
-		for _, r := range byName {
-			if !r.First.IsZero() && (first.IsZero() || r.First.Before(first)) {
-				first = r.First
-			}
-			if r.Last.After(last) {
-				last = r.Last
-			}
-		}
-	}
-	if first.IsZero() || last.IsZero() {
-		return 0
-	}
-	return int(last.Sub(first).Hours() / 24)
 }

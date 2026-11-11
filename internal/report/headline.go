@@ -1,6 +1,9 @@
 package report
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Headline is the one place the report's opening figures are named.
 //
@@ -29,11 +32,28 @@ type Headline struct {
 	Reaped     int  // DeadCount: the subset reap will condemn
 	HeldBack   int  // never fired, not condemned
 	KnowsFired bool // false when no gap was measured; then only Reaped is safe to state
+	// The dead weight by what reap prune can do about it. Unremovable items sit
+	// inside plugins, and are usually most of the total.
+	RemovableTokens int
+	PluginTokens    int
+	Muted           int
+	ByHandTokens    int // unused items outside plugins that reap cannot edit
 }
 
 // NewHeadline derives the opening figures from a finished report.
 func NewHeadline(r *Report) Headline {
-	h := Headline{Reaped: r.DeadCount}
+	h := Headline{Reaped: r.DeadCount, Muted: r.MutedCount}
+	for _, row := range r.Rows {
+		switch {
+		case row.Verdict != VerdictReap:
+		case row.Removable:
+			h.RemovableTokens += row.Tokens
+		case IsPluginSource(row.Source):
+			h.PluginTokens += row.Tokens
+		default:
+			h.ByHandTokens += row.Tokens
+		}
+	}
 	if r.Gap == nil || r.Gap.Loaded <= 0 {
 		return h
 	}
@@ -42,7 +62,7 @@ func NewHeadline(r *Report) Headline {
 	h.KnowsFired = true
 	// Clamped, not trusted: the two counts come from different passes, and a
 	// negative "held back" would be printed as a fact.
-	if held := h.NeverFired - h.Reaped; held > 0 {
+	if held := h.NeverFired - h.Reaped - h.Muted; held > 0 {
 		h.HeldBack = held
 	}
 	return h
@@ -53,9 +73,9 @@ func NewHeadline(r *Report) Headline {
 // so the verdict count is named as what it is instead.
 func (h Headline) Figure() (val, unit string) {
 	if !h.KnowsFired {
-		return humanNum(h.Reaped), "items marked REAP"
+		return HumanNum(h.Reaped), "items marked REAP"
 	}
-	return humanNum(h.NeverFired), fmt.Sprintf("items never fired, of %s loaded", humanNum(h.Loaded))
+	return HumanNum(h.NeverFired), fmt.Sprintf("items never fired, of %s loaded", HumanNum(h.Loaded))
 }
 
 // Verdict is the line under the figures: how many of the never-fired reap will
@@ -64,11 +84,35 @@ func (h Headline) Verdict() string {
 	if !h.KnowsFired {
 		return ""
 	}
-	s := fmt.Sprintf("%s of them marked REAP", humanNum(h.Reaped))
+	s := fmt.Sprintf("%s of them marked REAP", HumanNum(h.Reaped))
 	if h.HeldBack > 0 {
 		s += fmt.Sprintf(", %d held back rather than condemned", h.HeldBack)
 	}
 	return s
+}
+
+// Split says how much of the dead weight reap prune can take. Empty when it can
+// take all of it, because the total already says so.
+func (h Headline) Split() string {
+	if h.PluginTokens == 0 && h.ByHandTokens == 0 {
+		return ""
+	}
+	parts := []string{fmt.Sprintf("~%s removable with reap prune", HumanNum(h.RemovableTokens))}
+	if h.PluginTokens > 0 {
+		parts = append(parts, fmt.Sprintf("~%s inside plugins", HumanNum(h.PluginTokens)))
+	}
+	if h.ByHandTokens > 0 {
+		parts = append(parts, fmt.Sprintf("~%s to remove by hand", HumanNum(h.ByHandTokens)))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// MutedLine counts the muted skills, which the tables no longer show.
+func (h Headline) MutedLine() string {
+	if h.Muted == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d muted · reap unmute to list", h.Muted)
 }
 
 // Line is the same two counts on one line, for the renderers with no room to

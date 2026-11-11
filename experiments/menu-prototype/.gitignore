@@ -1,0 +1,4 @@
+*.json
+!rates.json
+__pycache__/
+.snapshot.*

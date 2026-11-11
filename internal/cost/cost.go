@@ -6,6 +6,8 @@
 // tokenizer dependency.
 package cost
 
+import "strings"
+
 // ModelPricing maps known model IDs to input price per million tokens.
 // When a provider releases a new model, just add its pricing here
 // instead of changing core logic.
@@ -104,4 +106,22 @@ func tokensWithRatio(chars, ratioX10 int) int {
 // million input tokens.
 func MoneyPerMonth(tokensPerSession, sessionsPerMonth int, pricePerMTok float64) float64 {
 	return float64(tokensPerSession) * float64(sessionsPerMonth) * pricePerMTok / 1e6
+}
+
+// Blended is the input price for a mix of models, weighted by how often each was
+// used. Models with no known price are left out; without any known model there is
+// no price to give. A context-window suffix ("...[1m]") is not part of the id.
+func Blended(use map[string]int) (float64, bool) {
+	total, sum := 0, 0.0
+	for model, n := range use {
+		id, _, _ := strings.Cut(model, "[")
+		if p, ok := LookupPrice(id); ok && n > 0 {
+			total += n
+			sum += p * float64(n)
+		}
+	}
+	if total == 0 {
+		return 0, false
+	}
+	return sum / float64(total), true
 }

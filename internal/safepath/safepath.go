@@ -200,3 +200,55 @@ func AtomicWriteFileWithin(root, target string, b []byte, perm os.FileMode) erro
 	}
 	return atomicfile.Write(target, b, perm)
 }
+
+// LinkedSkillHomes are the folders a personal skill may be a symlink into:
+// the shared folder `npx skills add` installs to (~/.agents/skills, beside the
+// platform config directory) and the one reinvest writes skills to. Claude
+// Code loads a skill linked from either; anywhere else a link stays refused.
+func LinkedSkillHomes(rootDir string) []string {
+	return []string{
+		filepath.Join(filepath.Dir(rootDir), ".agents", "skills"),
+		WrittenSkillHome(rootDir),
+	}
+}
+
+// LinkedSkillDir resolves link, a personal skill directory that is a symlink,
+// to its target when that target is a directory directly inside one of
+// LinkedSkillHomes(rootDir).
+func LinkedSkillDir(rootDir, link string) (string, bool) {
+	t, err := filepath.EvalSymlinks(link)
+	if err != nil {
+		return "", false
+	}
+	if info, err := os.Stat(t); err != nil || !info.IsDir() {
+		return "", false
+	}
+	for _, h := range LinkedSkillHomes(rootDir) {
+		if hr, err := filepath.EvalSymlinks(h); err == nil && filepath.Dir(t) == hr {
+			return t, true
+		}
+	}
+	return "", false
+}
+
+// WrittenSkillHome is the folder reinvest writes skills to. A skill linked
+// from it was written for the user and has no other copy, so pruning it
+// removes the folder too, not just the link.
+func WrittenSkillHome(rootDir string) string {
+	return filepath.Join(rootDir, "skills-reinvest")
+}
+
+// LinkWithin checks that path is itself a symlink whose parent directory
+// resolves under root. The link's target is not followed: moving a link
+// never touches what it points at.
+func LinkWithin(root, path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return fmt.Errorf("%s is not a symlink", path)
+	}
+	_, err = ExistingPathWithin(root, filepath.Dir(path))
+	return err
+}

@@ -28,9 +28,7 @@ func TOMLTables(b []byte) map[string]map[string]string {
 			continue
 		}
 		if strings.HasPrefix(line, "[") {
-			// Array-of-tables headers ([[x]]) are tables for this purpose.
-			name := strings.Trim(line, "[]")
-			current = name
+			current = tableHeader(line)
 			if _, ok := tables[current]; !ok {
 				tables[current] = map[string]string{}
 			}
@@ -61,16 +59,104 @@ func TOMLTables(b []byte) map[string]map[string]string {
 func TOMLSubTables(b []byte, prefix string) map[string]map[string]string {
 	out := map[string]map[string]string{}
 	for header, keys := range TOMLTables(b) {
-		rest, ok := strings.CutPrefix(header, prefix+".")
-		if !ok || rest == "" {
-			continue
-		}
+		parts := tomlPath(header)
 		// Only immediate children: a deeper table belongs to the child, not here.
-		name := strings.Trim(rest, `"'`)
-		if strings.Contains(rest, ".") && !strings.HasPrefix(rest, `"`) {
+		if len(parts) == 2 && parts[0] == prefix {
+			out[parts[1]] = keys
+		}
+	}
+	dottedServers(b, prefix, out)
+	return out
+}
+
+// tableHeader returns what is between a header's brackets, ignoring spaces, a
+// trailing comment and the doubled brackets of an array of tables.
+func tableHeader(line string) string {
+	body := strings.TrimLeft(line, "[")
+	var quote rune
+	for i, r := range body {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '"' || r == '\'':
+			quote = r
+		case r == ']':
+			return normalizeHeader(body[:i])
+		}
+	}
+	return normalizeHeader(body)
+}
+
+func notBareKey(r rune) bool {
+	return !(r == '_' || r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
+}
+
+// normalizeHeader drops spaces around segments and re-quotes any that need it,
+// so TOMLTables keys stay unambiguous: mcp_servers."a.b" and not mcp_servers.a.b.
+func normalizeHeader(h string) string {
+	parts := tomlPath(h)
+	for i, p := range parts {
+		if strings.IndexFunc(p, notBareKey) >= 0 {
+			parts[i] = `"` + p + `"`
+		}
+	}
+	return strings.Join(parts, ".")
+}
+
+// tomlPath splits a dotted path, with quotes keeping a dot inside one segment.
+func tomlPath(path string) []string {
+	var parts []string
+	var cur strings.Builder
+	var quote rune
+	for _, r := range path {
+		switch {
+		case quote != 0 && r == quote:
+			quote = 0
+		case quote != 0:
+			cur.WriteRune(r)
+		case r == '"' || r == '\'':
+			quote = r
+		case r == '.':
+			parts = append(parts, strings.TrimSpace(cur.String()))
+			cur.Reset()
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	parts = append(parts, strings.TrimSpace(cur.String()))
+	return parts
+}
+
+// dottedServers adds servers written as dotted keys outside any table:
+// prefix.name = { command = "x" }.
+func dottedServers(b []byte, prefix string, out map[string]map[string]string) {
+	inTable := false
+	for _, raw := range strings.Split(string(b), "\n") {
+		line := strings.TrimSpace(raw)
+		if strings.HasPrefix(line, "[") {
+			inTable = true
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if inTable || !ok || strings.HasPrefix(line, "#") {
 			continue
 		}
-		out[name] = keys
+		parts := tomlPath(strings.TrimSpace(k))
+		if len(parts) == 2 && parts[0] == prefix {
+			out[parts[1]] = inlineTable(v)
+		}
 	}
-	return out
+}
+
+// inlineTable reads the string keys of { a = "x", b = "y" }.
+func inlineTable(v string) map[string]string {
+	keys := map[string]string{}
+	body := strings.Trim(strings.TrimSpace(v), "{}")
+	for _, pair := range strings.Split(body, ",") {
+		if k, val, ok := strings.Cut(pair, "="); ok {
+			keys[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(val), `"'`)
+		}
+	}
+	return keys
 }

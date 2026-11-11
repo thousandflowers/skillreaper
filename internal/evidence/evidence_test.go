@@ -59,19 +59,6 @@ func TestAddAccumulatesAcrossSources(t *testing.T) {
 	}
 }
 
-// The whole reason the package exists: the span the digest describes is not
-// bounded by the retention horizon, because the record outlives the
-// transcripts it was built from.
-func TestSpanDaysExceedsTheRetentionHorizon(t *testing.T) {
-	d := New()
-	d.Add("old", obs(time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), "skill", "seasonal", 1))
-	d.Add("new", obs(time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC), "skill", "seasonal", 1))
-
-	if span := d.SpanDays(); span < 140 {
-		t.Errorf("SpanDays = %d, want the full observed range (~141), not a 30-day window", span)
-	}
-}
-
 func TestErrorsAreCountedWithoutCountingAsAFiring(t *testing.T) {
 	d := New()
 	d.Add("t1", Observation{

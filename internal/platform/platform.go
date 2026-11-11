@@ -31,14 +31,24 @@ type Info struct {
 	// what every platform used before Codex (TOML) and OpenCode (JSONC) were
 	// added — both of which were being handed to encoding/json and failing by
 	// construction, with no parser for what they actually are.
-	ConfigFormat   string // "" or "json" | "jsonc" | "toml"
+	ConfigFormat   string // "" or "json" | "jsonc" | "toml" | "yaml"
 	HasSkills      bool
 	HasAgents      bool
 	HasMCP         bool
 	HasHooks       bool
 	HasProse       bool
 	HasTranscripts bool
-	TranscriptType string // "jsonl" | "sqlite" | "none"
+	// TranscriptType picks the parser. "jsonl" is Claude Code's format, and
+	// nothing else may claim it: the parser would find no fires in another tool's
+	// lines and every item would read as unused. "codex-jsonl" and "sqlite" have
+	// parsers. Anything else is declared unparsed, so its items stay REVIEW.
+	TranscriptType string
+	// NestedSkills means skills may sit in category folders, one level down.
+	NestedSkills bool
+	// ReadsProjectCLAUDE means the tool loads the working directory's CLAUDE.md.
+	ReadsProjectCLAUDE bool
+	// TranscriptDBTried is where a sqlite history was looked for, for the warning.
+	TranscriptDBTried string
 
 	// Derived from detection; empty when not installed.
 	ConfigDirAbs  string // resolved absolute config directory
@@ -56,14 +66,18 @@ type Info struct {
 
 // All returns the list of all known platform definitions (paths relative).
 func All() []Info {
-	home, _ := os.UserHomeDir()
-	_ = home
+	// Claude Code keeps both its directory and its .claude.json under
+	// CLAUDE_CONFIG_DIR when that is set.
+	claudeDir, claudeFile := "~/.claude", "~/.claude.json"
+	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+		claudeDir, claudeFile = d, filepath.Join(d, ".claude.json")
+	}
 	return []Info{
 		{
 			ID:             ClaudeCode,
 			Name:           "Claude Code",
-			ConfigDir:      "~/.claude",
-			ConfigFile:     "~/.claude.json",
+			ConfigDir:      claudeDir,
+			ConfigFile:     claudeFile,
 			HasSkills:      true,
 			HasAgents:      true,
 			HasMCP:         true,
@@ -71,6 +85,8 @@ func All() []Info {
 			HasProse:       true,
 			HasTranscripts: true,
 			TranscriptType: "jsonl",
+
+			ReadsProjectCLAUDE: true,
 		},
 		{
 			ID:             OpenCode,
@@ -85,6 +101,8 @@ func All() []Info {
 			HasProse:       true,
 			HasTranscripts: true,
 			TranscriptType: "sqlite",
+			// Its Claude Code compatibility: CLAUDE.md, the same as ProseDirs below.
+			ReadsProjectCLAUDE: true,
 		},
 		{
 			ID:             Cursor,
@@ -111,13 +129,14 @@ func All() []Info {
 			HasHooks:       false,
 			HasProse:       true,
 			HasTranscripts: true,
-			TranscriptType: "jsonl",
+			TranscriptType: "codex-jsonl",
 		},
 		{
 			ID:             OpenClaw,
 			Name:           "OpenClaw",
 			ConfigDir:      "~/.openclaw",
 			ConfigFile:     "~/.openclaw/openclaw.json",
+			ConfigFormat:   "jsonc",
 			HasSkills:      true,
 			HasAgents:      false,
 			HasMCP:         true,
@@ -154,13 +173,17 @@ func All() []Info {
 			Name:           "Hermes",
 			ConfigDir:      "~/.hermes",
 			ConfigFile:     "~/.hermes/config.yaml",
+			ConfigFormat:   "yaml",
 			HasSkills:      true,
 			HasAgents:      false,
 			HasMCP:         true,
 			HasHooks:       false,
 			HasProse:       true,
 			HasTranscripts: true,
-			TranscriptType: "jsonl",
+			// The history is in ~/.hermes/state.db, which no parser reads yet;
+			// ~/.hermes/sessions only holds request dumps.
+			TranscriptType: "hermes-sqlite",
+			NestedSkills:   true,
 		},
 	}
 }
@@ -238,9 +261,23 @@ func resolve(p Info) Info {
 				filepath.Join(claudeDir, "rules"),
 			}
 		}
-		opencodeDB := filepath.Join(home, ".opencode", "opencode.db")
-		if _, err := os.Stat(opencodeDB); err == nil {
-			p.TranscriptDB = opencodeDB
+		if p.ConfigFileAbs == "" {
+			if alt := filepath.Join(cfgDir, "opencode.json"); fileExists(alt) {
+				p.ConfigFileAbs = alt
+			}
+		}
+		dataDir := os.Getenv("XDG_DATA_HOME")
+		if dataDir == "" {
+			dataDir = filepath.Join(home, ".local", "share")
+		}
+		// Where OpenCode keeps it today, then where older versions did.
+		current := filepath.Join(dataDir, "opencode", "opencode.db")
+		p.TranscriptDBTried = current
+		for _, db := range []string{current, filepath.Join(home, ".opencode", "opencode.db")} {
+			if fileExists(db) {
+				p.TranscriptDB = db
+				break
+			}
 		}
 
 	case Cursor:
@@ -291,13 +328,14 @@ func resolve(p Info) Info {
 
 	case Hermes:
 		p.SkillDirs = []string{filepath.Join(cfgDir, "skills")}
-		sessionsDir := filepath.Join(cfgDir, "sessions")
-		if dirExists(sessionsDir) {
-			p.TranscriptDirs = []string{sessionsDir}
-		}
 	}
 
 	return p
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func dirExists(path string) bool {

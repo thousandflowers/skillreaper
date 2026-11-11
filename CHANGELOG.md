@@ -4,6 +4,122 @@ Notable changes to skillreaper. This file starts at 0.8.0; notes for earlier
 releases are on the [GitHub releases
 page](https://github.com/thousandflowers/skillreaper/releases).
 
+## 0.9.0
+
+**`skillreaper` now opens a menu: every item on one screen, a choice per row or
+group, and a receipt before anything changes. `reap` alone still prints the
+report, and every command still works from the command line.**
+
+### The menu
+
+```bash
+skillreaper        # or: reap menu
+```
+
+The number at the top is what you re-send in every session. It falls as you
+choose, in tokens or in money. Rows are grouped by what reap suggests (prune,
+mute, not sure, lock, already muted, already pruned), by plugin, or flat.
+
+- `space` takes reap's suggestion for a row, a group or a selection; `p`, `m`,
+  `l` and `d` choose prune, mute, lock or delete yourself; `a` fills in every
+  suggestion and, pressed again, puts back what was there.
+- Any action can be chosen on any row or group. A verdict is a suggestion and
+  never limits the choice; only what is physically impossible is refused, and
+  the row says why.
+- `o` turns a whole plugin off through `claude plugin disable`, after asking if
+  you use anything in it.
+- `enter` opens a row's card: weight, last use, errors, and the reason for the
+  verdict in a sentence.
+- Nothing is touched until `shift+enter` and a `y` on the receipt, which lists
+  every change, what cannot be undone first. Where Shift cannot be read (ssh,
+  some Linux terminals) the key is `x`.
+- A prune, a mute or a lock already on disk is taken back from the same screen
+  with `u`.
+- Shift+arrows, `v` and the mouse select many rows; `g` regroups, `f` filters by
+  platform, holding `s` shows reap's suggestion on every row.
+
+The menu carries out its choices with the same code the commands use, under the
+same lock. It runs on macOS and Linux; on Windows, in a pipe, or with any
+argument, `skillreaper` prints the report as before.
+
+Two things it does on macOS that no command did, both local: it reads the
+currency format set on your Mac to show amounts in it, at a fixed ECB rate
+shipped in the release; and, because Terminal.app sends Shift+arrows as plain
+arrows, a small `osascript` helper tells it whether Shift (and `s`) is down
+while the menu is open. Nothing is sent anywhere, and neither runs over ssh.
+
+### reap delete
+
+`reap delete <name>` removes one item for good. It takes exactly one item, asks
+first, and nothing brings it back: a copy already in quarantine stays there.
+Prune remains the reversible way and the default everywhere.
+
+### MCP servers have a weight
+
+An MCP server's tool schemas are built at runtime, so its rows used to read `?`
+and the total under-counted. reap now measures them from what your transcripts
+show Claude Code injected, and `reap why` says where a weight comes from or why
+one is still unknown. Skills are weighed the same way, by what the listing
+really injected, with multi-line descriptions read in full.
+
+### Truer verdicts and numbers
+
+- Uses are counted per platform and by the date of the event. A use in one tool
+  says nothing about the copy installed in another.
+- Only commands you typed count as uses, and a skill a plugin's SessionStart hook
+  loads every session is no longer called unused.
+- A skill named in your `CLAUDE.md`, an import or your rules is protected
+  wherever reap runs from, not only in the directory that file lives in.
+- A tool whose history cannot be read is no longer judged on other tools'
+  sessions.
+- Mute savings leave out the name, which stays loaded, and money figures follow
+  each platform's own session count.
+
+### Safer prune, mute and restore
+
+- Quarantine paths are unique. Two items with the same name used to overwrite
+  each other there, and `restore` could not bring both back.
+- A name two items share is refused rather than guessed: select with
+  `codex:skill:x` or a path.
+- Named prune, mute and delete reach a plugin's item or a link; a bulk prune
+  never does.
+- `reap restore` with no arguments lists what is pruned, with ids.
+- A kept item refuses a named prune or mute until `reap keep --remove`.
+
+### Behaviour changes on the command line
+
+- `echo y | reap prune` is refused, and a declined prompt exits 3.
+- `--dry-run` on `prune` and `mute` exits 2: they show their plan and ask
+  already.
+
+### reap reinvest (experimental)
+
+```bash
+reap reinvest --dry-run    # pick swaps, print what would run, change nothing
+reap reinvest              # the same, then ask before creating and muting
+```
+
+`reap` finds what you never use. `reinvest` looks at the work you actually do,
+finds the kinds of work no skill of yours covers, and proposes swaps: a skill
+for that work, written from your own sessions, against mutes of unused skills
+of about the same weight. You pick the swaps with the arrow keys.
+
+It is the Python prototype from `experiments/reinvest`, now in the binary, with
+the same cache files and the same checks. What to know before running it:
+
+- It asks Claude, through `claude -p`, to group your sessions, write the skill
+  and read every candidate: about twenty calls and a minute on a first run.
+  Nothing else reap does calls a model or the network.
+- Every candidate is read in full by Claude, twice, and by a set of risk rules
+  first; one refusal is enough, and a refused document stays refused. A swap is
+  all or nothing, and an existing skill of the same name is never replaced.
+- `--online` searches skills.sh instead of writing. Its search and its checks
+  were run against the live sites; installing what it finds was tested with
+  stand-ins only, so try it with `--dry-run` first.
+- It has run on macOS. On Linux it builds and has not been run.
+
+It is not in the menu yet.
+
 ## 0.8.0
 
 **Every command that prints for a human was redesigned — `reap`, `reap gap`,

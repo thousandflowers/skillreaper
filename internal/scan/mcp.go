@@ -9,10 +9,25 @@ import (
 
 // mcpServerConfig is the loose shape of one MCP server entry.
 type mcpServerConfig struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-	Type    string   `json:"type"`
-	URL     string   `json:"url"`
+	// Command is a string in most tools and a whole argv array in OpenCode.
+	Command json.RawMessage `json:"command"`
+	Args    []string        `json:"args"`
+	Type    string          `json:"type"`
+	URL     string          `json:"url"`
+}
+
+// display is the command line or URL with any credentials masked.
+func (c mcpServerConfig) display() string {
+	var argv []string
+	var one string
+	switch {
+	case json.Unmarshal(c.Command, &one) == nil && one != "":
+		argv = []string{one}
+	case json.Unmarshal(c.Command, &argv) == nil && len(argv) > 0:
+	default:
+		return RedactSecrets(c.URL)
+	}
+	return RedactSecrets(strings.TrimSpace(strings.Join(append(argv, c.Args...), " ")))
 }
 
 // ScanMCP inventories MCP servers from the platform config file (user
@@ -23,6 +38,7 @@ func ScanMCP(configPath, configDir, platformID, configFormat string) ([]Item, []
 	var warns []Warning
 
 	b, err := readCapped(configPath)
+	plainJSON := true
 	if err == nil {
 		// The platform table names the encoding. Before it did, every config
 		// was handed to encoding/json — so a TOML file failed on the first
@@ -31,15 +47,31 @@ func ScanMCP(configPath, configDir, platformID, configFormat string) ([]Item, []
 		// broken. Neither platform's servers were ever inventoried.
 		switch configFormat {
 		case "jsonc":
+			// Prune edits plain JSON only: it will not rewrite a file full of
+			// someone's comments, so their servers are reported, not offered.
+			plainJSON = json.Valid(b)
 			b = StripJSONC(b)
 		case "toml":
 			return appendTOMLMCP(items, warns, b, configPath, platformID), warns
+		case "yaml":
+			return appendYAMLMCP(items, b, configPath, platformID), warns
 		}
 		var top map[string]json.RawMessage
 		if jerr := json.Unmarshal(b, &top); jerr != nil {
 			warns = append(warns, Warning{Path: configPath, Msg: "unreadable JSON: " + jerr.Error()})
 		} else {
+			firstServer := len(items)
 			items = appendMCPServers(items, top["mcpServers"], "user-config", configPath, platformID, nil)
+			for i := firstServer; i < len(items) && !plainJSON; i++ {
+				items[i].Removable = false
+			}
+			// OpenCode's documented key. Prune only edits mcpServers, so these
+			// are reported, not offered for removal.
+			before := len(items)
+			items = appendMCPServers(items, top["mcp"], "user-config", configPath, platformID, nil)
+			for i := before; i < len(items); i++ {
+				items[i].Removable = false
+			}
 
 			var projects map[string]json.RawMessage
 			if raw, ok := top["projects"]; ok {
@@ -115,17 +147,13 @@ func appendMCPServers(items []Item, raw json.RawMessage, source, path, platformI
 		}
 		var cfg mcpServerConfig
 		_ = json.Unmarshal(cfgRaw, &cfg)
-		display := cfg.URL
-		if cfg.Command != "" {
-			display = strings.TrimSpace(cfg.Command + " " + strings.Join(cfg.Args, " "))
-		}
 		items = append(items, Item{
 			Category:    CatMCP,
 			Name:        name,
 			Platform:    platformID,
 			Source:      source,
 			Path:        path,
-			Description: display,
+			Description: cfg.display(),
 			Removable:   true,
 		})
 	}
@@ -147,9 +175,51 @@ func appendTOMLMCP(items []Item, warns []Warning, b []byte, configPath, platform
 			Platform:    platformID,
 			Source:      "user-config",
 			Path:        configPath,
-			Description: desc,
+			Description: RedactSecrets(desc),
 			Removable:   false,
 		})
+	}
+	return items
+}
+
+// appendYAMLMCP inventories the servers under a top-level mcp_servers: block,
+// which is how Hermes writes them. Like the TOML reader it reads only that
+// shape, by indentation, and it needs no dependency.
+func appendYAMLMCP(items []Item, b []byte, configPath, platformID string) []Item {
+	inBlock, childIndent := false, -1
+	var cur *Item
+	for _, raw := range strings.Split(string(b), "\n") {
+		line := strings.TrimRight(raw, " \t\r")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		if indent == 0 {
+			inBlock = strings.HasPrefix(trimmed, "mcp_servers:")
+			childIndent, cur = -1, nil
+			continue
+		}
+		if !inBlock {
+			continue
+		}
+		if childIndent < 0 {
+			childIndent = indent
+		}
+		key, val, ok := strings.Cut(trimmed, ":")
+		if !ok {
+			continue
+		}
+		key, val = strings.Trim(key, `"'`), strings.Trim(strings.TrimSpace(val), `"'`)
+		if indent == childIndent {
+			items = append(items, Item{Category: CatMCP, Name: key, Platform: platformID,
+				Source: "user-config", Path: configPath})
+			cur = &items[len(items)-1]
+			continue
+		}
+		if cur != nil && (key == "command" || key == "url") && val != "" {
+			cur.Description = RedactSecrets(val)
+		}
 	}
 	return items
 }

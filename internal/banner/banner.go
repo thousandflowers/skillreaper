@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/thousandflowers/skillreaper/internal/tty"
 )
 
 // Mark is the runtime wordmark, the same block lettering the README opens
@@ -54,8 +56,8 @@ var Detect = detect
 // and nothing about the run asks for undecorated output. stdOut is inspected
 // but never written to.
 func Print(errOut, stdOut io.Writer, o Options) {
-	tty, cols, widthKnown := Detect(stdOut)
-	if !allow(o, tty, cols, widthKnown, os.Getenv("NO_COLOR")) {
+	isTTY, cols, widthKnown := Detect(stdOut)
+	if !allow(o, isTTY, cols, widthKnown, os.Getenv("NO_COLOR")) {
 		return
 	}
 	mark := Mark
@@ -85,13 +87,9 @@ func allow(o Options, tty bool, cols int, widthKnown bool, noColor string) bool 
 // detect answers from the stream itself rather than from the arguments: a
 // redirect, a pipe, and a capture all look identical on the command line and
 // only differ here.
-func detect(w io.Writer) (tty bool, cols int, widthKnown bool) {
-	f, ok := w.(*os.File)
-	if !ok {
-		return false, 0, false
-	}
-	info, err := f.Stat()
-	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+func detect(w io.Writer) (isTTY bool, cols int, widthKnown bool) {
+	f, ok := tty.FileOf(w)
+	if !ok || !tty.IsTerminal(f) {
 		return false, 0, false
 	}
 	cols, widthKnown = terminalWidth(f)

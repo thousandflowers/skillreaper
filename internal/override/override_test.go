@@ -36,7 +36,7 @@ func TestRemoveKeep(t *testing.T) {
 	dir := t.TempDir()
 	_ = AddKeep(dir, "skill:a")
 	_ = AddKeep(dir, "skill:b")
-	if err := RemoveKeep(dir, "skill:a"); err != nil {
+	if _, err := RemoveKeep(dir, "skill:a"); err != nil {
 		t.Fatal(err)
 	}
 	items, _ := ListKeep(dir)
@@ -47,7 +47,7 @@ func TestRemoveKeep(t *testing.T) {
 
 func TestRemoveKeepNotFound(t *testing.T) {
 	dir := t.TempDir()
-	if err := RemoveKeep(dir, "skill:nonexistent"); err == nil {
+	if _, err := RemoveKeep(dir, "skill:nonexistent"); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -107,7 +107,7 @@ func TestItemKeyEmptyName(t *testing.T) {
 
 func TestRemoveKeepFromEmpty(t *testing.T) {
 	dir := t.TempDir()
-	if err := RemoveKeep(dir, "skill:ghost"); err == nil {
+	if _, err := RemoveKeep(dir, "skill:ghost"); err == nil {
 		t.Error("expected error for empty keep list")
 	}
 }

@@ -82,7 +82,8 @@ func TestBuildRoutePlanCategories(t *testing.T) {
 	if proj == nil {
 		t.Fatal("expected a project router for personal-rare")
 	}
-	if proj.Name != "/Users/x/Desktop/myrepo" {
+	// No path on record: the key as it is, since it cannot be decoded.
+	if proj.Name != "-Users-x-Desktop-myrepo" {
 		t.Errorf("project label: got %q", proj.Name)
 	}
 	// Heaviest router first: ecc(50) before project(25).

@@ -18,7 +18,7 @@ For the full inventory rather than the top rows, use `reap --json`.
 
 ## If reap is not installed
 
-Decide with `command -v reap` and nothing else - never an absolute path, never a
+Decide with `command -v reap || command -v skillreaper` and nothing else (use whichever name it finds) - never an absolute path, never a
 filesystem search: a copy found off `PATH` may be an older build, and silently
 using it hides a broken install.
 
@@ -49,8 +49,9 @@ upgrade, never the install block above, which they have already done.
 
 ## Pruning
 
-Never prune on your own initiative. `reap prune` is interactive and aborts when
-it has no terminal, so calling it from here does nothing anyway.
+Never prune on your own initiative, and never run `reap prune` or `reap mute`
+from here to see what they would do. Their question reads stdin, not a terminal:
+a piped word answers it and the change goes through.
 
 If the user explicitly asks in this turn: get an unambiguous yes, run
 `reap prune --yes`, and remind them of `reap restore --all`. If the request is

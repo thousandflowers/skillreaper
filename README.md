@@ -81,6 +81,10 @@ figure on this page comes from that one run.</sub>
 every skill / MCP / agent your AI loads but never fires, and shows you exactly
 what it costs you.
 
+In a terminal, `skillreaper` opens [the menu](#the-menu): the same findings on
+one screen, where you choose what goes and see the number fall before anything
+is touched. `reap` prints the report, for reading, piping and agents.
+
 <br>
 
 ## What it does
@@ -115,27 +119,37 @@ measurement side without changing a single file.
 | `reap gap` | `reap mute <name>` &nbsp;↔&nbsp; `reap unmute <name>` |
 | `reap by-project` | `reap keep <name>` &nbsp;↔&nbsp; `reap keep --remove <name>` |
 | `reap why <name>` | `reap install-hook` &nbsp;↔&nbsp; `reap uninstall-hook` |
-| `reap route` | |
+| `reap route` | `skillreaper` / `reap menu`: the same writes, chosen on one screen, undone from it with `u` |
 | `reap apm` | |
 | `reap manifest <name>` | |
 | `reap share` | |
 | `reap snapshot` <sup>1</sup> | |
 | `reap diff` | |
 
-**Nothing is ever deleted.** `reap prune` moves files into a `reaped/`
-directory with a versioned manifest, `reap mute` keeps a backup of the
-description it strips, and `reap uninstall-hook` removes only skillreaper's own
-entry, leaving your other hooks alone. Every write is **atomic** (temp file +
+**Nothing is deleted unless you ask for exactly that.** `reap prune` moves files
+into a `reaped/` directory with a versioned manifest, `reap mute` keeps a backup
+of the description it strips, and `reap uninstall-hook` removes only
+skillreaper's own entry, leaving your other hooks alone. The one exception is
+the one you have to name: `reap delete <name>`, or `d` in the menu, removes an
+item for good, says so in red, and asks first. Every write is **atomic** (temp file +
 rename) and **confined** to your Claude directory, so an interrupted prune,
 mute, or hook edit leaves the original file intact, never a half-written mix.
 
+One command is not local, and it is not in the table: `reap reinvest`, which is
+experimental. It asks Claude, through `claude -p`, to read your sessions and
+write a skill for work none of yours covers, and with `--online` it searches
+skills.sh. Nothing else here calls a model or the network.
+
 <sub><sup>1</sup> The only files a read-only command writes are skillreaper's
 own: <code>~/.claude/reaped/nudge-state.json</code>, which the default report
-touches so a hint it already showed you does not repeat, and the snapshot
-<code>reap snapshot</code> exists to write. Neither touches your stack. Pass
-<code>--no-nudge</code> (or set <code>SKILLREAPER_NO_NUDGE=1</code>) and not
-even that happens. No command in either column sends anything over the
-network.</sub>
+touches so a hint it already showed you does not repeat; a parsed-transcript
+cache in your user cache folder, which keeps the next run fast; an evidence
+record in your user config folder, which remembers uses older than your
+transcripts; and the snapshot <code>reap snapshot</code> exists to write. None of
+them touches your stack. <code>--no-nudge</code> (or
+<code>SKILLREAPER_NO_NUDGE=1</code>) turns off the first and
+<code>--no-cache</code> the second. No command in either column sends anything
+over the network.</sub>
 
 <br>
 
@@ -149,6 +163,8 @@ reap                       # 1. measure: what you load, what fires, what it cost
 reap why <name>            # 2. decide: the evidence behind one verdict
 reap prune                 # 3. act: quarantine the dead ones, interactive
 ```
+
+Or all three on one screen: `skillreaper`, [the menu](#the-menu).
 
 **1. `reap`** prints the report at the top of this page. Every row carries a
 verdict:
@@ -317,13 +333,20 @@ Upgrading, uninstalling, and platform-specific tips →
 💬 **Curious what `reap` finds in other setups?** [Share your output →](https://github.com/thousandflowers/skillreaper/discussions)
 
 ```bash
+skillreaper                   # the menu: choose on one screen, apply after a receipt
+reap menu                     # the same menu, by its command name
 reap                          # scan + report (read-only)
 reap gap                      # loaded-vs-fired utilization + MCP payload quality
 reap prune                    # quarantine REAP items (reversible)
+reap prune <name>             # quarantine that one item, whatever its verdict
 reap mute <name>              # strip description, keep skill available
+reap delete <name>            # remove one item for good (cannot be restored)
+reap unmute                   # list what is muted
 reap unmute <name>            # restore description from backup
 reap unmute --all             # restore all muted skills
 reap keep <name>              # protect an item from pruning
+reap restore                  # list what is pruned, with ids
+reap restore <id>             # undo one prune
 reap restore --all            # undo every prune
 reap why <name>               # explain in detail why an item got its verdict
 reap by-project               # skills bucketed by the project that fired them
@@ -331,6 +354,7 @@ reap route                    # propose a usage-informed lazy-load routing plan 
 reap apm                      # emit a proposed APM apm.yml from this repo's firing
 reap apm --diff apm.yml       # reconcile: what to add (fired, undeclared) / drop (declared, cold)
 reap share                    # print a ready-to-paste line about what you reclaimed
+reap reinvest --dry-run       # experimental: propose a skill for work none of yours covers
 reap snapshot                 # save this run's --json payload for later comparison
 reap diff                     # compare the newest two snapshots
 reap diff <a> <b>             # compare two named snapshots
@@ -344,6 +368,59 @@ reap --days 7                 # shorter evidence window
 reap --mute-threshold 0.20    # firing rate below which MUTE triggers (default 20%)
 reap version                  # print version
 ```
+
+<br>
+
+### The menu
+
+```bash
+skillreaper        # or: reap menu
+```
+
+<p align="center">
+  <img src="docs/menu-demo.gif" alt="The skillreaper menu: choosing what to prune and mute, the number falling to zero, then the receipt" width="900"><br>
+  <sub>Recorded against an invented stack
+  (<a href="docs/gif-helpers/menu-fixture.sh">menu-fixture.sh</a>), so the
+  names and numbers are the fixture's, not a real machine's.</sub>
+</p>
+
+One screen instead of three commands. The number at the top is what you re-send
+in every session, and it falls as you choose. Nothing changes until you apply:
+the receipt lists every change and asks first. A prune, a mute or a lock can be
+taken back from the same screen with `u`.
+
+| Key | What it does |
+|---|---|
+| `space` | Takes reap's own suggestion for the row, the group or the selection |
+| `p` `m` `l` `d` | Prune, mute, lock, delete. Delete is the one choice that cannot be undone, and it says so in red |
+| `n` &nbsp; `u` | Clear a choice &nbsp;·&nbsp; undo a mute, a lock or a prune that is already on disk |
+| `a` | Fills in what reap suggests; pressed again, puts back what was there |
+| `o` | Turns the row's whole plugin off, through `claude plugin disable` |
+| `enter` | Opens a group, or a row's card: its weight, its last use, why reap says what it says |
+| `shift+↑↓` &nbsp; `v` &nbsp; mouse | Select many rows at once; a click takes reap's suggestion, a drag paints it |
+| `tab` | Money or tokens. On a subscription it starts with tokens: they are what eats the plan |
+| `g` &nbsp; `f` | Group by suggestion, by plugin, or flat &nbsp;·&nbsp; one platform at a time |
+| hold `s` | Shows what reap suggests on every row, while you hold it |
+| `shift+enter` | The receipt, then `y` applies. Where Shift cannot be read (ssh, some Linux terminals) the key is `x`, and the footer says so |
+
+Any action can be chosen on any row or group. reap's verdicts are suggestions
+and never limit the choice; it refuses only what is physically impossible, and
+says why on the row.
+
+What the menu does that the commands do not, all on macOS and all local:
+
+- Amounts are shown in the currency set on your Mac (or the locale in `LC_ALL`
+  or `LC_MONETARY`, when you set one), at a fixed ECB reference rate shipped
+  inside the release. Nothing is fetched. A release whose table is
+  more than 90 days old shows US dollars instead of a stale conversion.
+- Terminal.app sends Shift+arrows and Shift+Enter as the plain keys, so while
+  the menu is open a small `/usr/bin/osascript` helper asks macOS whether Shift
+  (and the `s` key, for the peek) is down. It reads those two keys' state and
+  nothing else, needs no permission, writes nothing, and exits with the menu. It
+  does not run over ssh.
+
+The menu runs on macOS and Linux. On Windows, in a pipe, or with any argument,
+`skillreaper` prints the report as it always did, and `reap` alone always does.
 
 <br>
 
@@ -680,14 +757,19 @@ docs/           demo assets
 
 Tracked as issues, grouped by the problem they solve.
 
-- **Weigh MCP** - an MCP server's tool schemas are injected every session, but
-  their size is only knowable by running the server, so those rows read `?`
-  today and the total under-counts
-  ([#27](https://github.com/thousandflowers/skillreaper/issues/27)).
+- **The menu, next** - `reap reinvest` as its last step: what you removed
+  becomes credit for a skill that covers work none of yours does, written from
+  your own sessions (a command of its own today, and experimental); and the
+  menu on Windows.
 - **Better verdicts** - `--since` / `--until` and a window that respects the
   corpus ([#53](https://github.com/thousandflowers/skillreaper/issues/53));
   measuring wrong-tool picks
   ([#55](https://github.com/thousandflowers/skillreaper/issues/55)).
+- **Act on more than one stack shape** - group skills by domain and language,
+  then act on a group
+  ([#101](https://github.com/thousandflowers/skillreaper/issues/101)); move a
+  skill between user and workspace scope
+  ([#102](https://github.com/thousandflowers/skillreaper/issues/102)).
 - **Teams** - shared policy with verdicts that stay on each machine
   ([#89](https://github.com/thousandflowers/skillreaper/issues/89)), and a
   hosted view of them

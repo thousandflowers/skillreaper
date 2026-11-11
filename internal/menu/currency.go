@@ -54,8 +54,17 @@ func askedLocale(getenv func(string) string) string {
 	return ""
 }
 
+// asker is where the system is asked, and on which system: the tests stand in
+// for both, so every branch runs on any machine.
+type asker struct {
+	goos    string
+	command string // never whatever comes first on PATH
+	getenv  func(string) string
+}
+
+var systemAsker = asker{goos: runtime.GOOS, command: "/usr/bin/osascript", getenv: os.Getenv}
+
 const (
-	osascript   = "/usr/bin/osascript" // never whatever comes first on PATH
 	askTimeout  = 10 * time.Second
 	maxRateAge  = 90 * 24 * time.Hour
 	maxDigits   = 4
@@ -112,17 +121,17 @@ func parseAnswer(out string) (systemStyle, bool) {
 
 // systemCurrency is the system's currency and number style. ok is false off
 // macOS or if it cannot answer.
-func systemCurrency() (systemStyle, bool) {
-	if runtime.GOOS != "darwin" {
+func systemCurrency(a asker) (systemStyle, bool) {
+	if a.goos != "darwin" {
 		return systemStyle{}, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), askTimeout)
 	defer cancel()
 	args := []string{"-l", "JavaScript", "-e", askSystem}
-	if id := askedLocale(os.Getenv); id != "" {
+	if id := askedLocale(a.getenv); id != "" {
 		args = append(args, id)
 	}
-	out, err := exec.CommandContext(ctx, osascript, args...).Output()
+	out, err := exec.CommandContext(ctx, a.command, args...).Output()
 	if err != nil {
 		return systemStyle{}, false
 	}
@@ -179,6 +188,10 @@ func currencyFor(found systemStyle, ok bool, perEUR map[string]float64) Currency
 // SystemCurrency is the currency amounts are shown in: the one set on this Mac,
 // at the fixed rate in rates.json. No network.
 func SystemCurrency(now time.Time) Currency {
-	found, ok := systemCurrency()
+	return currencyWith(systemAsker, now)
+}
+
+func currencyWith(a asker, now time.Time) Currency {
+	found, ok := systemCurrency(a)
 	return currencyFor(found, ok, readTable(ratesJSON, now))
 }

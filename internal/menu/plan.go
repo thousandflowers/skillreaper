@@ -445,9 +445,6 @@ func verbsSaid(rows []*Row) string {
 			words = append(words, w)
 		}
 	}
-	if len(words) == 0 {
-		return "does nothing to"
-	}
 	sort.Strings(words)
 	return strings.Join(words, " or ")
 }
@@ -496,8 +493,10 @@ func (m *Menu) cursorHint(l line, st stats, p *Plan) string {
 			hint = "space clears " + plural(len(st.doable), "item") + " in " + l.name
 		case len(st.doable) > 0:
 			hint = "space " + verbsSaid(st.doable) + " " + l.name + ": " + plural(len(st.doable), "item")
-		default:
+		case anyExisting(l.rows):
 			hint = "reap has nothing to change in " + l.name + ": u undoes it"
+		default:
+			hint = "reap has no choice of its own in " + l.name + ": p, l and d still choose"
 		}
 		if _, _, ok := pluginTarget(l.rows); ok {
 			hint += " · o turns the whole plugin off"
@@ -506,13 +505,7 @@ func (m *Menu) cursorHint(l line, st stats, p *Plan) string {
 	}
 	r := l.row
 	if best(r) == "" {
-		switch reason := whyNot(r, vPrune); {
-		case reason != "":
-			return r.Name + " · " + reason
-		case r.Reason == reasonMuted:
-			return r.Name + " · it is muted: u unmutes it, p prunes it"
-		}
-		return r.Name + " · reap suggests nothing here: p, m, l and d still choose"
+		return r.Name + " · " + whyNothing(r)
 	}
 	verb := verbS[best(r)]
 	if p.get(r) == best(r) {

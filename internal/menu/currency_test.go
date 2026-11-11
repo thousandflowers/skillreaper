@@ -6,6 +6,9 @@ package menu
 import (
 	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -251,6 +254,179 @@ func TestShippedRatesAreReadable(t *testing.T) {
 		mustEqual(t, "code", got.Code, "EUR")
 		if !usableRate(got.Rate) {
 			t.Errorf("rate = %v", got.Rate)
+		}
+	})
+}
+
+// env is a getenv over a fixed set of variables.
+func env(vars map[string]string) func(string) string {
+	return func(name string) string { return vars[name] }
+}
+
+func TestAskedLocaleIsTheOneTheEnvironmentAsksMoneyToFollow(t *testing.T) {
+	cases := []struct {
+		name string
+		vars map[string]string
+		want string
+	}{
+		{"nothing set: the system's own", nil, ""},
+		{"LC_MONETARY alone", map[string]string{"LC_MONETARY": "it_IT.UTF-8"}, "it_IT"},
+		{"LC_ALL wins over LC_MONETARY", map[string]string{"LC_ALL": "fr_FR.UTF-8", "LC_MONETARY": "it_IT.UTF-8"}, "fr_FR"},
+		{"the encoding is dropped", map[string]string{"LC_ALL": "en_US.UTF-8"}, "en_US"},
+		{"a modifier is dropped", map[string]string{"LC_ALL": "it_IT@euro"}, "it_IT"},
+		{"an encoding and a modifier both", map[string]string{"LC_MONETARY": "de_DE.ISO8859-15@euro"}, "de_DE"},
+		{"C is the POSIX locale", map[string]string{"LC_ALL": "C"}, "en_US_POSIX"},
+		{"C with an encoding too", map[string]string{"LC_ALL": "C.UTF-8"}, "en_US_POSIX"},
+		{"POSIX is the POSIX locale", map[string]string{"LC_MONETARY": "POSIX"}, "en_US_POSIX"},
+		{"a language alone", map[string]string{"LC_ALL": "de"}, "de"},
+		{"a script and a region", map[string]string{"LC_ALL": "zh_Hans_CN"}, "zh_Hans_CN"},
+		{"a value that is not a locale is never passed on", map[string]string{"LC_ALL": "$(id)"}, ""},
+		{"a value that is not a locale does not fall through to the next variable", map[string]string{"LC_ALL": "not a locale", "LC_MONETARY": "it_IT"}, ""},
+		{"LANG is left alone: the terminal fills it in by itself", map[string]string{"LANG": "it_IT.UTF-8"}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mustEqual(t, "locale", askedLocale(env(c.vars)), c.want)
+		})
+	}
+}
+
+// standIn writes a shell script that stands where osascript would: it notes how
+// it was called beside itself, then does what body says.
+func standIn(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "ask")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$#\" > \"$0.count\"\nfor a in \"$@\"; do last=$a; done\nprintf '%s' \"$last\" > \"$0.last\"\n" + body + "\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// calledWith is how many arguments the stand-in was given and the last of them;
+// ran is false if it was never run.
+func calledWith(t *testing.T, script string) (count, last string, ran bool) {
+	t.Helper()
+	n, err := os.ReadFile(script + ".count")
+	if err != nil {
+		return "", "", false
+	}
+	l, _ := os.ReadFile(script + ".last")
+	return strings.TrimSpace(string(n)), string(l), true
+}
+
+const euroAnswer = `printf '%s' '{"code":"EUR","sym":"€","decimal":",","group":".","digits":2}'`
+
+func TestSystemCurrencyAsksOnlyAMac(t *testing.T) {
+	t.Run("off macOS nothing is asked and nothing is run", func(t *testing.T) {
+		script := standIn(t, euroAnswer)
+
+		_, ok := systemCurrency(asker{goos: "linux", command: script, getenv: env(nil)})
+
+		_, _, ran := calledWith(t, script)
+		mustEqual(t, "answered", ok, false)
+		mustEqual(t, "command run", ran, false)
+	})
+
+	t.Run("on macOS the answer is read as the system gave it", func(t *testing.T) {
+		script := standIn(t, euroAnswer)
+
+		got, ok := systemCurrency(asker{goos: "darwin", command: script, getenv: env(nil)})
+
+		mustEqual(t, "answered", ok, true)
+		mustEqual(t, "style", got, systemStyle{code: "EUR", sym: "€", decimal: ",", group: ".", digits: 2, hasDigits: true})
+	})
+
+	t.Run("with no locale asked for, the question carries none", func(t *testing.T) {
+		script := standIn(t, euroAnswer)
+
+		systemCurrency(asker{goos: "darwin", command: script, getenv: env(nil)})
+
+		count, last, _ := calledWith(t, script)
+		mustEqual(t, "arguments", count, "4") // -l JavaScript -e <the question>
+		mustEqual(t, "last argument", last, askSystem)
+	})
+
+	t.Run("the locale the environment asks for is handed over, cleaned", func(t *testing.T) {
+		script := standIn(t, euroAnswer)
+
+		systemCurrency(asker{goos: "darwin", command: script, getenv: env(map[string]string{"LC_MONETARY": "it_IT.UTF-8"})})
+
+		count, last, _ := calledWith(t, script)
+		mustEqual(t, "arguments", count, "5")
+		mustEqual(t, "last argument", last, "it_IT")
+	})
+
+	failures := map[string]string{
+		"the command fails":          "exit 1",
+		"the command prints rubbish": "printf 'no idea'",
+		"the command prints nothing": "true",
+		"the answer has no currency": `printf '%s' '{"sym":"€"}'`,
+		"the answer fails after it":  euroAnswer + "\nexit 3",
+	}
+	for name, body := range failures {
+		t.Run("no answer when "+name, func(t *testing.T) {
+			_, ok := systemCurrency(asker{goos: "darwin", command: standIn(t, body), getenv: env(nil)})
+
+			mustEqual(t, "answered", ok, false)
+		})
+	}
+
+	t.Run("no answer when the command is not there", func(t *testing.T) {
+		_, ok := systemCurrency(asker{goos: "darwin", command: filepath.Join(t.TempDir(), "missing"), getenv: env(nil)})
+
+		mustEqual(t, "answered", ok, false)
+	})
+}
+
+// ratesMade is the day the shipped table was made.
+func ratesMade(t *testing.T) time.Time {
+	t.Helper()
+	var shipped struct {
+		Date string `json:"date"`
+	}
+	if err := json.Unmarshal(ratesJSON, &shipped); err != nil {
+		t.Fatal(err)
+	}
+	made, err := time.Parse(isoDate, shipped.Date)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return made
+}
+
+func TestCurrencyWithJoinsTheSystemsAnswerAndTheShippedRates(t *testing.T) {
+	made := ratesMade(t)
+	rates := readTable(ratesJSON, made)
+	mac := func(body string) asker { return asker{goos: "darwin", command: standIn(t, body), getenv: env(nil)} }
+
+	t.Run("a Mac set to euros shows euros at the shipped rate", func(t *testing.T) {
+		got := currencyWith(mac(euroAnswer), made)
+
+		mustEqual(t, "currency", got, Currency{Code: "EUR", Sym: "€", Rate: rates["EUR"] / rates["USD"], Decimal: ",", Group: ".", Digits: 2})
+	})
+
+	t.Run("once the rates are stale it is dollars again, in the system's separators", func(t *testing.T) {
+		got := currencyWith(mac(euroAnswer), made.Add(maxRateAge+48*time.Hour))
+
+		mustEqual(t, "currency", got, Currency{Code: "USD", Sym: "US$", Rate: 1, Decimal: ",", Group: ".", Digits: 2})
+	})
+
+	t.Run("a system that cannot answer is dollars", func(t *testing.T) {
+		mustEqual(t, "currency", currencyWith(mac("exit 1"), made), USD)
+	})
+
+	t.Run("off macOS it is dollars", func(t *testing.T) {
+		mustEqual(t, "currency", currencyWith(asker{goos: "linux", command: standIn(t, euroAnswer), getenv: env(nil)}, made), USD)
+	})
+
+	t.Run("on this machine, whatever it is, the result can be shown", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+
+		got := SystemCurrency(made)
+
+		if got.Rate <= 0 || got.Sym == "" || got.Code == "" || got.Decimal == "" {
+			t.Errorf("currency = %+v", got)
 		}
 	})
 }

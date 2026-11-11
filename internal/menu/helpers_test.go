@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/report"
@@ -119,13 +120,32 @@ type screen struct {
 	frames   [][]string
 	mouseOn  []bool         // whether mouse reports were on, frame by frame
 	resizeAt map[int][2]int // the size the window takes just before the nth key is read
-	reads    int
+	// watch is text whose style is noted the first time a frame shows it, on the
+	// lowest line that holds it; styles is how each was drawn there.
+	watch  []string
+	styles map[string]term.Style
+	reads  int
 }
 
 func (s *screen) Refresh() {
 	s.Fake.Refresh()
-	s.frames = append(s.frames, s.Fake.Lines())
+	lines := s.Fake.Lines()
+	s.frames = append(s.frames, lines)
 	s.mouseOn = append(s.mouseOn, s.Fake.MouseOn)
+	for _, text := range s.watch {
+		if _, seen := s.styles[text]; seen {
+			continue
+		}
+		for y := len(lines) - 1; y >= 0; y-- {
+			if at := strings.Index(lines[y], text); at >= 0 {
+				if s.styles == nil {
+					s.styles = map[string]term.Style{}
+				}
+				s.styles[text] = s.Fake.StyleAt(y, utf8.RuneCountInString(lines[y][:at]))
+				break
+			}
+		}
+	}
 }
 
 func (s *screen) ReadKey(wait time.Duration) term.Key {

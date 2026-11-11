@@ -359,6 +359,28 @@ func best(r *Row) string {
 	return ""
 }
 
+// whyNothing says why reap has no choice of its own for a row: it is pruned,
+// locked or read-only; it is muted; or what reap would suggest is refused there.
+func whyNothing(r *Row) string {
+	if reason := whyNot(r, vPrune); reason != "" {
+		return reason
+	}
+	if r.Reason == reasonMuted {
+		return "it is muted: u unmutes it, p prunes it"
+	}
+	return whyNot(r, suggestPlan[suggestion(r)]) + ": p, l and d still choose"
+}
+
+// anyExisting says some row holds a state u can take back.
+func anyExisting(rows []*Row) bool {
+	for _, r := range rows {
+		if existing(r) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // inUse: chosen against the evidence. It fires, or reap itself would lock it.
 func inUse(r *Row) bool { return r.Uses > 0 || suggestion(r) == suggestKeep }
 

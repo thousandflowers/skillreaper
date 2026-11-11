@@ -224,7 +224,7 @@ func (l *list) toggle(items []*Row) {
 	if len(doable) == 0 {
 		l.msg = "nothing unused here to select"
 		if len(items) > 0 {
-			l.msg = "nothing to select here: " + whyNot(items[0], vPrune)
+			l.msg = "nothing to select here: " + whyNothing(items[0])
 			settled := true
 			for _, r := range items {
 				settled = settled && (r.Reason == reasonMuted || r.Reason == reasonPruned)
@@ -401,10 +401,11 @@ func (l *list) pluginsOff(rows []*Row) string {
 		if left > 0 {
 			l.msg += " · " + itoa(left) + " not in a plugin"
 		}
-	case len(rows) > 0:
-		l.msg = "o cannot act here: " + whyNot(rows[0], vDisable)
 	default:
 		l.msg = "o works on a plugin"
+		if len(rows) > 0 {
+			l.msg = "o cannot act here: " + whyNot(rows[0], vDisable)
+		}
 	}
 	return l.msg
 }

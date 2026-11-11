@@ -31,7 +31,6 @@ func pad(s string, n int) string      { return term.Pad(s, n) }
 func cutMid(s string, n int) string   { return term.CutMid(s, n) }
 func runes(s string) int              { return utf8.RuneCountInString(s) }
 func asBold(st term.Style) term.Style { st.Bold = true; return st }
-func asDim(st term.Style) term.Style  { st.Dim = true; return st }
 
 // put writes at a cell, cut at the window's edge. Outside the window it does
 // nothing.
@@ -262,6 +261,10 @@ func wrap(text string, width int) []string {
 				lines, line = append(lines, line), ""
 			}
 			head := cut(word, width)
+			if head == "" { // one character wider than the window: a line of its own, never a loop
+				_, size := utf8.DecodeRuneInString(word)
+				head = word[:size]
+			}
 			lines, word = append(lines, head), word[len(head):]
 		}
 		switch {

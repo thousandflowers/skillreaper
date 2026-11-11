@@ -212,8 +212,6 @@ func (l *list) drawGroup(y int, f line, n, amountW int, lit bool) {
 		boxLook = asBold(m.red())
 	case on:
 		boxLook = green
-	case st.box != "[ ]":
-		boxLook = dim
 	}
 	m.put(y, 3, field[:3], or(hl, lit, boxLook))
 	nameLook := bold

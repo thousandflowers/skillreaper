@@ -87,7 +87,7 @@ func Open() (*Terminal, error) {
 	}
 	t := &Terminal{in: int(os.Stdin.Fd()), out: int(os.Stdout.Fd()), mouse: true, full: true,
 		gap: math.MaxInt64, colors: colorCount(), narrow: Narrow(), done: make(chan struct{})}
-	if err := ioctl(t.in, ioctlGetTermios, unsafe.Pointer(&t.saved)); err != nil {
+	if err := sysIoctl(t.in, ioctlGetTermios, unsafe.Pointer(&t.saved)); err != nil {
 		return nil, fmt.Errorf("the terminal's settings cannot be read: %w", err)
 	}
 	var pipe [2]int
@@ -128,8 +128,17 @@ func Open() (*Terminal, error) {
 func (t *Terminal) Close() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.giveBack() {
+		_ = syscall.Close(t.wakeR)
+		_ = syscall.Close(t.wakeW)
+	}
+}
+
+// giveBack puts the terminal as it was, the first time it is called, and says
+// whether this was that time. The caller holds t.mu.
+func (t *Terminal) giveBack() bool {
 	if t.closed {
-		return
+		return false
 	}
 	t.closed = true
 	signal.Stop(t.signals)
@@ -141,8 +150,7 @@ func (t *Terminal) Close() {
 		t.write(screenOff)
 		_ = ioctl(t.in, ioctlSetTermios, unsafe.Pointer(&t.saved))
 	}
-	_ = syscall.Close(t.wakeR)
-	_ = syscall.Close(t.wakeW)
+	return true
 }
 
 // setRaw makes keys arrive one at a time and unechoed. Signals stay with the
@@ -154,7 +162,7 @@ func (t *Terminal) setRaw() error {
 	raw.Cc[syscall.VMIN] = 1
 	raw.Cc[syscall.VTIME] = 0
 	disableSuspendKeys(&raw)
-	return ioctl(t.in, ioctlSetTermios, unsafe.Pointer(&raw))
+	return sysIoctl(t.in, ioctlSetTermios, unsafe.Pointer(&raw))
 }
 
 // askLight is whether the colours chosen for a dark window would vanish here.
@@ -207,7 +215,12 @@ func (t *Terminal) watchSignals() {
 
 // exitOn ends the program for a signal, the terminal given back first.
 func (t *Terminal) exitOn(sig os.Signal) {
-	t.Close() // the shell gets its terminal back
+	// The shell gets its terminal back, but the wake-up pipe stays open: a
+	// ReadKey waiting on it would read a closed pipe as the end of input, and the
+	// program would carry on, to exit 0, before this exits for the signal.
+	t.mu.Lock()
+	t.giveBack()
+	t.mu.Unlock()
 	code := 1
 	if n, ok := sig.(syscall.Signal); ok {
 		code = 128 + int(n)
@@ -548,7 +561,7 @@ func (s *fdSource) read() readState {
 	}
 	var chunk [256]byte
 	for {
-		n, err := syscall.Read(s.fd, chunk[:])
+		n, err := sysRead(s.fd, chunk[:])
 		if err == syscall.EINTR {
 			continue
 		}
@@ -560,6 +573,14 @@ func (s *fdSource) read() readState {
 		return gotByte
 	}
 }
+
+// The system calls a failure of which has a branch of its own. They are
+// variables only so a test can make each one fail; the program never changes them.
+var (
+	sysIoctl  = ioctl
+	sysRead   = syscall.Read
+	sysSelect = selectRead
+)
 
 func ioctl(fd int, request uintptr, arg unsafe.Pointer) error {
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), request, uintptr(arg)); errno != 0 {
@@ -583,7 +604,7 @@ func waitReadable(a, b int, timeout time.Duration) (aReady, bReady bool, err err
 		tv := syscall.NsecToTimeval(int64(timeout))
 		limit = &tv
 	}
-	if err := selectRead(top+1, &set, limit); err != nil {
+	if err := sysSelect(top+1, &set, limit); err != nil {
 		return false, false, err
 	}
 	return a >= 0 && fdHas(&set, a), b >= 0 && fdHas(&set, b), nil

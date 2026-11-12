@@ -22,6 +22,9 @@ while (true) {
   $.usleep(10000);
 }`
 
+// keyboardHelper runs keyboardScript. A variable only so a test can name one that is missing.
+var keyboardHelper = "/usr/bin/osascript"
+
 // startKeyboardWatcher starts the helper. Terminal.app sends Shift+Up, Shift+Down
 // and Shift+Return as the plain keys, so only the system can say Shift is down.
 // It answers nil over ssh and wherever the helper cannot start.
@@ -29,11 +32,8 @@ func startKeyboardWatcher() *keyboardWatcher {
 	if remoteSession() {
 		return nil
 	}
-	cmd := exec.Command("/usr/bin/osascript", "-l", "JavaScript", "-e", keyboardScript)
-	lines, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil
-	}
+	cmd := exec.Command(keyboardHelper, "-l", "JavaScript", "-e", keyboardScript)
+	lines, _ := cmd.StdoutPipe() // fails only once Stdout is set or the command started, neither so here
 	if err := cmd.Start(); err != nil {
 		return nil
 	}

@@ -26,10 +26,7 @@ func parseBackground(reply []byte) (light, ok bool) {
 		if len(part) > 8 {
 			return false, false
 		}
-		v, err := strconv.ParseUint(string(part), 16, 64)
-		if err != nil {
-			return false, false
-		}
+		v, _ := strconv.ParseUint(string(part), 16, 64) // cannot fail: the pattern took hex digits, eight at most
 		share[i] = float64(v) / float64(uint64(1)<<(4*len(part))-1)
 	}
 	return 0.299*share[0]+0.587*share[1]+0.114*share[2] >= lightFrom, true

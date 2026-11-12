@@ -186,8 +186,10 @@ func TestApply_install_not_for_claude_code_mutes_nothing(t *testing.T) {
 	calls := stepsRecorded(a, nil)
 	a.isInstalled = func(candidate) bool { return false }
 	a.applyOne(applySwap())
-	if len(*calls) != 1 {
-		t.Errorf("%d steps, want 1: %v", len(*calls), *calls)
+	for _, cmd := range *calls {
+		if containsString(cmd, "mute") {
+			t.Errorf("a skill Claude Code does not load still muted: %v", *calls)
+		}
 	}
 }
 

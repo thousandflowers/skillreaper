@@ -64,8 +64,7 @@ FILE_MARK = "===== FILE {} ====="  # how each bundled file appears after SKILL.m
 SKILL_FILE = "SKILL.md"
 FETCH = r"(?:curl|wget|iwr|invoke-webrequest)\b"
 SH = r"(?:ba|z|k|da|fi)?sh"
-SECRETS = [r"sk-ant-[\w-]{20,}", r"\bsk-[a-z0-9]{32,}", r"\bgh[pousr]_[a-z0-9]{30,}", r"\bgithub_pat_\w{20,}",
-           r"\bakia[a-z0-9]{16}\b", r"\bxox[abprs]-[\w-]{10,}", r"-----begin [a-z ]*private key-----"]
+SECRETS = [r"sk-ant-[\w-]{20,}", r"\bsk-[a-z0-9_-]{32,}", r"\b[sr]k_(?:live|test)_[a-z0-9]{20,}", r"\bgh[pousr]_[a-z0-9]{30,}", r"\bgithub_pat_\w{20,}", r"\bglpat-[\w-]{20,}", r"\bnpm_[a-z0-9]{30,}", r"\baiza[\w-]{30,}", r"\bhf_[a-z0-9]{30,}", r"\bakia[a-z0-9]{16}\b", r"\bxox[abprs]-[\w-]{10,}", r"\bbearer\s+[\w.~+/=-]{20,}", r"\beyj[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}", r"-----begin [a-z ]*private key-----(?:[\s\S]*?-----end [a-z ]*private key-----|[\s\S]*)"]
 RISKY = [
     (rf"{FETCH}[^\n]{{0,200}}\|[^\n]{{0,80}}(?<![\w.-]){SH}\b", "downloads and runs code"),
     (rf"{FETCH}[^\n]{{0,200}}\|\s*(?:sudo\s+)?(?:python3?|perl|ruby|node)\s*(?:-\s*)?$", "downloads and runs code"),
@@ -91,6 +90,8 @@ RISKY = [
 ]
 # Control characters a pager or terminal acts on (escape sequences, the clipboard one, backspace): never in a real doc.
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+# a lone CR, the tag block and the direction overrides: text a reader cannot see
+HIDDEN_RE = re.compile(r"\r(?!\n)|[\U000E0000-\U000E007F\u202A-\u202E\u2066-\u2069\u200E\u200F]")
 # An MCP server's tools run on every call without the agent reading them first: one that runs any command or
 # script hands the model a shell under a friendlier name. Matched against tool names and capability phrases,
 # with camelCase and hyphens first turned into underscores. A bare word counts only where it stands as a tool name.
@@ -157,7 +158,9 @@ def frontmatter(text: str) -> dict:
 
 def printable(text: str) -> str:
     """Third-party text made safe to store and print: no lone surrogates, no control characters."""
-    return CONTROL_RE.sub("", text.encode("utf-8", "replace").decode("utf-8"))
+    text = CONTROL_RE.sub("", text.encode("utf-8", "replace").decode("utf-8")).replace("\r\n", "\n")
+    # a lone CR redraws the line; format characters (the tag block among them) draw nothing
+    return "".join(c for c in text if c != "\r" and unicodedata.category(c) != "Cf")
 
 
 def one_line(text: str) -> str:
@@ -192,7 +195,7 @@ def risks(doc: str, mcp: bool = False) -> list[str]:
     if mcp:
         tools = _tool_form(text)
         found |= {why for pattern, why in MCP_RISKY if re.search(pattern, tools) or re.search(pattern, low)}
-    if CONTROL_RE.search(doc):
+    if CONTROL_RE.search(doc) or HIDDEN_RE.search(doc):
         found.add("hides control sequences from the reader")
     if "hooks" in frontmatter(doc):
         found.add("installs hooks that run on their own")

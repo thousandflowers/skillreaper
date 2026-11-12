@@ -1446,9 +1446,14 @@ func cmdUninstallHook(opts options, stdout, stderr io.Writer) int {
 		return 1
 	}
 	settings := filepath.Join(opts.claudeDir, "settings.json")
-	if err := hook.Uninstall(settings); err != nil {
+	removed, err := hook.Uninstalled(settings)
+	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
+	}
+	if !removed {
+		fmt.Fprintf(stdout, "no skillreaper nudge hook in %s: nothing to remove\n", settings)
+		return 0
 	}
 	fmt.Fprintf(stdout, "removed skillreaper nudge hook from %s\n", settings)
 	return 0

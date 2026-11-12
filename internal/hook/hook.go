@@ -120,19 +120,25 @@ func Install(settingsPath, command string, dryRun bool) ([]byte, error) {
 // uninstall leaves the file as it was. Missing files and missing entries are
 // no-ops.
 func Uninstall(settingsPath string) error {
+	_, err := Uninstalled(settingsPath)
+	return err
+}
+
+// Uninstalled is Uninstall that also says whether there was a hook to remove.
+func Uninstalled(settingsPath string) (removed bool, err error) {
 	if _, err := os.Stat(settingsPath); err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return false, nil
 		}
-		return err
+		return false, err
 	}
 	doc, perm, err := readSettings(settingsPath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	groups, err := sessionStartGroups(doc)
 	if err != nil {
-		return err
+		return false, err
 	}
 	out := doc
 	// Backwards, so the indexes still to come stay valid as elements go.
@@ -145,25 +151,25 @@ func Uninstall(settingsPath string) error {
 			kept--
 			path := append(slices.Clone(sessionStartPath), strconv.Itoa(i), "hooks", strconv.Itoa(j))
 			if out, _, err = jsonedit.Delete(out, path...); err != nil {
-				return err
+				return false, err
 			}
 		}
 		if kept == 0 {
 			if out, _, err = jsonedit.Delete(out, append(slices.Clone(sessionStartPath), strconv.Itoa(i))...); err != nil {
-				return err
+				return false, err
 			}
 		}
 	}
 	if bytes.Equal(out, doc) {
-		return nil
+		return false, nil
 	}
 	if out, err = dropIfEmpty(out, sessionStartPath...); err != nil {
-		return err
+		return false, err
 	}
 	if out, err = dropIfEmpty(out, sessionStartPath[:1]...); err != nil {
-		return err
+		return false, err
 	}
-	return writeSettings(settingsPath, out, perm)
+	return true, writeSettings(settingsPath, out, perm)
 }
 
 // writeSettings writes through a link: settings.json is often a link into a

@@ -99,6 +99,16 @@ really injected, with multi-line descriptions read in full.
   another tool as it is.
 - A YAML description block whose line is indented less than the rest keeps
   that line's text; its first letters, or half an accented one, were cut.
+- A skill or agent of your own is dated by its file, so one written or edited
+  in the last `--grace-days` is REVIEW(grace), not REAP: it had no date at all,
+  and a skill made today was offered as safe to prune.
+- `reap mute` works on a SKILL.md saved with a byte-order mark, and keeps the
+  mark.
+- The report's `DO` line for `reap prune` counts what a bare `reap prune`
+  takes, not every unused item.
+- `reap uninstall-hook` says when there was no hook to remove.
+- Installed with npm into a folder you cannot write (`sudo npm i -g`), the
+  binary goes to `~/.cache/skillreaper/<version>/` instead of failing.
 
 ### Behaviour changes on the command line
 
@@ -123,8 +133,9 @@ the same cache files and the same checks. What to know before running it:
 
 - It asks Claude, through `claude -p`, to group your sessions, write the skill
   and read every candidate: about twenty calls and a minute on a first run.
-  It says so on its first line, before any call, and removes keys it
-  recognises from the text before anything is kept or sent. Nothing else reap
+  It says so on its first line, before any call. What it sends is excerpts
+  of your sessions, with the keys it recognises removed before anything is
+  kept or sent, and your installed skills' names and descriptions. Nothing else reap
   does calls a model or the network.
 - Every candidate is read in full by Claude, twice, and by a set of risk rules
   first; one refusal is enough, and a refused document stays refused. A swap is
@@ -136,6 +147,13 @@ the same cache files and the same checks. What to know before running it:
   screen: it is loaded in every session from then on.
 - Mutes and their roll back name each file by its path, so undoing a failed
   swap never unmutes a copy you muted yourself in another tool.
+- Keys removed before anything is sent or kept: Anthropic, OpenAI (project and
+  service keys too), GitHub, GitLab, npm, Google, Stripe, Hugging Face, AWS,
+  Slack, bearer tokens, JWTs, and private keys with their whole body.
+- A skill holding text a reader cannot see (Unicode tag characters, direction
+  overrides, a carriage return that redraws a line) is refused, and the screen
+  never carries those characters; nor a failing program's escape sequences.
+- A swap that failed stays on offer in `reap`'s report.
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

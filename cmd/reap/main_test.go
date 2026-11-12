@@ -49,6 +49,19 @@ func TestStateCommandsRequireClaudeDir(t *testing.T) {
 
 // buildFixture creates a minimal but complete fake installation:
 // a used skill, a dead skill, a dead MCP server, and one transcript.
+// backdated gives a skill or agent file a date well before any window, as an
+// item someone has had for a while: reap dates your own items by their file.
+func backdated(t *testing.T, path string) {
+	t.Helper()
+	if !strings.HasSuffix(path, "SKILL.md") && !strings.Contains(filepath.ToSlash(path), "/agents/") {
+		return
+	}
+	old := time.Now().AddDate(-1, 0, 0)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func buildFixture(t *testing.T) (claudeDir, claudeJSON string) {
 	t.Helper()
 	root := t.TempDir()
@@ -63,6 +76,7 @@ func buildFixture(t *testing.T) (claudeDir, claudeJSON string) {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
+		backdated(t, path)
 	}
 
 	write(filepath.Join(claudeDir, "skills", "usedskill", "SKILL.md"),

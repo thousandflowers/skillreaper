@@ -510,22 +510,27 @@ func renderWarnings(w io.Writer, r *Report, width int, paint func(code, s string
 // what running it buys.
 func renderActions(w io.Writer, r *Report, width int, paint func(code, s string) string) {
 	var muteNames []string
-	muteTokens := 0
+	muteTokens, pruneCount, pruneTokens := 0, 0, 0
 	for _, row := range r.Rows {
-		// What reap mute itself takes, so this line and the command agree.
+		// What reap mute and a bare reap prune themselves take, so these lines
+		// and the commands agree: an unused link or plugin item is not prune's.
 		if MuteEligible(row) {
 			muteNames = append(muteNames, row.Name)
 			muteTokens += MuteSaving(row)
 		}
+		if row.Verdict == VerdictReap && row.Removable {
+			pruneCount++
+			pruneTokens += row.Tokens
+		}
 	}
 
-	if r.DeadCount > 0 || len(muteNames) > 0 {
+	if pruneCount > 0 || len(muteNames) > 0 {
 		fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule("DO", width-2)))
 		type action struct{ cmd, gain string }
 		var acts []action
-		if r.DeadCount > 0 {
+		if pruneCount > 0 {
 			acts = append(acts, action{"reap prune", fmt.Sprintf("%d %s · ~%s tok/session reclaimed",
-				r.DeadCount, Plural(r.DeadCount, "item"), HumanNum(r.DeadTokensPerSession))})
+				pruneCount, Plural(pruneCount, "item"), HumanNum(pruneTokens))})
 		}
 		if len(muteNames) > 0 {
 			acts = append(acts, action{"reap mute", fmt.Sprintf("%d %s · ~%s tok · %s",

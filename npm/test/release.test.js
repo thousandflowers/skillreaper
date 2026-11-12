@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  binaryHome,
   checksumForAsset,
   checksumsDownloadUrl,
   isSourceCheckout,
@@ -86,4 +87,21 @@ test("checksum verification rejects mismatched archives", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("the binary lives next to the package when it can, else in the user's cache", () => {
+  const base = { packageDir: "/pkg/bin", version: "0.9.0", home: "/home/me", env: {}, platformName: "linux" };
+  assert.equal(binaryHome({ ...base, writable: () => true }), "/pkg/bin");
+  assert.equal(binaryHome({ ...base, writable: () => false }), join("/home/me", ".cache", "skillreaper", "0.9.0"));
+  assert.equal(
+    binaryHome({ ...base, writable: () => false, env: { XDG_CACHE_HOME: "/xdg" } }),
+    join("/xdg", "skillreaper", "0.9.0"),
+  );
+  assert.equal(
+    binaryHome({ ...base, platformName: "win32", writable: () => false, env: { LOCALAPPDATA: "C:\\Local" } }),
+    join("C:\\Local", "skillreaper", "0.9.0"),
+  );
+  assert.equal(binaryHome({ ...base, platformName: "win32", writable: () => false }), join("/home/me", ".cache", "skillreaper", "0.9.0"));
+  // a source checkout fetches "latest": a cache keyed on it would never move on
+  assert.equal(binaryHome({ ...base, version: "0.0.0", writable: () => false }), "/pkg/bin");
 });

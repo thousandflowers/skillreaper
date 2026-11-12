@@ -145,7 +145,7 @@ func TestPickerWrittenSkills_m_keeps_the_old_skills_then_mutes_them_again(t *tes
 	if !strings.Contains(muteText(built[0]), "m to mute old again") {
 		t.Errorf("mute text %q", muteText(built[0]))
 	}
-	if got := a.apply(built, true); len(got) != 1 { // the write, no `reap mute` line
+	if got, _ := a.apply(built, true); len(got) != 1 { // the write, no `reap mute` line
 		t.Errorf("dry run: %q", got)
 	}
 	built, _, _ = onKey(built, 0, 'm')
@@ -258,7 +258,7 @@ func TestCreateWritten_dry_run_writes_nothing(t *testing.T) {
 	a := fakeApp(t)
 	s := writtenSwap("old")
 	s.OK = true
-	log := a.apply([]swap{s}, true)
+	log, _ := a.apply([]swap{s}, true)
 	if exists(filepath.Join(home, ".claude")) {
 		t.Error("a dry run wrote under ~/.claude")
 	}

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { arch, platform } from "node:os";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 
 const REPO_RELEASES = "https://github.com/thousandflowers/skillreaper/releases";
@@ -130,4 +130,14 @@ export async function downloadVerifiedReleaseAsset({ version, assetName, destina
 
   await pipeline(assetResp.body, createWriteStream(destination));
   await verifySha256File(destination, expectedHash);
+}
+
+// binaryHome is the folder the binary is kept in: next to the package, or, when
+// that is not writable (a global install owned by root), the user's own cache.
+// A source checkout fetches "latest", and a cache keyed on that would never
+// move on, so it stays next to the package.
+export function binaryHome({ packageDir, version, home, env, platformName, writable }) {
+  if (writable(packageDir) || isSourceCheckout(version)) return packageDir;
+  const base = env.XDG_CACHE_HOME || (platformName === "win32" && env.LOCALAPPDATA) || join(home, ".cache");
+  return join(base, "skillreaper", version);
 }

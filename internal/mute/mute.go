@@ -546,7 +546,8 @@ func splitDescription(b []byte) (rest, removed []byte, found bool) {
 // which is another key's child: only what older versions wrote needs that.
 func splitKey(b []byte, anyIndent bool) (rest, removed []byte, found bool) {
 	lines := bytes.SplitAfter(b, []byte("\n"))
-	if string(bytes.TrimSpace(lines[0])) != "---" {
+	// a byte-order mark before the first line is the editor's, not the YAML's: it stays
+	if string(bytes.TrimSpace(bytes.TrimPrefix(lines[0], []byte("\xef\xbb\xbf")))) != "---" {
 		return b, nil, false
 	}
 	var out, taken bytes.Buffer

@@ -180,7 +180,7 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			Description:     desc,
 			DescChars:       descChars,
 			BodyChars:       bodyChars,
-			InstalledAt:     installedAt,
+			InstalledAt:     datedOr(installedAt, readPath),
 			Removable:       removable && viaLink == "",
 			ToolSurface:     toolSurface(b, "allowed-tools"),
 			LinkTarget:      linkTarget,

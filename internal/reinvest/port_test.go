@@ -116,7 +116,7 @@ var redactGolden = [][2]string{
 	{"ghp_a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438", "ghp_a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438a\u0438"},
 	{"xoxb-\u0663\u0663\u0663\u0663\u0663\u0663\u0663\u0663\u0663\u0663", "[secret removed]"},
 	{"keep sk-ant-b2b2b2b2b2b2b2b2b2b2 and ghp_c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 apart", "keep [secret removed] and [secret removed] apart"},
-	{"-----begin private key-----sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "[secret removed][secret removed]"},
+	{"-----begin private key-----sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "[secret removed]"}, // a key with no end line takes the rest with it
 }
 
 // sourceRE, slugRE, mcpNameRE, packageIDRE on the same inputs.

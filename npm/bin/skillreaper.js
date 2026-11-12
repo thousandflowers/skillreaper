@@ -1,16 +1,30 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
-import { constants as osConstants } from 'node:os';
+import { accessSync, constants as fsConstants, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { homedir, constants as osConstants } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { downloadVerifiedReleaseAsset, isSourceCheckout, platformTarget } from '../lib/release.js';
+import { binaryHome, downloadVerifiedReleaseAsset, isSourceCheckout, platformTarget } from '../lib/release.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(resolve(__dirname, '..', 'package.json'), 'utf-8'));
 const versionLabel = isSourceCheckout(version) ? 'latest' : version;
 const { os, archName, binaryName, tarball } = platformTarget();
-const bin = resolve(__dirname, binaryName);
+const writable = (dir) => {
+  try {
+    accessSync(dir, fsConstants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const packaged = resolve(__dirname, binaryName);
+// A global install owned by root leaves bin/ read-only: the binary then goes to
+// the user's cache, where every later run finds it.
+const home = existsSync(packaged)
+  ? __dirname
+  : binaryHome({ packageDir: __dirname, version, home: homedir(), env: process.env, platformName: process.platform, writable });
+const bin = resolve(home, binaryName);
 
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: 'inherit' });
@@ -21,12 +35,13 @@ function run(command, args) {
 }
 
 async function download() {
-  const tmp = resolve(__dirname, tarball);
+  mkdirSync(home, { recursive: true });
+  const tmp = resolve(home, tarball);
   console.error(`downloading skillreaper ${versionLabel} for ${os}/${archName}...`);
 
   try {
     await downloadVerifiedReleaseAsset({ version, assetName: tarball, destination: tmp });
-    run('tar', ['-xzf', tmp, '-C', __dirname, binaryName]);
+    run('tar', ['-xzf', tmp, '-C', home, binaryName]);
     if (os !== 'windows') run('chmod', ['+x', bin]);
     unlinkSync(tmp);
     console.error(`installed skillreaper ${versionLabel} at ${bin}`);

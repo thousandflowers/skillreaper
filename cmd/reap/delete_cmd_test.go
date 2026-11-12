@@ -27,6 +27,7 @@ func deleteHome(t *testing.T) string {
 		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
+		backdated(t, p)
 	}
 	md := func(name string) string { return "---\nname: " + name + "\ndescription: some words here\n---\nbody\n" }
 	for _, n := range []string{"mine", "kept-one", "copied", "dup"} {

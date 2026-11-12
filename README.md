@@ -269,9 +269,9 @@ skillreaper measures both, from evidence - no guessing.
 **100 % local**, with one exception you start by hand. Zero telemetry, zero
 uploads. Reads config files and session transcripts on disk, and your data never
 leaves your machine, except through `reap reinvest`: it is experimental, says so
-on its first line, and sends excerpts of your sessions to Claude through
-`claude -p`, on your own Claude Code account, with keys it recognises removed
-first.
+on its first line, and sends Claude, through `claude -p` on your own Claude Code
+account, excerpts of your sessions (with the keys it recognises removed first)
+and the names and descriptions of your installed skills.
 
 <br>
 

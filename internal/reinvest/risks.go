@@ -19,9 +19,22 @@ const (
 )
 
 // secretPatterns are credentials as they look when pasted.
+// A private key goes with its body, up to its end line or, cut off, to the end.
 var secretPatterns = []string{
-	`sk-ant-[\w-]{20,}`, `\bsk-[a-z0-9]{32,}`, `\bgh[pousr]_[a-z0-9]{30,}`, `\bgithub_pat_\w{20,}`,
-	`\bakia[a-z0-9]{16}\b`, `\bxox[abprs]-[\w-]{10,}`, `-----begin [a-z ]*private key-----`,
+	`sk-ant-[\w-]{20,}`,
+	`\bsk-[a-z0-9_-]{32,}`,
+	`\b[sr]k_(?:live|test)_[a-z0-9]{20,}`,
+	`\bgh[pousr]_[a-z0-9]{30,}`,
+	`\bgithub_pat_\w{20,}`,
+	`\bglpat-[\w-]{20,}`,
+	`\bnpm_[a-z0-9]{30,}`,
+	`\baiza[\w-]{30,}`,
+	`\bhf_[a-z0-9]{30,}`,
+	`\bakia[a-z0-9]{16}\b`,
+	`\bxox[abprs]-[\w-]{10,}`,
+	`\bbearer\s+[\w.~+/=-]{20,}`,
+	`\beyj[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}`,
+	`-----begin [a-z ]*private key-----(?:[\s\S]*?-----end [a-z ]*private key-----|[\s\S]*)`,
 }
 
 type riskRule struct {
@@ -105,14 +118,26 @@ var (
 	secretPattern   = mustPattern(strings.Join(secretPatterns, "|"), true)
 	// Control characters a pager or terminal acts on (escape sequences, the clipboard one, backspace): never in a real doc.
 	controlChars = regexp.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x{9f}]`)
-	continuedRE  = regexp.MustCompile(`\\\r?\n[ \t]*`)
-	camelCaseRE  = regexp.MustCompile(`([a-z0-9])([A-Z])`)
+	// What a reader cannot see and the rules would not read: a carriage return
+	// that does not end a line (it redraws the line over itself), the tag block
+	// (text spelt in characters no terminal draws), and the direction overrides.
+	hiddenChars = regexp.MustCompile(`\r[^\n]|\r\z|[\x{E0000}-\x{E007F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{200E}\x{200F}]`)
+	continuedRE = regexp.MustCompile(`\\\r?\n[ \t]*`)
+	camelCaseRE = regexp.MustCompile(`([a-z0-9])([A-Z])`)
 )
 
 const secretRemoved = "[secret removed]"
 
 // printable is third-party text made safe to store and print: no control characters.
-func printable(text string) string { return controlChars.ReplaceAllString(text, "") }
+func printable(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.Map(func(r rune) rune {
+		if r == '\r' || isFormatChar(r) { // a lone CR redraws the line; Cf draws nothing
+			return -1
+		}
+		return r
+	}, controlChars.ReplaceAllString(text, ""))
+}
 
 func oneLine(text string) string { return clean(printable(text)) }
 
@@ -159,7 +184,7 @@ func risks(doc string, mcp bool) []string {
 			}
 		}
 	}
-	if controlChars.MatchString(doc) {
+	if controlChars.MatchString(doc) || hiddenChars.MatchString(doc) {
 		found[whyControl] = true
 	}
 	if _, has := frontmatter(doc)["hooks"]; has {

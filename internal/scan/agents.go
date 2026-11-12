@@ -65,10 +65,23 @@ func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			Description:     desc,
 			DescChars:       len(key) + len(desc),
 			BodyChars:       bodyChars,
-			InstalledAt:     installedAt,
+			InstalledAt:     datedOr(installedAt, path),
 			Removable:       removable,
 			ToolSurface:     toolSurface(b, "tools", "allowed-tools"),
 		})
 	}
 	return items, warns
+}
+
+// datedOr is the install time a plugin records, or for an item of your own,
+// which has none, its file's last change. An edit counts as new: that errs
+// toward REVIEW(grace), never toward REAP.
+func datedOr(installedAt time.Time, path string) time.Time {
+	if !installedAt.IsZero() {
+		return installedAt
+	}
+	if info, err := os.Stat(path); err == nil {
+		return info.ModTime()
+	}
+	return time.Time{}
 }

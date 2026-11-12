@@ -280,10 +280,18 @@ func (a *app) runInEmptyDir(cmd []string) error {
 	if said == "" {
 		said = pyStrip(res.stdout)
 	}
-	if said = lastRunes(said, outputTail); said != "" {
+	if said = lastRunes(printable(said), outputTail); said != "" { // a remote's words, not its escape sequences
 		return errors.New(said)
 	}
 	return fmt.Errorf("exit %d", res.code)
+}
+
+// takeOut uninstalls what a step just installed and says how that went.
+func (a *app) takeOut(c candidate) string {
+	if a.runStep(uninstallCommand(c)) != nil {
+		return "still installed, remove it by hand"
+	}
+	return "removed again"
 }
 
 // rollBack undoes a swap whose mute failed: unmutes what it muted and takes
@@ -339,17 +347,13 @@ func (a *app) install(s swap) (lines []string, stop bool) {
 	if err := a.runStep(command); err != nil {
 		return fail(err.Error())
 	}
-	if !a.isInstalled(c) {
-		return fail("installed, but not for Claude Code")
+	if !a.isInstalled(c) { // on disk, but not where Claude Code loads it, and never compared
+		return fail("installed, but not for Claude Code · " + a.takeOut(c))
 	}
 	if c.Kind == kindSkill {
 		if changed := a.unchecked(c); len(changed) > 0 {
-			state := "removed again"
-			if a.runStep(uninstallCommand(c)) != nil {
-				state = "still installed, remove it by hand"
-			}
 			shown := strings.Join(changed[:min(changedShown, len(changed))], ", ")
-			return []string{"  ✗  " + c.Name + ": not what was checked (" + shown + ") · " + state + " · nothing muted"}, true
+			return []string{"  ✗  " + c.Name + ": not what was checked (" + shown + ") · " + a.takeOut(c) + " · nothing muted"}, true
 		}
 	}
 	lines = []string{"  ✓  installed " + c.Name}
@@ -366,10 +370,16 @@ func (a *app) install(s swap) (lines []string, stop bool) {
 // this swap muted and uninstalls (a server installed by an earlier run stays:
 // only this run's mutes are undone).
 func (a *app) applyOne(s swap) []string {
+	log, _ := a.carryOut(s)
+	return log
+}
+
+// carryOut is applyOne that also says whether the swap is now in place.
+func (a *app) carryOut(s swap) (log []string, applied bool) {
 	c := s.cand()
 	log, stop := a.install(s)
 	if stop {
-		return log
+		return log, false
 	}
 	var muted []skill
 	for _, x := range s.Mute {
@@ -384,7 +394,7 @@ func (a *app) applyOne(s swap) []string {
 		if left := a.rollBack(c, muted); len(left) > 0 {
 			outcome = "  ↺  rolled back, but still changed: " + strings.Join(left, ", ")
 		}
-		return append(log, "  ✗  reap mute "+x.Name+": "+err.Error(), outcome)
+		return append(log, "  ✗  reap mute "+x.Name+": "+err.Error(), outcome), false
 	}
 	if c.Installed {
 		if err := a.forgetServer(c); err != nil {
@@ -394,20 +404,24 @@ func (a *app) applyOne(s swap) []string {
 	for _, x := range muted {
 		log = append(log, "  ✓  muted "+x.Name+" (reap unmute "+x.target()+" undoes)")
 	}
-	return log
+	return log, true
 }
 
 // apply carries out the chosen swaps, or with dryRun says what it would run.
-func (a *app) apply(chosen []swap, dryRun bool) []string {
-	var log []string
+// The swaps returned are the ones now in place.
+func (a *app) apply(chosen []swap, dryRun bool) (log []string, applied []swap) {
 	for _, s := range chosen {
-		if !dryRun {
-			log = append(log, a.applyOne(s)...)
+		if dryRun {
+			log = append(log, dryRunLines(s)...)
 			continue
 		}
-		log = append(log, dryRunLines(s)...)
+		lines, ok := a.carryOut(s)
+		log = append(log, lines...)
+		if ok {
+			applied = append(applied, s)
+		}
 	}
-	return log
+	return log, applied
 }
 
 func dryRunLines(s swap) []string {

@@ -68,15 +68,18 @@ func TestOpenTakesTheTerminalAndCloseGivesItBack(t *testing.T) {
 	if tm.Light() || tm.Colors() != 256 || tm.ShiftReadable() || tm.ShiftHeld() || tm.SHeld() {
 		t.Errorf("light %v, colours %d, shift readable %v held %v, s %v", tm.Light(), tm.Colors(), tm.ShiftReadable(), tm.ShiftHeld(), tm.SHeld())
 	}
+	mark := len(p.output())
 	tm.Close()
 	if got := p.termios(); got != before {
 		t.Errorf("Close left the terminal changed: lflag %#x, was %#x", got.Lflag, before.Lflag)
 	}
-	out := p.output()
-	if !strings.HasSuffix(out, modesOff+screenOff) {
+	if !p.waitFor(mark, modesOff+screenOff) { // the window reads what Close wrote in its own time
+		out := p.output()
 		t.Errorf("Close did not give the screen and the mouse back: output ends %q", out[max(0, len(out)-40):])
 	}
+	out := p.output()
 	tm.Close()
+	time.Sleep(50 * time.Millisecond) // time for a second Close's bytes, were there any, to arrive
 	if again := p.output(); again != out {
 		t.Errorf("a second Close wrote %q", again[len(out):])
 	}

@@ -28,6 +28,7 @@ func anyRowHome(t *testing.T) string {
 		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
+		backdated(t, p)
 	}
 	base := ".claude/plugins/cache/m/p/1/"
 	put(base+"agents/pa.md", "---\nname: pa\ndescription: plugin agent words\n---\nbody\n")

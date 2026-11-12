@@ -459,10 +459,8 @@ func TestTTYCov_the_person_picks_swaps_with_the_keys(t *testing.T) {
 	a.stdin, a.term = pt.slave, pt.slave
 	var previewed []string
 	a.runPager = func(argv []string, text string) error {
-		screen := pt.text()
-		if !strings.HasSuffix(screen, leaveScreen) {
-			t.Errorf("the pager ran on the picker's screen: %q", screen[max(0, len(screen)-40):])
-		}
+		// the window reads what the picker wrote in its own time
+		pt.waitFor(t, "the picker leaving its screen before the pager", func(s string) bool { return strings.HasSuffix(s, leaveScreen) })
 		var now syscall.Termios
 		if err := termios(pt.slave, ioctlGetTermios, &now); err != nil || now != before {
 			t.Errorf("the pager ran with the keyboard still in raw mode (%v)", err)

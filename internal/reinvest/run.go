@@ -138,7 +138,7 @@ func (a *app) run(opts options) error {
 
 // claudeNotice is printed before the first `claude -p` call: reinvest is the
 // one command that sends anything off the machine.
-const claudeNotice = "experimental · reinvest runs `claude -p` on your Claude Code account and sends it excerpts of your sessions"
+const claudeNotice = "experimental · reinvest runs `claude -p` on your Claude Code account and sends it excerpts of your sessions and your skills' names and descriptions"
 
 // pipeline reads, groups, finds candidates and verifies them.
 func (a *app) pipeline(opts options) (outcome, error) {
@@ -312,10 +312,11 @@ func (a *app) chooseAndApply(swaps []swap, dryRun bool) error {
 			return nil
 		}
 	}
-	fmt.Fprintln(a.term, strings.Join(a.apply(chosen, dryRun), "\n"))
+	log, applied := a.apply(chosen, dryRun)
+	fmt.Fprintln(a.term, strings.Join(log, "\n"))
 	if dryRun {
 		fmt.Fprintln(a.term, "  dry run · nothing installed or muted")
 		return nil
 	}
-	return a.dropProposals(chosen)
+	return a.dropProposals(applied) // a swap that failed is still on offer
 }

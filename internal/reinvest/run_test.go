@@ -121,12 +121,17 @@ func TestRun_whole_pipeline_writes_a_skill_and_proposes_the_swap(t *testing.T) {
 	if grouping.opts.think || grouping.opts.effort != effortMid {
 		t.Errorf("grouping was asked with %+v", grouping.opts)
 	}
-	if want := "[0] please cut the release for this tool now"; !strings.HasPrefix(grouping.body, want) {
-		t.Errorf("the grouping body starts %q", firstRunes(grouping.body, 80))
+	fence := fenceRE.FindStringSubmatch(grouping.body)
+	if fence == nil {
+		t.Fatalf("the grouping body has no data fence:\n%s", grouping.body)
 	}
-	if strings.Count(grouping.body, "\n") != 3 || strings.Contains(grouping.body, "automated") || strings.Contains(grouping.body, "subagent") ||
-		strings.Contains(grouping.body, "running reinvest") {
-		t.Errorf("sessions that are not the person's were sent:\n%s", grouping.body)
+	sent := fence[2] // what the person wrote, inside the fence
+	if want := "[0] please cut the release for this tool now"; !strings.HasPrefix(sent, want) {
+		t.Errorf("the grouping data starts %q", firstRunes(sent, 80))
+	}
+	if strings.Count(sent, "\n") != 3 || strings.Contains(sent, "automated") || strings.Contains(sent, "subagent") ||
+		strings.Contains(sent, "running reinvest") {
+		t.Errorf("sessions that are not the person's were sent:\n%s", sent)
 	}
 	report := readFile(t, a.reportPath())
 	for _, part := range []string{"- Software Releases: 4 sessions, ", "## Gaps\n\n- Software Releases: Cut a release",
@@ -140,7 +145,7 @@ func TestRun_whole_pipeline_writes_a_skill_and_proposes_the_swap(t *testing.T) {
 		t.Errorf("verified.json holds %s", dumpJSON(first))
 	}
 	proposals := jsObj(t, readFile(t, a.cachePath(swapsFile)))
-	if want := js(t, `[{"install": "ship-release", "mute": ["old-notes"]}]`); !jsonEqual(proposals.val("swaps"), want) {
+	if want := js(t, `[{"install": "ship-release", "mute": ["old-notes"], "pick": "new:ship-release@Software Releases (4 sessions)"}]`); !jsonEqual(proposals.val("swaps"), want) {
 		t.Errorf("swaps.json holds %s", dumpJSON(proposals.val("swaps")))
 	}
 	memory := js(t, readFile(t, filepath.Join(a.stateDir, memoryFile))).([]any)

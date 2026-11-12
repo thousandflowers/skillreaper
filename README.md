@@ -481,9 +481,9 @@ how much of what you load you actually use.
   mcp           12      1    8%  ▏▱▱▱▱▱▱▱▱▱           ?         ?
   agents        68      0    0%  ▱▱▱▱▱▱▱▱▱▱      ~1,305         0
   ───────────────────────────────────────────────────────────────
-  total        378      7    1%  ▏▱▱▱▱▱▱▱▱▱     ~22,998       278
+  total        378      7    1%  ▏▱▱▱▱▱▱▱▱▱   ~22,998+?     278+?
 
-  ~  MUTE — 2 heavy low-use skills, ~102 tok/session recoverable with reap mute
+  ~  MUTE — 2 heavy low-use skills, ~94 tok/session recoverable with reap mute
 ```
 <!-- readme-gap:end -->
 

@@ -106,7 +106,15 @@ really injected, with multi-line descriptions read in full.
   mark.
 - The report's `DO` line for `reap prune` counts what a bare `reap prune`
   takes, not every unused item.
-- `reap uninstall-hook` says when there was no hook to remove.
+- `reap uninstall-hook` says when there was no hook to remove, and
+  `reap install-hook` repairs a hook that names a reap binary which moved,
+  and says when there was nothing to change.
+- `reap mute` skips an item another prune moved meanwhile, as prune does,
+  instead of failing on it.
+- Model ids with a release date (`claude-haiku-4-5-20251001`) get their
+  model's price: they were left out of the blended `$/month`.
+- `--days` and `--grace-days` above 36500 are refused: past a century the date
+  arithmetic wrapped and the window came out wrong.
 - Installed with npm into a folder you cannot write (`sudo npm i -g`), the
   binary goes to `~/.cache/skillreaper/<version>/` instead of failing.
 
@@ -153,7 +161,12 @@ the same cache files and the same checks. What to know before running it:
 - A skill holding text a reader cannot see (Unicode tag characters, direction
   overrides, a carriage return that redraws a line) is refused, and the screen
   never carries those characters; nor a failing program's escape sequences.
-- A swap that failed stays on offer in `reap`'s report.
+- A swap that failed stays on offer in `reap`'s report; one applied after
+  being changed in the picker leaves it.
+- Session text and skill descriptions go to Claude inside a marker they
+  cannot guess, said to be data, in every call.
+- A skill written for a gap that drops out of a run stays cached, so it comes
+  back with the same text and verdicts.
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

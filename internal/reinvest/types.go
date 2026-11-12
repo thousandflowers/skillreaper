@@ -104,6 +104,7 @@ type swap struct {
 	Idx   int
 	OK    bool
 	Held  []skill // what `m` set aside, to mute again on the next `m`
+	Pick  string  // the candidate it was built for: what the picker changes, this does not
 }
 
 func (s swap) cand() candidate { return s.Cands[s.Idx] }

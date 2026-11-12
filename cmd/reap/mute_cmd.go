@@ -141,6 +141,8 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 				continue
 			}
 			out.skipped = append(out.skipped, problemOf(row, err.Error()))
+		case goneSinceScan(err):
+			out.skipped = append(out.skipped, problemOf(row, "already gone: moved since reap read it (another prune, perhaps)"))
 		default:
 			fmt.Fprintf(stderr, "error muting %s: %v\n", row.Name, err)
 			out.failed = append(out.failed, problemOf(row, err.Error()))

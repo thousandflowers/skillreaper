@@ -6,7 +6,10 @@
 // tokenizer dependency.
 package cost
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // ModelPricing maps known model IDs to input price per million tokens.
 // When a provider releases a new model, just add its pricing here
@@ -50,10 +53,17 @@ const DefaultModel = "claude-sonnet-4-6"
 
 // LookupPrice returns the per-MTok input price for a model ID.
 // The second result is false when the model is unknown.
+// An id with a release date ("claude-haiku-4-5-20251001") names a snapshot of
+// the undated model, at its price.
 func LookupPrice(modelID string) (float64, bool) {
-	p, ok := ModelPricing[modelID]
+	if p, ok := ModelPricing[modelID]; ok {
+		return p, true
+	}
+	p, ok := ModelPricing[datedSuffix.ReplaceAllString(modelID, "")]
 	return p, ok
 }
+
+var datedSuffix = regexp.MustCompile(`-\d{8}$`)
 
 // CharsPerToken is the documented estimation ratio (x10 to stay integer).
 const charsPerTokenX10 = 37

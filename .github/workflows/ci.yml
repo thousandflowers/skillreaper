@@ -71,3 +71,7 @@ jobs:
           go-version-file: go.mod
       - name: Captures match the binaries
         run: make renders-check
+      # The README's measured blocks are generated the same way, and went stale
+      # the same way before this step: regenerate them and fail on any change.
+      - name: README numbers match the binary
+        run: make readme-numbers && git diff --exit-code README.md

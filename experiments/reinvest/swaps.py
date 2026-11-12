@@ -83,7 +83,8 @@ def build(picks: list[dict], passing: list[dict], reap_pool: list[dict]) -> list
         out = sum(x["tokens"] for x in mute)
         cands = sorted(passing, key=lambda c: (c["gap"] != pick["gap"], -c["fit"], c["cost"] is None,
                                                abs((c["cost"] or 0) - out)))
-        idx = next((i for i, c in enumerate(cands) if c["name"] == pick["name"]), 0)
+        # a namesake from another source is not the pick
+        idx = next((i for i, c in enumerate(cands) if (c.get("id"), c.get("gap"), c["name"]) == (pick.get("id"), pick.get("gap"), pick["name"])), 0)
         swaps.append({"mute": mute, "out": out, "cands": cands, "idx": idx, "ok": False, "held": []})
     return swaps
 

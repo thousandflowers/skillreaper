@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
@@ -215,7 +216,7 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 		}
 		return ignoreGone(prune.DeleteItem(row.Item))
 	case menu.Mute:
-		if err := mute.Mute(a.dir, row.RootDir, row.Name, row.Path); err != nil && !errors.Is(err, mute.ErrAlreadyMuted) {
+		if err := mute.Mute(a.dir, row.RootDir, row.Name, row.Path); err != nil && !errors.Is(err, mute.ErrAlreadyMuted) && !goneSinceScan(err) {
 			return err
 		}
 		return nil
@@ -252,6 +253,10 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 }
 
 // ignoreGone: an item that vanished between the list and the y is not a failure.
+// goneSinceScan is an item that was there when the stack was read and is not
+// now: another run pruned it meanwhile. It is out of the way, which is no failure.
+func goneSinceScan(err error) bool { return errors.Is(err, fs.ErrNotExist) }
+
 func ignoreGone(err error) error {
 	if errors.Is(err, prune.ErrAlreadyGone) {
 		return nil

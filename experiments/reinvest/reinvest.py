@@ -266,6 +266,9 @@ def candidates_for(gap: dict, found: list[dict], no_mcp: bool, refused: list | N
     return [{**c, "gap": f"{gap['name']} ({gap['sessions']} sessions)", "task": gap["task"]} for c in out]
 
 
+WRITTEN_CACHE_CAP = 60  # keys change with a gap's sessions, so old ones would pile up
+
+
 def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict], refused: list | None = None) -> list[dict]:
     """One skill written per gap. Cached by the gap, its sessions and the prompt: rewritten only when one changes,
     so its verdicts stay cached too. A cached one the rules flag leaves the cache, so the next run writes it again."""
@@ -287,9 +290,19 @@ def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict], r
         for (k, _), out in zip(todo, ex.map(lambda kg: write(kg[1]), todo)):
             if out:  # an unusable answer is not cached: the next run tries again
                 cache[k] = list(out)
-    flagged = {k: sources.risks(cache[k][1]) for k in keys if k in cache and sources.risks(cache[k][1])}
-    refused.extend((f"new:{cache[k][0]}", cache[k][0], f"{llm.SECURITY}{', '.join(r)}") for k, r in flagged.items())
-    sources.write_private(cache_file, json.dumps({k: cache[k] for k in keys if k in cache and k not in flagged}, ensure_ascii=False))
+    # this run's first, then other gaps' (a gap that comes back keeps its text and verdicts), up to the cap
+    order = [k for k in keys if k in cache] + sorted(k for k in cache if k not in keys)
+    flagged, kept = {}, {}
+    for k in order:
+        if len(kept) >= WRITTEN_CACHE_CAP:
+            break
+        if r := sources.risks(cache[k][1]):
+            flagged[k] = r
+            continue
+        kept[k] = cache[k]
+    refused.extend((f"new:{cache[k][0]}", cache[k][0], f"{llm.SECURITY}{', '.join(r)}")
+                   for k, r in flagged.items() if k in keys)  # another gap's leaves without a word
+    sources.write_private(cache_file, json.dumps(kept, ensure_ascii=False))
     taken = {canon(s["name"]) for s in installed}  # a cached skill may share a name with one installed since
     out = []
     for k, g in zip(keys, gaps):

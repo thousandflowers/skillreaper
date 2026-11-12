@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -103,7 +104,7 @@ func invokedName(arg0 string) string {
 // the tool's other public name counts: a binary built under a scratch name (the
 // render captures, go run) is no name to send anyone to.
 func hintRewriter(invoked string, args []string) func([]byte) []byte {
-	if invoked != "skillreaper" || slices.Contains(args, "--json") || slices.Contains(args, "-json") {
+	if invoked != "skillreaper" || slices.ContainsFunc(args, asksJSON) {
 		return nil
 	}
 	names := []string{`\[`}
@@ -119,3 +120,17 @@ func hintRewriter(invoked string, args []string) func([]byte) []byte {
 
 // File lets terminal checks see through the tracker.
 func (t *stdoutTracker) File() *os.File { return t.f }
+
+// asksJSON reads one argument as the flag package does: --json, -json, or
+// either with =true (or 1, t, ...).
+func asksJSON(arg string) bool {
+	name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+	if name != "json" || !strings.HasPrefix(arg, "-") {
+		return false
+	}
+	if !hasValue {
+		return true
+	}
+	on, err := strconv.ParseBool(value)
+	return err == nil && on
+}

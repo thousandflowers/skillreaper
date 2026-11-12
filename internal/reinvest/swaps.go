@@ -83,7 +83,25 @@ func skillNames(skills []skill) []any {
 }
 
 func proposal(s swap) *obj {
-	return objOf("install", s.cand().Name, "mute", skillNames(s.Mute))
+	p := objOf("install", s.cand().Name, "mute", skillNames(s.Mute))
+	if s.Pick != "" {
+		p = p.with("pick", s.Pick)
+	}
+	return p
+}
+
+// pickKey names a candidate with the gap it fills: a namesake is another pick.
+func pickKey(c candidate) string { return c.ID + "@" + c.Gap }
+
+// sameProposal says whether a saved proposal is this swap, as built: changed in
+// the picker, it is still the one proposed.
+func sameProposal(saved any, s swap) bool {
+	if p, ok := saved.(*obj); ok && s.Pick != "" {
+		if pick, has := p.str("pick"); has {
+			return pick == s.Pick
+		}
+	}
+	return jsonEqual(saved, proposal(s))
 }
 
 // saveProposals leaves the proposals where reap's report looks for them.
@@ -106,7 +124,7 @@ func (a *app) dropProposals(applied []swap) error {
 	for _, x := range data.list("swaps") {
 		done := false
 		for _, s := range applied {
-			done = done || jsonEqual(x, proposal(s))
+			done = done || sameProposal(x, s)
 		}
 		if !done {
 			left = append(left, x)
@@ -134,12 +152,12 @@ func build(picks, passing []candidate, reapPool []skill) []swap {
 		sort.SliceStable(cands, func(i, j int) bool { return closer(cands[i], cands[j], pick.Gap, out) })
 		idx := 0
 		for i, c := range cands {
-			if c.Name == pick.Name {
+			if c.ID == pick.ID && c.Gap == pick.Gap && c.Name == pick.Name { // a namesake from another source is not the pick
 				idx = i
 				break
 			}
 		}
-		swaps = append(swaps, swap{Mute: mute, Out: out, Cands: cands, Idx: idx})
+		swaps = append(swaps, swap{Mute: mute, Out: out, Cands: cands, Idx: idx, Pick: pickKey(pick)})
 	}
 	return swaps
 }

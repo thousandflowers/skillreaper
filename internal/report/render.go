@@ -589,8 +589,12 @@ func RenderMarkdown(w io.Writer, r *Report) {
 	fmt.Fprintf(w, "**%s · ~%d dead tokens/session · ~$%.2f/month**\n",
 		NewHeadline(r).Line(), r.DeadTokensPerSession, r.MoneyPerMonth)
 	if r.DeadUnknownWeight > 0 {
-		fmt.Fprintf(w, "\nA floor, not a total: %d unused items (MCP servers, hooks) carry weight that was never measured.\n",
-			r.DeadUnknownWeight)
+		carry := "carry"
+		if r.DeadUnknownWeight == 1 {
+			carry = "carries"
+		}
+		fmt.Fprintf(w, "\nA floor, not a total: %d unused %s (MCP servers, hooks) %s weight that was never measured.\n",
+			r.DeadUnknownWeight, Plural(r.DeadUnknownWeight, "item"), carry)
 	}
 
 	for _, sec := range sectionTitles {

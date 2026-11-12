@@ -134,10 +134,7 @@ func candLine(s swap, taken bool) string {
 // totals is the picker's last line: what is accepted and what it adds up to.
 func totals(swaps []swap) string {
 	chosen, freed, cost, unknown := 0, 0, 0, false
-	for _, s := range swaps {
-		if !s.OK {
-			continue
-		}
+	for _, s := range accepted(swaps) { // what will be applied, a candidate once
 		chosen++
 		freed += s.Out
 		if s.cand().Cost == nil {

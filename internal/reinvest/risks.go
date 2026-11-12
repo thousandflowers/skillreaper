@@ -30,7 +30,7 @@ var secretPatterns = []string{
 	`\bnpm_[a-z0-9]{30,}`,
 	`\baiza[\w-]{30,}`,
 	`\bhf_[a-z0-9]{30,}`,
-	`\bakia[a-z0-9]{16}\b`,
+	`\b(?:akia|asia)[a-z0-9]{16}(?:\b|_)`, // an underscore after it is a boundary too
 	`\bxox[abprs]-[\w-]{10,}`,
 	`\bbearer\s+[\w.~+/=-]{20,}`,
 	`\beyj[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}`,

@@ -406,20 +406,26 @@ type flagBound struct {
 	// why explains the bound when the number alone does not. Empty when
 	// "must be at least N" already says everything.
 	why string
+	// ceiling is a top that guards the arithmetic, not a range the flag means:
+	// a value under it is told the lower bound alone, a value over it the ceiling.
+	ceiling float64
 }
 
 // outOfRangeFlags returns one message per numeric flag whose value falls
 // outside its accepted range, in flag order. An empty result means every flag
 // is usable.
+// maxDays is a century: day counts above it make time.AddDate wrap.
+const maxDays = 36500
+
 func outOfRangeFlags(opts options) []string {
 	unbounded := math.Inf(1)
 	bounds := []flagBound{
 		// A window of zero or fewer days yields a complete, well-formed,
 		// entirely empty report — "0 items never fired" is indistinguishable
 		// from a genuinely clean stack, which is the worst way to be wrong.
-		{name: "--days", val: float64(opts.days), min: 1, max: unbounded, why: "a window of zero days produces an empty report that reads like a clean one"},
+		{name: "--days", val: float64(opts.days), min: 1, max: unbounded, ceiling: maxDays, why: "a window of zero days produces an empty report that reads like a clean one"},
 		{name: "--min-sessions", val: float64(opts.minSessions), min: 0, max: unbounded},
-		{name: "--grace-days", val: float64(opts.graceDays), min: 0, max: unbounded},
+		{name: "--grace-days", val: float64(opts.graceDays), min: 0, max: unbounded, ceiling: maxDays},
 		{name: "--min-tokens", val: float64(opts.minTokens), min: 0, max: unbounded},
 		{name: "--mute-min-tokens", val: float64(opts.muteMinTokens), min: 0, max: unbounded},
 		{name: "--route-min-skills", val: float64(opts.routeMinSkills), min: 0, max: unbounded},
@@ -434,6 +440,11 @@ func outOfRangeFlags(opts options) []string {
 
 	var msgs []string
 	for _, b := range bounds {
+		if b.ceiling > 0 && b.val > b.ceiling {
+			msgs = append(msgs, fmt.Sprintf("%s must be at most %s, got %s — past a century the date arithmetic wraps",
+				b.name, trimFloat(b.ceiling), trimFloat(b.val)))
+			continue
+		}
 		if b.val >= b.min && b.val <= b.max {
 			continue
 		}
@@ -455,6 +466,9 @@ func outOfRangeFlags(opts options) []string {
 // trimFloat prints a bound without a trailing ".0", so an integer flag reads
 // as "1" rather than "1.0" while a fractional one keeps its decimals.
 func trimFloat(f float64) string {
+	if f == math.Trunc(f) && math.Abs(f) < 1e21 { // a huge integer reads as digits, not 9.2e+18
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
 	return strconv.FormatFloat(f, 'g', -1, 64)
 }
 
@@ -1407,16 +1421,24 @@ func cmdInstallHook(opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	out, err := hook.Install(settings, hook.Command(exe), opts.dryRun)
+	out, change, err := hook.Installed(settings, hook.Command(exe), opts.dryRun)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
+	}
+	if change == hook.Unchanged {
+		fmt.Fprintf(stdout, "the SessionStart nudge hook in %s already runs this reap: nothing changed\n", settings)
+		return 0
 	}
 	if opts.dryRun {
 		fmt.Fprintf(stdout, "dry-run — would write %s:\n%s\n", settings, out)
 		return 0
 	}
-	fmt.Fprintf(stdout, "installed SessionStart nudge hook in %s\n", settings)
+	if change == hook.Updated {
+		fmt.Fprintf(stdout, "pointed the SessionStart nudge hook in %s at this reap (it named another one)\n", settings)
+	} else {
+		fmt.Fprintf(stdout, "installed SessionStart nudge hook in %s\n", settings)
+	}
 	fmt.Fprintf(stdout, "Undo: reap uninstall-hook\n")
 	return 0
 }

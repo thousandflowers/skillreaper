@@ -19,6 +19,8 @@ var pastedKeys = []struct{ kind, text, secret string }{
 	{"Stripe", "sk_live_" + strings.Repeat("S7r", 9), "S7rS7r"},
 	{"Hugging Face", "hf_" + strings.Repeat("Hf4", 12), "Hf4Hf4"},
 	{"AWS", "AKIA" + strings.Repeat("A1B2", 4), "A1B2A1B2"},
+	{"AWS temporary", "ASIA" + strings.Repeat("C3D4", 4), "C3D4C3D4"},
+	{"AWS before an underscore", "AKIA" + strings.Repeat("E5F6", 4) + "_x", "E5F6E5F6"},
 	{"Slack", "xoxb-" + strings.Repeat("12-", 6), "12-12-"},
 	{"bearer token", "Authorization: Bearer " + strings.Repeat("tok.En", 5), "tok.Entok"},
 	{"JWT", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U", "dozjgNryP4J3"},

@@ -80,39 +80,69 @@ var sessionStartPath = []string{"hooks", "SessionStart"}
 // other fields, not the file's mode. It is idempotent. With dryRun the resulting
 // JSON is returned without writing.
 func Install(settingsPath, command string, dryRun bool) ([]byte, error) {
+	out, _, err := Installed(settingsPath, command, dryRun)
+	return out, err
+}
+
+// Change is what an install did to settings.json.
+type Change int
+
+const (
+	Unchanged Change = iota // the hook was there, with this command
+	Added                   // there was no hook
+	Updated                 // the hook named another program: the binary moved
+)
+
+// Installed is Install that also says what it changed. A hook of ours with
+// another command is pointed at this one: the old program may be gone.
+func Installed(settingsPath, command string, dryRun bool) ([]byte, Change, error) {
 	doc, perm, err := readSettings(settingsPath)
 	if err != nil {
-		return nil, err
+		return nil, Unchanged, err
 	}
 	groups, err := sessionStartGroups(doc)
 	if err != nil {
-		return nil, err
+		return nil, Unchanged, err
 	}
-	for _, g := range groups {
-		for _, h := range g.Hooks {
-			if isOurHook(h.Command) {
-				return doc, nil // already installed
+	out, change := doc, Added
+	for i, g := range groups {
+		for j, h := range g.Hooks {
+			if !isOurHook(h.Command) {
+				continue
 			}
+			if h.Command == command {
+				return doc, Unchanged, nil
+			}
+			value, err := marshalNoEscape(command)
+			if err != nil {
+				return nil, Unchanged, err
+			}
+			path := append(slices.Clone(sessionStartPath), strconv.Itoa(i), "hooks", strconv.Itoa(j), "command")
+			if out, err = jsonedit.Set(doc, value, path...); err != nil {
+				return nil, Unchanged, err
+			}
+			change = Updated
 		}
 	}
-	entry, err := marshalNoEscape(group{Hooks: []cmdEntry{{Type: "command", Command: command}}})
-	if err != nil {
-		return nil, err
-	}
-	out, err := jsonedit.Append(doc, entry, sessionStartPath...)
-	if err != nil {
-		return nil, fmt.Errorf("unreadable settings %s: %w", settingsPath, err)
+	if change == Added {
+		entry, err := marshalNoEscape(group{Hooks: []cmdEntry{{Type: "command", Command: command}}})
+		if err != nil {
+			return nil, Unchanged, err
+		}
+		if out, err = jsonedit.Append(doc, entry, sessionStartPath...); err != nil {
+			return nil, Unchanged, fmt.Errorf("unreadable settings %s: %w", settingsPath, err)
+		}
 	}
 	if dryRun {
-		return out, nil
+		return out, change, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
-		return nil, err
+		return nil, Unchanged, err
 	}
 	if err := writeSettings(settingsPath, out, perm); err != nil {
-		return nil, err
+		return nil, Unchanged, err
 	}
-	return out, nil
+	return out, change, nil
 }
 
 // Uninstall removes only skillreaper's nudge entry from SessionStart, and the

@@ -2,6 +2,7 @@ package reinvest
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,9 +75,10 @@ func (a *app) writeSkill(gap kind, conversations [][]string, installed []skill) 
 		convs[i] = "Conversation " + strconv.Itoa(i+1) + ":\n" + strings.Join(lines, "\n")
 	}
 	fence := randomFence()
-	body := "KIND OF WORK: " + gap.Name + "\nTASK: " + gap.Task + "\n\nInstalled skills closest to this work:\n" +
+	// the installed skills are data too: a description can come from anyone's download
+	body := "KIND OF WORK: " + gap.Name + "\nTASK: " + gap.Task + "\n\n<data-" + fence + ">\nInstalled skills closest to this work:\n" +
 		skillLines(closestInstalled(gap.Task, installed, closestForWriting), defaultLineWidth) +
-		"\n\n<data-" + fence + ">\n" + strings.Join(convs, "\n\n") + "\n</data-" + fence + ">"
+		"\n\n" + strings.Join(convs, "\n\n") + "\n</data-" + fence + ">"
 	out, err := a.ask(writePrompt, body, askOptions{think: true, effort: effortHigh})
 	if err != nil {
 		return writtenSkill{}, false, err
@@ -157,22 +159,41 @@ func (a *app) writeMissing(gaps []kind, keys []string, cache map[string]writtenS
 
 // flagWritten runs the rules over the written skills of these keys. It gives
 // what to keep in the cache, which keys the rules flagged, and the refusals.
+//
+// Skills written for gaps not in this run stay too, so a gap that comes back
+// finds the same text and its verdicts: this run's first, then the others by
+// key, up to writtenCacheCap.
 func flagWritten(keys []string, cache map[string]writtenSkill) (kept *obj, flagged map[string]bool, refused []refusal) {
 	kept, flagged = newObj(), map[string]bool{}
-	for _, key := range keys {
+	others := make([]string, 0, len(cache))
+	for key := range cache {
+		if !slices.Contains(keys, key) {
+			others = append(others, key)
+		}
+	}
+	sort.Strings(others)
+	for _, key := range append(slices.Clone(keys), others...) {
+		if kept.len() >= writtenCacheCap {
+			break
+		}
 		w, cached := cache[key]
 		if !cached || flagged[key] {
 			continue
 		}
 		if found := risks(w.doc, false); len(found) > 0 {
 			flagged[key] = true
-			refused = append(refused, refusal{createdPrefix + w.slug, w.slug, securityPrefix + strings.Join(found, ", ")})
+			if slices.Contains(keys, key) { // another gap's leaves the cache without a word: this run is not about it
+				refused = append(refused, refusal{createdPrefix + w.slug, w.slug, securityPrefix + strings.Join(found, ", ")})
+			}
 			continue
 		}
 		kept.set(key, []any{w.slug, w.doc})
 	}
 	return kept, flagged, refused
 }
+
+// writtenCacheCap bounds written.json: keys change with a gap's sessions, so old ones would pile up.
+const writtenCacheCap = 60
 
 // createdFor gives one skill written per gap. Cached by the gap, its sessions
 // and the prompt: rewritten only when one changes, so its verdicts stay

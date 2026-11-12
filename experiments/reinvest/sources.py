@@ -64,7 +64,7 @@ FILE_MARK = "===== FILE {} ====="  # how each bundled file appears after SKILL.m
 SKILL_FILE = "SKILL.md"
 FETCH = r"(?:curl|wget|iwr|invoke-webrequest)\b"
 SH = r"(?:ba|z|k|da|fi)?sh"
-SECRETS = [r"sk-ant-[\w-]{20,}", r"\bsk-[a-z0-9_-]{32,}", r"\b[sr]k_(?:live|test)_[a-z0-9]{20,}", r"\bgh[pousr]_[a-z0-9]{30,}", r"\bgithub_pat_\w{20,}", r"\bglpat-[\w-]{20,}", r"\bnpm_[a-z0-9]{30,}", r"\baiza[\w-]{30,}", r"\bhf_[a-z0-9]{30,}", r"\bakia[a-z0-9]{16}\b", r"\bxox[abprs]-[\w-]{10,}", r"\bbearer\s+[\w.~+/=-]{20,}", r"\beyj[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}", r"-----begin [a-z ]*private key-----(?:[\s\S]*?-----end [a-z ]*private key-----|[\s\S]*)"]
+SECRETS = [r"sk-ant-[\w-]{20,}", r"\bsk-[a-z0-9_-]{32,}", r"\b[sr]k_(?:live|test)_[a-z0-9]{20,}", r"\bgh[pousr]_[a-z0-9]{30,}", r"\bgithub_pat_\w{20,}", r"\bglpat-[\w-]{20,}", r"\bnpm_[a-z0-9]{30,}", r"\baiza[\w-]{30,}", r"\bhf_[a-z0-9]{30,}", r"\b(?:akia|asia)[a-z0-9]{16}(?:\b|(?=_))", r"\bxox[abprs]-[\w-]{10,}", r"\bbearer\s+[\w.~+/=-]{20,}", r"\beyj[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}", r"-----begin [a-z ]*private key-----(?:[\s\S]*?-----end [a-z ]*private key-----|[\s\S]*)"]
 RISKY = [
     (rf"{FETCH}[^\n]{{0,200}}\|[^\n]{{0,80}}(?<![\w.-]){SH}\b", "downloads and runs code"),
     (rf"{FETCH}[^\n]{{0,200}}\|\s*(?:sudo\s+)?(?:python3?|perl|ruby|node)\s*(?:-\s*)?$", "downloads and runs code"),

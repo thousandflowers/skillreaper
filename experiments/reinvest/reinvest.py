@@ -97,7 +97,8 @@ def block(lines: list[str], style: str, chomp: str) -> str:
     if first is None:
         return ""
     indent = len(first) - len(first.lstrip(" \t"))
-    body = ["" if not l.strip() else l[indent:].rstrip("\r") if len(l) >= indent else l.strip() for l in lines]
+    # a less indented line keeps its text: only its own spaces go, as in reap
+    body = ["" if not l.strip() else l[indent:].rstrip("\r") if len(l) - len(l.lstrip(" \t")) >= indent else l.strip() for l in lines]
     trailing = 0
     while body and body[-1] == "":
         body.pop()

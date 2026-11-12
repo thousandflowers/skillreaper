@@ -3,6 +3,7 @@
 package report
 
 import (
+	"cmp"
 	"math"
 	"path/filepath"
 	"sort"
@@ -109,7 +110,18 @@ type Row struct {
 	// HistoricalLast is when the durable record last saw it fire, for an item
 	// with no use in this window but one before it.
 	HistoricalLast time.Time `json:",omitzero"`
+	// RawName and RawSource are Name and Source as they are on disk, set only
+	// where cleaning them for the screen changed them. A config file is edited
+	// by the real name: the cleaned one names nothing there.
+	RawName   string `json:",omitempty"`
+	RawSource string `json:",omitempty"`
 }
+
+// DiskName is the name as it is on disk, for anything that acts on the item.
+func (r Row) DiskName() string { return cmp.Or(r.RawName, r.Name) }
+
+// DiskSource is the source as it is on disk, for anything that acts on the item.
+func (r Row) DiskSource() string { return cmp.Or(r.RawSource, r.Source) }
 
 // MuteSaving is what muting a row takes off each session. A muted item stays
 // installed and its name stays loaded, so the name's tokens are not saved.
@@ -217,6 +229,12 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		}
 		ev := evidenceFor(it.Platform)
 		row := Row{Item: cleanItem(it), Tokens: cost.TokensFor(opts.Model, it.DescChars), MuteLost: opts.MuteLost[it.Path], PruneLost: opts.PruneLost[PruneLostKey(it.Platform, string(it.Category), it.Source, it.Name)], PrunedCopyID: prunedCopy(opts.PrunedCopies, it)}
+		if row.Name != it.Name {
+			row.RawName = it.Name
+		}
+		if row.Source != it.Source {
+			row.RawSource = it.Source
+		}
 		row.WeightUnknown = it.Category == scan.CatHook
 		if it.Category == scan.CatMCP {
 			chars, ok := lookupMCPWeight(ev.raw, it)

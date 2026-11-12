@@ -75,3 +75,23 @@ func TestOpen_fails_cleanly_at_every_step(t *testing.T) {
 		})
 	}
 }
+
+func TestSettings_reads_a_terminal_and_refuses_a_file(t *testing.T) {
+	master, slave, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(master)
+	defer slave.Close()
+	if tio, err := Settings(slave); err != nil || tio.Lflag&syscall.ICANON == 0 {
+		t.Errorf("a fresh terminal: %v, canonical %v", err, tio.Lflag&syscall.ICANON != 0)
+	}
+	f, err := os.CreateTemp(t.TempDir(), "plain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := Settings(f); err == nil {
+		t.Error("a plain file has terminal settings")
+	}
+}

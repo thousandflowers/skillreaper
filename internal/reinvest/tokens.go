@@ -120,7 +120,7 @@ func block(lines []string, style, chomp string) string {
 		switch {
 		case pyStrip(line) == "":
 			body = append(body, "")
-		case runeLen(line) >= indent:
+		case runeLen(line)-runeLen(strings.TrimLeft(line, indentChars)) >= indent: // as reap: its own spaces, never its text
 			body = append(body, strings.TrimRight(string([]rune(line)[indent:]), "\r"))
 		default:
 			body = append(body, pyStrip(line))

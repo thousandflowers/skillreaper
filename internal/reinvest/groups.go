@@ -52,6 +52,9 @@ func rememberedSession(v any) (session, bool) {
 	id, okID := r.str("id")
 	rawPrompts, okPrompts := r.val("prompts").([]any)
 	prompts := stringList(r.val("prompts"))
+	for i, p := range prompts { // a file from before prompts were redacted on reading
+		prompts[i] = redact(p)
+	}
 	if !okID || !okPrompts || len(prompts) != len(rawPrompts) {
 		return session{}, false
 	}

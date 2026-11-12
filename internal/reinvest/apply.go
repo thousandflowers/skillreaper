@@ -180,13 +180,11 @@ func filesUnder(root, rel string) []string {
 		if rel != "" {
 			child = rel + "/" + entry.Name()
 		}
-		if entry.IsDir() {
+		if entry.IsDir() { // a real folder: a link to one is an entry like any other
 			out = append(out, filesUnder(root, child)...)
 			continue
 		}
-		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(child))); err == nil && info.Mode().IsRegular() {
-			out = append(out, child)
-		}
+		out = append(out, child) // links and pipes too: uncheckedFiles refuses them
 	}
 	return out
 }
@@ -200,7 +198,12 @@ func uncheckedFiles(c candidate) []string {
 	sort.Slice(files, func(i, j int) bool { return lessByParts(files[i], files[j]) })
 	var out []string
 	for _, rel := range files {
-		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() {
+			out = append(out, rel) // a link can point anywhere once the check is over
+			continue
+		}
+		raw, err := os.ReadFile(path)
 		if err != nil || !utf8.Valid(raw) {
 			out = append(out, rel)
 			continue
@@ -285,11 +288,11 @@ func (a *app) runInEmptyDir(cmd []string) error {
 
 // rollBack undoes a swap whose mute failed: unmutes what it muted and takes
 // the new skill or server out again. It returns what could not be undone.
-func (a *app) rollBack(c candidate, muted []string) []string {
+func (a *app) rollBack(c candidate, muted []skill) []string {
 	var left []string
-	for _, name := range muted {
-		if a.runStep([]string{reapName, "unmute", name}) != nil {
-			left = append(left, name)
+	for _, x := range muted {
+		if a.runStep([]string{reapName, "unmute", x.target()}) != nil {
+			left = append(left, x.Name)
 		}
 	}
 	var err error
@@ -368,13 +371,13 @@ func (a *app) applyOne(s swap) []string {
 	if stop {
 		return log
 	}
-	var muted []string
+	var muted []skill
 	for _, x := range s.Mute {
 		// --yes: the swap was accepted in reinvest's own question, with this mute
 		// listed in it. reap would otherwise ask again on a terminal nobody sees.
-		err := a.runStep([]string{reapName, "--yes", "mute", x.Name})
+		err := a.runStep([]string{reapName, "--yes", "mute", x.target()})
 		if err == nil {
-			muted = append(muted, x.Name)
+			muted = append(muted, x)
 			continue
 		}
 		outcome := "  ↺  rolled back: nothing changed"
@@ -388,8 +391,8 @@ func (a *app) applyOne(s swap) []string {
 			log = append(log, "  ✗  "+c.Name+" not forgotten: "+err.Error())
 		}
 	}
-	for _, name := range muted {
-		log = append(log, "  ✓  muted "+name+" (reap unmute "+name+" undoes)")
+	for _, x := range muted {
+		log = append(log, "  ✓  muted "+x.Name+" (reap unmute "+x.target()+" undoes)")
 	}
 	return log
 }

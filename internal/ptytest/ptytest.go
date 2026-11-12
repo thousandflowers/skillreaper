@@ -21,3 +21,11 @@ var (
 	ptmxPath  = "/dev/ptmx"
 	openSlave = os.OpenFile
 )
+
+// Settings reads the terminal settings of f, so a test can tell whether a
+// program gave its terminal back as it found it.
+func Settings(f *os.File) (syscall.Termios, error) {
+	var tio syscall.Termios
+	err := ioctl(int(f.Fd()), ioctlGetTermios, unsafe.Pointer(&tio))
+	return tio, err
+}

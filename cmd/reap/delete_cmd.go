@@ -61,7 +61,7 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 	}
 	defer lock.Release()
 	if row.Category == scan.CatMCP {
-		err = prune.DeleteMCP(opts.claudeDir, row.Path, serverScope(row), row.Name)
+		err = prune.DeleteMCP(opts.claudeDir, row.Path, serverScope(row), row.DiskName())
 	} else {
 		err = prune.DeleteItem(row.Item)
 	}

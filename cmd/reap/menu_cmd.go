@@ -74,8 +74,9 @@ func cmdMenu(opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: cannot open the menu: %v\n", err)
 		return 1
 	}
+	defer screen.Close() // a panic in the menu must not leave the shell a raw, blank screen
 	applier := &menuApplier{dir: opts.claudeDir, hold: screen.Hold}
-	menu.New(screen, data, applier).Run()
+	runMenu(screen, data, applier)
 	screen.Close()
 	// Only now: a line printed over the menu would be lost with its screen.
 	for _, w := range applier.warnings {
@@ -83,6 +84,9 @@ func cmdMenu(opts options, stdout, stderr io.Writer) int {
 	}
 	return 0
 }
+
+// runMenu shows the menu until it is left. A variable only so a test can make it fail.
+var runMenu = func(s term.Screen, d menu.Data, a menu.Applier) { menu.New(s, d, a).Run() }
 
 // menuData is everything the menu shows: the same report `reap` prints, what is
 // in quarantine, and how this account is billed.
@@ -197,7 +201,7 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 		var e prune.Entry
 		var err error
 		if row.Category == scan.CatMCP {
-			e, err = prune.RemoveMCP(a.dir, row.Path, serverScope(row), row.Name)
+			e, err = prune.RemoveMCP(a.dir, row.Path, serverScope(row), row.DiskName())
 		} else {
 			e, err = prune.QuarantineChosen(a.dir, row.Item)
 		}
@@ -207,7 +211,7 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 		return ignoreGone(err)
 	case menu.Delete:
 		if row.Category == scan.CatMCP {
-			return ignoreGone(prune.DeleteMCP(a.dir, row.Path, serverScope(row), row.Name))
+			return ignoreGone(prune.DeleteMCP(a.dir, row.Path, serverScope(row), row.DiskName()))
 		}
 		return ignoreGone(prune.DeleteItem(row.Item))
 	case menu.Mute:
@@ -240,7 +244,7 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 	case menu.Disable:
 		// One command turns the whole plugin off, whichever of its rows comes first.
 		if _, done := disabled[row.Source]; !done {
-			disabled[row.Source] = disablePlugin(strings.TrimPrefix(row.Source, "plugin:"))
+			disabled[row.Source] = disablePlugin(strings.TrimPrefix(row.DiskSource(), "plugin:"))
 		}
 		return disabled[row.Source]
 	}

@@ -131,14 +131,20 @@ into a `reaped/` directory with a versioned manifest, `reap mute` keeps a backup
 of the description it strips, and `reap uninstall-hook` removes only
 skillreaper's own entry, leaving your other hooks alone. The one exception is
 the one you have to name: `reap delete <name>`, or `d` in the menu, removes an
-item for good, says so in red, and asks first. Every write is **atomic** (temp file +
-rename) and **confined** to your Claude directory, so an interrupted prune,
-mute, or hook edit leaves the original file intact, never a half-written mix.
+item for good, says so in red, and asks first. Every edit of an existing file is
+**atomic** (temp file + rename), so an interrupted prune, mute, or hook edit
+leaves the original file intact, never a half-written mix, and every write stays
+**inside your home folder**, in the files of the tools it reads (`~/.claude`,
+`~/.claude.json`, `~/.codex` and the like). Removing an MCP server edits
+`~/.claude.json` and keeps a copy of the whole file in `~/.claude/reaped/backups/`
+until you restore that server; if Claude Code changes the file while reap is
+editing it, reap writes nothing and asks you to run the command again.
 
 One command is not local, and it is not in the table: `reap reinvest`, which is
 experimental. It asks Claude, through `claude -p`, to read your sessions and
 write a skill for work none of yours covers, and with `--online` it searches
-skills.sh. Nothing else here calls a model or the network.
+skills.sh. Nothing else here calls a model or the network. (The menu's plugin
+switch runs `claude plugin disable`, Claude Code's own command for that.)
 
 <sub><sup>1</sup> The only files a read-only command writes are skillreaper's
 own: <code>~/.claude/reaped/nudge-state.json</code>, which the default report
@@ -260,8 +266,12 @@ skillreaper measures both, from evidence - no guessing.
 
 ### Privacy
 
-**100 % local.** Zero telemetry, zero network, zero uploads. Reads config
-files and session transcripts on disk - your data never leaves your machine.
+**100 % local**, with one exception you start by hand. Zero telemetry, zero
+uploads. Reads config files and session transcripts on disk, and your data never
+leaves your machine, except through `reap reinvest`: it is experimental, says so
+on its first line, and sends excerpts of your sessions to Claude through
+`claude -p`, on your own Claude Code account, with keys it recognises removed
+first.
 
 <br>
 
@@ -343,6 +353,7 @@ reap mute <name>              # strip description, keep skill available
 reap delete <name>            # remove one item for good (cannot be restored)
 reap unmute                   # list what is muted
 reap unmute <name>            # restore description from backup
+reap unmute <path>            # restore that one copy, not its namesakes elsewhere
 reap unmute --all             # restore all muted skills
 reap keep <name>              # protect an item from pruning
 reap restore                  # list what is pruned, with ids

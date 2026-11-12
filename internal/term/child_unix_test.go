@@ -43,6 +43,19 @@ var childScenarios = map[string]func(report *os.File) int{
 		fmt.Fprintln(report, "drawn")
 		return 0
 	},
+	// Holds signals and never releases them.
+	"hold-forever": func(report *os.File) int {
+		tm, err := Open()
+		if err != nil {
+			fmt.Fprintf(report, "open failed: %v\n", err)
+			return 4
+		}
+		_ = tm.Hold()
+		fmt.Fprintln(report, "holding")
+		time.Sleep(patience)
+		fmt.Fprintln(report, "never stopped")
+		return 0
+	},
 	// Holds signals, reads one key, and releases once a signal is held.
 	"hold": func(report *os.File) int {
 		tm, err := Open()
@@ -216,6 +229,37 @@ func TestAHeldSignalWaitsForRelease(t *testing.T) {
 	}
 	if p.termios() != before {
 		t.Error("the terminal was left raw")
+	}
+}
+
+func TestAHeldCtrlCStopsTheWorkButNotTheProgram(t *testing.T) {
+	p := newPTY(t, 24, 80)
+	c := startChild(t, p, "hold", nil, nil)
+	c.expect("holding")
+	c.signal(syscall.SIGINT)
+	p.typeIn("g")
+	c.expect("key g, held true")
+	c.expect("release returned") // the menu goes on, to show what was done
+	if code, _ := c.wait(); code != 0 {
+		t.Errorf("a released Ctrl-C ended the child with %d, want it to carry on", code)
+	}
+}
+
+func TestASecondSignalWhileHeldEndsTheProgramAtOnce(t *testing.T) {
+	for _, sig := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
+		p := newPTY(t, 24, 80)
+		before := p.termios()
+		c := startChild(t, p, "hold-forever", nil, nil)
+		c.expect("holding")
+		c.signal(sig)
+		time.Sleep(50 * time.Millisecond) // the first one is held
+		c.signal(sig)
+		if code, _ := c.wait(); code != 128+int(sig) {
+			t.Errorf("%v twice while held ended the child with %d, want %d", sig, code, 128+int(sig))
+		}
+		if p.termios() != before {
+			t.Errorf("%v twice left the terminal raw", sig)
+		}
 	}
 }
 

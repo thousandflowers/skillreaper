@@ -204,8 +204,10 @@ func (t *Terminal) watchSignals() {
 			default:
 				if t.holding.Load() {
 					held := sig
-					t.held.Store(&held)
-					continue
+					if t.held.CompareAndSwap(nil, &held) {
+						continue // the first one waits for the item in hand
+					}
+					// a second one means it: as before Hold, it ends the program now
 				}
 				t.exitOn(sig)
 			}
@@ -229,12 +231,15 @@ func (t *Terminal) exitOn(sig os.Signal) {
 }
 
 // Hold makes a signal that would end the program wait until release is called:
-// whoever is halfway through changing files finishes the item in hand first.
+// whoever is halfway through changing files finishes the item in hand first. A
+// second signal ends the program at once. On release a held Ctrl-C is spent,
+// as the work it stopped is the answer to it, and the menu stays to show what
+// was done; any other signal ends the program then.
 func (t *Terminal) Hold() (release func()) {
 	t.holding.Store(true)
 	return func() {
 		t.holding.Store(false)
-		if sig := t.held.Swap(nil); sig != nil {
+		if sig := t.held.Swap(nil); sig != nil && *sig != os.Interrupt {
 			t.exitOn(*sig)
 		}
 	}

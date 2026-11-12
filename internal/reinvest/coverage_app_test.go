@@ -505,7 +505,7 @@ func TestAppCov_what_a_roll_back_could_not_undo_is_listed(t *testing.T) {
 		return nil
 	})
 	c := candidate{Kind: kindSkill, Name: "release", Source: "acme/tools", Slug: "release"}
-	if left := a.rollBack(c, []string{"a", "b"}); !sameWords(left, []string{"a", "release (installed)"}) {
+	if left := a.rollBack(c, []skill{{Name: "a"}, {Name: "b"}}); !sameWords(left, []string{"a", "release (installed)"}) {
 		t.Errorf("left %v", left)
 	}
 	tempHome(t)

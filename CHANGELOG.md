@@ -48,6 +48,10 @@ shipped in the release; and, because Terminal.app sends Shift+arrows as plain
 arrows, a small `osascript` helper tells it whether Shift (and `s`) is down
 while the menu is open. Nothing is sent anywhere, and neither runs over ssh.
 
+A first Ctrl-C while the menu applies stops it after the item in hand and
+shows what was done; a second one ends it at once. A crash gives the terminal
+back as it was.
+
 ### reap delete
 
 `reap delete <name>` removes one item for good. It takes exactly one item, asks
@@ -85,6 +89,16 @@ really injected, with multi-line descriptions read in full.
   never does.
 - `reap restore` with no arguments lists what is pruned, with ids.
 - A kept item refuses a named prune or mute until `reap keep --remove`.
+- Removing, deleting or restoring an MCP server checks `~/.claude.json` again
+  just before writing it: if Claude Code changed it meanwhile, nothing is
+  written and the command says to run again, instead of losing that change.
+- On macOS and Linux the prune lock is the system's own (flock): a run that
+  dies drops it, and two runs finding a lock left by a dead one can no longer
+  both get in.
+- `reap unmute <path>` undoes that one copy and leaves a namesake muted in
+  another tool as it is.
+- A YAML description block whose line is indented less than the rest keeps
+  that line's text; its first letters, or half an accented one, were cut.
 
 ### Behaviour changes on the command line
 
@@ -109,14 +123,19 @@ the same cache files and the same checks. What to know before running it:
 
 - It asks Claude, through `claude -p`, to group your sessions, write the skill
   and read every candidate: about twenty calls and a minute on a first run.
-  It says so on its first line, before any call. Nothing else reap does calls
-  a model or the network.
+  It says so on its first line, before any call, and removes keys it
+  recognises from the text before anything is kept or sent. Nothing else reap
+  does calls a model or the network.
 - Every candidate is read in full by Claude, twice, and by a set of risk rules
   first; one refusal is enough, and a refused document stays refused. A swap is
   all or nothing, and an existing skill of the same name is never replaced.
 - `--online` searches skills.sh instead of writing. Its search and its checks
   were run against the live sites; installing what it finds was tested with
   stand-ins only, so try it with `--dry-run` first.
+- Before the question that installs a skill, its whole text is on the
+  screen: it is loaded in every session from then on.
+- Mutes and their roll back name each file by its path, so undoing a failed
+  swap never unmutes a copy you muted yourself in another tool.
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

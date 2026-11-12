@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strings"
 
 	"github.com/thousandflowers/skillreaper/internal/mute"
 	"github.com/thousandflowers/skillreaper/internal/report"
@@ -274,6 +276,8 @@ func cmdUnmute(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 	var err error
 	if opts.all {
 		res, err = mute.UnmuteAll(opts.claudeDir)
+	} else if strings.ContainsRune(args[0], filepath.Separator) { // a name never holds one
+		res, err = mute.UnmutePath(opts.claudeDir, args[0]) // that one copy, as reinvest's roll back needs
 	} else {
 		names, listErr := mute.List(opts.claudeDir)
 		if listErr != nil {

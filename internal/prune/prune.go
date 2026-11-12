@@ -30,6 +30,29 @@ import (
 // rather than abort, since the remaining candidates are still valid.
 var ErrAlreadyGone = errors.New("item already moved by another process")
 
+// ErrConfigChanged is a config file that changed between reap's read and its
+// write: Claude Code rewrites ~/.claude.json while it runs.
+var ErrConfigChanged = errors.New("changed while reap was editing it, so nothing was written; run the command again")
+
+// beforeConfigWrite runs between an edit's read and its write. A variable only
+// so a test can play the program that changes the file meanwhile.
+var beforeConfigWrite = func() {}
+
+// writeConfigIfUnchanged writes out over path only if path still holds read.
+// ponytail: a write landing between the second read and the rename is still
+// lost; closing that needs a lock Claude Code would honour, and it takes none.
+func writeConfigIfUnchanged(path string, read, out []byte, perm os.FileMode) error {
+	beforeConfigWrite()
+	now, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(now, read) {
+		return fmt.Errorf("%s %w", path, ErrConfigChanged)
+	}
+	return atomicfile.Write(path, out, perm)
+}
+
 const manifestVersion = 1
 const maxManifestFileSize = 10 << 20
 const maxConfigFileSize = 10 << 20
@@ -438,7 +461,7 @@ func DeleteItem(it scan.Item) error {
 // DeleteMCP removes one server from a config file for good, changing nothing else
 // in the file and keeping no copy.
 func DeleteMCP(claudeDir, configPath, scope, name string) error {
-	_, out, _, err := readConfigWithout(claudeDir, configPath, scope, name)
+	raw, out, _, err := readConfigWithout(claudeDir, configPath, scope, name)
 	if err != nil {
 		return err
 	}
@@ -446,7 +469,7 @@ func DeleteMCP(claudeDir, configPath, scope, name string) error {
 	if err != nil {
 		return err
 	}
-	return atomicfile.Write(configPath, out, info.Mode().Perm())
+	return writeConfigIfUnchanged(configPath, raw, out, info.Mode().Perm())
 }
 
 // serverPath is where a server sits in a config file. scope "" targets the
@@ -536,7 +559,7 @@ func RemoveMCP(claudeDir, configPath, scope, name string) (Entry, error) {
 		_ = os.Remove(backup)
 		return Entry{}, fmt.Errorf("save manifest: %w", err)
 	}
-	if err := atomicfile.Write(configPath, out, info.Mode().Perm()); err != nil {
+	if err := writeConfigIfUnchanged(configPath, raw, out, info.Mode().Perm()); err != nil {
 		if saveErr := saveManifest(claudeDir, entries); saveErr != nil {
 			return Entry{}, fmt.Errorf("%w (and its record could not be removed: %v)", err, saveErr)
 		}
@@ -702,7 +725,7 @@ func restoreServer(claudeDir string, e *Entry) error {
 		return err
 	}
 	if out != nil {
-		if err := atomicfile.Write(e.ConfigPath, out, info.Mode().Perm()); err != nil {
+		if err := writeConfigIfUnchanged(e.ConfigPath, b, out, info.Mode().Perm()); err != nil {
 			return err
 		}
 	}

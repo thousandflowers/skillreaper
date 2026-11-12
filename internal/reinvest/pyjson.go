@@ -197,7 +197,7 @@ func intEqualsFloat(n int64, f float64) bool {
 // Reading
 // ---------------------------------------------------------------------------
 
-const maxJSONDepth = 1000 // the prototype's parser gave up on deeper nesting too
+const maxJSONDepth = 1000 // a cap of our own: no answer or cache file nests near this, and recursion stays bounded
 
 var errDuplicateKey = errors.New("duplicate key")
 

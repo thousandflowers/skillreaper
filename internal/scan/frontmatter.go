@@ -212,7 +212,7 @@ func blockScalar(lines []string, style, chomp byte) string {
 	for _, l := range lines {
 		if strings.TrimSpace(l) == "" {
 			body = append(body, "")
-		} else if len(l) >= indent {
+		} else if len(l)-len(strings.TrimLeft(l, " \t")) >= indent { // its own spaces, never its text
 			body = append(body, strings.TrimRight(l[indent:], "\r"))
 		} else {
 			body = append(body, strings.TrimSpace(l))

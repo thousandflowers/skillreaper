@@ -273,6 +273,19 @@ func (a *app) show(result outcome, dryRun bool) error {
 	return nil
 }
 
+// showDoc puts the whole of a skill on the screen: it is loaded in every session
+// once installed, and its text came from Claude or a download.
+func (a *app) showDoc(c candidate) {
+	if c.Kind != kindSkill || c.Doc == "" {
+		return
+	}
+	fmt.Fprintf(a.term, "\n    ── %s, as it will be loaded in every session ──\n", c.Name)
+	for _, line := range strings.Split(strings.TrimRight(printable(c.Doc), "\n"), "\n") {
+		fmt.Fprintln(a.term, "    "+line)
+	}
+	fmt.Fprintln(a.term)
+}
+
 const applyQuestion = "  apply? installs the new ones, mutes the old ones (reap unmute undoes) [y/N] "
 
 func (a *app) chooseAndApply(swaps []swap, dryRun bool) error {
@@ -286,6 +299,7 @@ func (a *app) chooseAndApply(swaps []swap, dryRun bool) error {
 	}
 	for _, s := range chosen {
 		fmt.Fprintf(a.term, "  %s  in place of  %s\n", named(s.cand()), names(s.Mute))
+		a.showDoc(s.cand())
 	}
 	if !dryRun {
 		fmt.Fprint(a.term, applyQuestion)

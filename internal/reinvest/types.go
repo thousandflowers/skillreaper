@@ -1,15 +1,21 @@
 package reinvest
 
+import "cmp"
+
 import "sort"
 
 // skill is one installed skill as reap reports it.
 type skill struct {
 	Name    string
+	Path    string // the file reap knows it by: a name can be several tools' copies
 	Desc    string
 	Tokens  int
 	Uses    int
 	Verdict string
 }
+
+// target is how reap is told which copy: its path, else its name.
+func (s skill) target() string { return cmp.Or(s.Path, s.Name) }
 
 // session is one conversation a person had with Claude Code.
 type session struct {

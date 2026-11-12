@@ -273,7 +273,7 @@ func addPrompt(s session, raw string, skillNames map[string]bool) session {
 		return s
 	}
 	if text := clean(raw); !hasNoisePrefix(raw) && runeLen(text) >= minPromptChars {
-		s.Prompts = append(s.Prompts, text)
+		s.Prompts = append(s.Prompts, redact(text)) // before anything keeps or sends it
 	}
 	return s
 }

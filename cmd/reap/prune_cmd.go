@@ -60,7 +60,7 @@ func refuseKept(row report.Row, stderr io.Writer) bool {
 
 // serverScope is the project an MCP row's server belongs to, "" for top level.
 func serverScope(row report.Row) string {
-	if project, ok := strings.CutPrefix(row.Source, "project:"); ok {
+	if project, ok := strings.CutPrefix(row.DiskSource(), "project:"); ok {
 		return project
 	}
 	return ""
@@ -152,7 +152,7 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 		// A config this tool cannot edit is known now, so the count in the
 		// question below is one it can keep.
 		if row.Category == scan.CatMCP {
-			err := prune.CheckMCP(opts.claudeDir, row.Path, serverScope(row), row.Name)
+			err := prune.CheckMCP(opts.claudeDir, row.Path, serverScope(row), row.DiskName())
 			if err != nil && !errors.Is(err, prune.ErrAlreadyGone) {
 				refused = append(refused, problemOf(row, err.Error()))
 				continue
@@ -253,7 +253,7 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 		var e prune.Entry
 		var err error
 		if row.Category == scan.CatMCP {
-			e, err = prune.RemoveMCP(opts.claudeDir, row.Path, serverScope(row), row.Name)
+			e, err = prune.RemoveMCP(opts.claudeDir, row.Path, serverScope(row), row.DiskName())
 		} else if named {
 			e, err = prune.QuarantineChosen(opts.claudeDir, row.Item)
 		} else {

@@ -87,7 +87,7 @@ Usage:
   reap keep --list          show all kept items
   reap keep --remove <name>  remove item from keep list
   reap mute [<name>]        strip skill/agent descriptions (reversible)
-  reap unmute [<name>|--all]  list muted skills, or restore a description
+  reap unmute [<name>|<path>|--all]  list muted skills, or restore a description
   reap restore [<id>|<name>|--all]  list pruned items, or undo a prune
   reap delete <name>        remove one item for good (cannot be restored)
   reap share [flags]        print a ready-to-share message about your savings

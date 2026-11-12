@@ -142,6 +142,9 @@ const claudeNotice = "experimental · reinvest runs `claude -p` on your Claude C
 
 // pipeline reads, groups, finds candidates and verifies them.
 func (a *app) pipeline(opts options) (outcome, error) {
+	if _, err := a.lookPath(claudeCLI); err != nil { // every path asks Claude: fail before reading anything
+		return outcome{}, errNoClaude
+	}
 	fmt.Fprintf(a.term, "  %s\n\n", claudeNotice)
 	a.step("reading sessions", false)
 	state, err := a.loadReapState()

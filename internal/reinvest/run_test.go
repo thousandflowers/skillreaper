@@ -480,4 +480,15 @@ func TestRun_says_it_calls_Claude_before_the_first_call(t *testing.T) {
 	if !shownFirst {
 		t.Errorf("Claude was asked before the terminal said so:\n%s", termText(a))
 	}
+
+	// without claude on PATH there is nothing to announce: stop before reading anything
+	a, _ = pipelineApp(t, verdict{})
+	a.ask = a.askClaude
+	a.lookPath = func(string) (string, error) { return "", os.ErrNotExist }
+	if err := a.run(options{days: defaultDays}); err != errNoClaude {
+		t.Errorf("a missing claude gave %v", err)
+	}
+	if out := termText(a); out != "" {
+		t.Errorf("a missing claude still printed:\n%s", out)
+	}
 }

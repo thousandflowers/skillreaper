@@ -791,8 +791,8 @@ Tracked as issues, grouped by the problem they solve.
 Not planned: a CI job running `reap` (a runner has no session transcripts, so it
 would measure nothing - the periodic loop is `reap install-hook`), an
 extrapolated annual dollar figure (see [docs/decisions.md](docs/decisions.md)),
-and git commit ranges (transcripts carry timestamps, which `--since` /
-`--until` already covers).
+and git commit ranges (transcripts carry timestamps, so a window of days,
+`--days` today and `--since` / `--until` once #53 lands, covers it).
 
 <br>
 

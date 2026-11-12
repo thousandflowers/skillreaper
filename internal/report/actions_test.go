@@ -23,3 +23,15 @@ func TestTheDoLineForPruneCountsWhatPruneTakes(t *testing.T) {
 		t.Errorf("the DO block reads:\n%s", out)
 	}
 }
+
+func TestSourceIsTakesAnIdOrAOneSourceLabel(t *testing.T) {
+	for _, c := range []struct {
+		src, want string
+		is        bool
+	}{{"personal", "personal", true}, {"personal", "own", true}, {"user-config", "usr", true},
+		{"plugin:a@b", "ext", false}, {"plugin:a@b", "plugin:a@b", true}, {"personal", "usr", false}} {
+		if got := SourceIs(c.src, c.want); got != c.is {
+			t.Errorf("SourceIs(%q, %q) = %v", c.src, c.want, got)
+		}
+	}
+}

@@ -46,13 +46,13 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		}
 		candidates = rows
 	} else {
-		sources := 0
+		var eligible []report.Row
 		for _, row := range r.Rows {
 			if !report.MuteEligible(row) {
 				continue
 			}
-			sources++
-			if opts.source != "" && row.Source != opts.source {
+			eligible = append(eligible, row)
+			if opts.source != "" && !report.SourceIs(row.Source, opts.source) {
 				continue
 			}
 			// Not eligible, however little it weighs: a file with no description
@@ -63,8 +63,12 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 			}
 			candidates = append(candidates, row)
 		}
-		if opts.source != "" && len(candidates) == 0 && sources > 0 {
+		if opts.source != "" && len(candidates) == 0 && len(eligible) > 0 {
 			fmt.Fprintf(stderr, "error: no items to mute from source %q\n", opts.source)
+			fmt.Fprintln(stderr, "sources with items to mute:")
+			for _, t := range report.SourceTotals(eligible) {
+				fmt.Fprintf(stderr, "  %s — %d %s\n", t.Source, t.Items, report.Plural(t.Items, "item"))
+			}
 			return 1
 		}
 	}

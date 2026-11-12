@@ -364,6 +364,13 @@ func (a *app) install(s swap) (lines []string, stop bool) {
 		}
 	}
 	if err := a.runStep(command); err != nil {
+		if c.Kind == kindSkill {
+			// the slug was free before the step: anything there now is the step's, half
+			// written and never checked
+			if left, _ := present(filepath.Join(skillsDir(), c.Slug)); left {
+				return fail(err.Error() + " · " + a.takeOut(c))
+			}
+		}
 		return fail(err.Error())
 	}
 	if !a.isInstalled(c) { // on disk, but not where Claude Code loads it, and never compared

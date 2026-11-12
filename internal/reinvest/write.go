@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 // A skill written from the developer's own sessions.
@@ -220,7 +222,7 @@ func (a *app) createdFor(gaps []kind, sessions []session, installed []skill) ([]
 			continue
 		}
 		out = append(out, candidate{ID: createdPrefix + w.slug, Name: w.slug, Slug: w.slug, Doc: w.doc, Kind: kindSkill,
-			Created: true, Desc: frontmatter(w.doc)["description"], Cost: intPtr(a.reapTokens(w.slug, w.doc)),
+			Created: true, Desc: writtenDesc(w), Cost: intPtr(a.reapTokens(w.slug, w.doc)),
 			Gap: g.gapLabel(), Task: g.Task})
 	}
 	return out, refused, nil
@@ -240,4 +242,10 @@ func longestConversations(gap kind, byID map[string]session) [][]string {
 		out = append(out, s.Prompts)
 	}
 	return out
+}
+
+// writtenDesc is a written skill's description as reap reads it.
+func writtenDesc(w writtenSkill) string {
+	desc, _ := scan.SkillListing(w.slug, []byte(w.doc))
+	return desc
 }

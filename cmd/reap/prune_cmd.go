@@ -146,7 +146,7 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 			notRemovable = append(notRemovable, row)
 			continue
 		}
-		if opts.source != "" && row.Source != opts.source {
+		if opts.source != "" && !report.SourceIs(row.Source, opts.source) {
 			continue
 		}
 		// A config this tool cannot edit is known now, so the count in the

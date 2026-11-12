@@ -84,3 +84,19 @@ func TestHooksThatAreNullOrEmptyAreNoHooks(t *testing.T) {
 		t.Errorf("a string hooks: %v", err)
 	}
 }
+
+// After a cleanup the counts drop. The baseline follows them down, or new dead
+// items would have to pass the old peak before the nudge ever spoke again.
+func TestTheNudgeBaselineFollowsACleanupDown(t *testing.T) {
+	st := NudgeState{LastReapCount: 10, LastMuteCount: 5}
+	got, changed := Lowered(st, 3, 1)
+	if !changed || got.LastReapCount != 3 || got.LastMuteCount != 1 || !got.LastNudgeAt.Equal(st.LastNudgeAt) {
+		t.Errorf("lowered %+v, %v", got, changed)
+	}
+	if _, changed := Lowered(NudgeState{LastReapCount: 3, LastMuteCount: 1}, 3, 4); changed {
+		t.Error("a count that grew lowered the baseline")
+	}
+	if got, changed := Lowered(NudgeState{LastReapCount: 3, LastMuteCount: 6}, 7, 2); !changed || got.LastReapCount != 3 || got.LastMuteCount != 2 {
+		t.Errorf("one count down, one up: %+v, %v", got, changed)
+	}
+}

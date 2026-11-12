@@ -1,6 +1,9 @@
 package menu
 
 import (
+	"errors"
+	"io/fs"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -287,10 +290,11 @@ func (m *Menu) receipt(p *Plan, unit string, onApplied func()) string {
 		}
 	}
 	if len(failed) > 0 {
+		// what went well first: a line the screen cuts loses its end
 		first := failed[0]
-		warn := "⚠ " + itoa(len(failed)) + " not done: " + first.Pick.Row.Name + ": " + first.Err.Error()
+		warn := "⚠ " + itoa(len(failed)) + " not done: " + first.Pick.Row.Name + ": " + causeOf(first.Err)
 		if said != "" {
-			warn += " · " + said
+			return said + " · " + warn
 		}
 		return warn
 	}
@@ -424,4 +428,18 @@ func (v *receiptView) draw(question string) bool {
 	m.put(y+7, x, question, bold)
 	m.s.Refresh()
 	return true
+}
+
+// causeOf is what went wrong, without the paths a file error carries: two full
+// paths in front of "permission denied" push it off any screen.
+func causeOf(err error) string {
+	var link *os.LinkError
+	var path *fs.PathError
+	switch {
+	case errors.As(err, &link):
+		return link.Err.Error()
+	case errors.As(err, &path):
+		return path.Err.Error()
+	}
+	return err.Error()
 }

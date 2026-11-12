@@ -3,6 +3,8 @@ package reinvest
 import (
 	"sort"
 	"strings"
+
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 const (
@@ -82,7 +84,7 @@ func (a *app) candidatesFor(gap kind, found []candidate, noMCP bool) ([]candidat
 	var refused []refusal
 	for i, c := range ranked {
 		doc := docs[i]
-		desc := frontmatter(doc)["description"]
+		desc, _ := scan.SkillListing(c.Slug, []byte(doc)) // reap's reading: a byte-order mark and all
 		if runeLen(desc) < minDesc {
 			continue
 		}

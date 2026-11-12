@@ -202,7 +202,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&opts.listKeep, "list", false, "keep, snapshot: list what is saved")
 	fs.StringVar(&opts.removeKeep, "remove", "", "keep: remove a kept item")
 	fs.StringVar(&opts.claudeDir, "claude-dir", "", "Claude Code directory (default ~/.claude)")
-	fs.StringVar(&opts.claudeJSON, "claude-json", "", "Claude config file (default ~/.claude.json)")
+	fs.StringVar(&opts.claudeJSON, "claude-json", "", "Claude config file (default ~/.claude.json; with --claude-dir, the .claude.json inside or beside it)")
 	fs.StringVar(&opts.claudeVersion, "claude-version", "", "manifest: Claude Code version this skill was tested on")
 	// flag calls Usage the moment it sees -h, before any flag written after it
 	// has been parsed, so the opt-out has to be legible straight from args or
@@ -493,6 +493,9 @@ func fillDefaults(opts *options, stderr io.Writer) error {
 	}
 	opts.claudeDirExplicit = opts.claudeDir != ""
 	opts.hasClaudeCode = opts.claudeDirExplicit
+	if opts.claudeDirExplicit && opts.claudeJSON == "" {
+		opts.claudeJSON = configBeside(opts.claudeDir)
+	}
 	if opts.claudeDir == "" {
 		detected := platform.Detect()
 		for _, p := range detected {
@@ -541,9 +544,26 @@ func fillDefaults(opts *options, stderr io.Writer) error {
 // the Claude directory. When nothing was detected and none was given, claudeDir
 // is empty and filepath.Join would resolve state paths relative to the current
 // working directory. Fail clearly instead of silently polluting the cwd.
+// configBeside is the config file Claude Code keeps with dir: inside it, as
+// under CLAUDE_CONFIG_DIR, or next to it, as ~/.claude.json is to ~/.claude.
+// "" when neither is there.
+func configBeside(dir string) string {
+	for _, p := range []string{filepath.Join(dir, ".claude.json"), filepath.Join(filepath.Dir(dir), ".claude.json")} {
+		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() {
+			return p
+		}
+	}
+	return ""
+}
+
 func requireClaudeDir(opts options, stderr io.Writer) bool {
 	if strings.TrimSpace(opts.claudeDir) == "" {
 		fmt.Fprintln(stderr, "error: no Claude Code directory found; pass --claude-dir <path>")
+		return false
+	}
+	// a typo in --claude-dir is no empty stack: "Nothing to restore." would hide it
+	if info, err := os.Stat(opts.claudeDir); err != nil || !info.IsDir() {
+		fmt.Fprintf(stderr, "error: no Claude Code directory at %s\n", opts.claudeDir)
 		return false
 	}
 	return true
@@ -1241,6 +1261,9 @@ func cmdKeepRemove(opts options, name string, stdout, stderr io.Writer) int {
 }
 
 func cmdKeepList(opts options, stdout, stderr io.Writer) int {
+	if !requireClaudeDir(opts, stderr) {
+		return 1
+	}
 	items, err := override.ListKeep(opts.claudeDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -1525,6 +1548,9 @@ func cmdNudge(opts options, stdout, stderr io.Writer) int {
 	}
 	now := time.Now()
 	if !hook.ShouldNudge(now, r.DeadCount, r.MuteCount, st) {
+		if lower, changed := hook.Lowered(st, r.DeadCount, r.MuteCount); changed {
+			_ = hook.SaveNudgeState(opts.claudeDir, lower)
+		}
 		return 0
 	}
 	fmt.Fprintln(stderr, nudgeText(r.DeadCount, r.MuteCount))

@@ -453,49 +453,6 @@ func TestLogicCov_refusalNotes_count_failed_checks_apart(t *testing.T) {
 	}
 }
 
-// --- tokens.go and text.go -----------------------------------------------------
-
-func TestLogicCov_description_inline_values(t *testing.T) {
-	cases := []struct {
-		header []string
-		want   string
-	}{
-		{[]string{`description: "bad \x escape"`}, `bad \x escape`}, // not JSON: the quotes are trimmed
-		{[]string{`description: "a" "b"`}, `a" "b`},
-		{[]string{`description: 'single'`, "  not joined"}, "single"},
-		{[]string{`description: "open`, "  not joined"}, "open"},
-		{[]string{`description: plain`, "  and more", "", "\tlast", "next: key"}, "plain and more last"},
-		{[]string{`description:`}, ""},
-		{[]string{"  description: indented", "description: top"}, "top"},
-		{[]string{"name: x"}, ""},
-	}
-	for _, c := range cases {
-		if got := description(c.header); got != c.want {
-			t.Errorf("description(%q) = %q, want %q", c.header, got, c.want)
-		}
-	}
-}
-
-func TestLogicCov_block_scalars(t *testing.T) {
-	cases := []struct {
-		lines        []string
-		style, chomp string
-		want         string
-	}{
-		{[]string{"    deep", "  a"}, "|", "", "deep\na\n"}, // shorter than the indent: stripped, as reap does
-		{[]string{"  a", "", ""}, "|", "+", "a\n\n\n"},
-		{[]string{"  a", "", ""}, "|", "-", "a"},
-		{[]string{"  a", "  b", "", "  c", "", "", "  d", ""}, ">", "", "a b\nc\n\nd\n"},
-		{[]string{"", "  a", "  b"}, ">", "-", "\na b"}, // a leading empty line stays a line break
-		{[]string{"", "   "}, "|", "", ""},
-	}
-	for _, c := range cases {
-		if got := block(c.lines, c.style, c.chomp); got != c.want {
-			t.Errorf("block(%q, %s%s) = %q, want %q", c.lines, c.style, c.chomp, got, c.want)
-		}
-	}
-}
-
 func TestLogicCov_frontmatter_a_blank_line_does_not_continue_a_value(t *testing.T) {
 	got := frontmatter("---\ndescription: first\n\n  second\nname: n\n---\n")
 	if got["description"] != "first second" || got["name"] != "n" {

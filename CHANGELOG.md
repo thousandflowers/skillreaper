@@ -124,6 +124,18 @@ really injected, with multi-line descriptions read in full.
   counts the snapshots still missing; naming a muted item in `reap prune`
   says it is muted.
 - Under the `skillreaper` name, `help` keeps its columns.
+- After a cleanup the weekly nudge's baseline follows the counts down, so it
+  speaks again when new unused items appear.
+- A menu apply that partly failed shows what went well first, then the
+  failure's cause without the paths that pushed it off the screen.
+- Restore, unmute and `keep --list` on a `--claude-dir` that is not there say
+  so, instead of "Nothing to restore."
+- `--claude-dir` alone finds the `.claude.json` inside or beside it: every MCP
+  server used to drop out.
+- `--source own` and `--source usr` work, as the report labels those sources;
+  a mute with no match lists the sources there are.
+- A joined emoji in a name shows as its emoji in the menu, not with
+  replacement marks.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -187,6 +199,11 @@ the same cache files and the same checks. What to know before running it:
 - `--days` outside 1–36500, `--max` under 1, and `--mcp` without `--online` are
   refused; with `--online` the first line also names skills.sh (and the MCP
   registry).
+- A step that runs out of time ends with everything it started (npx, node,
+  git), and a skill a failed step half wrote is taken out again.
+- A candidate is weighed, and its description read, by reap's own reader of
+  the header, so the two agree on every quirk (a byte-order mark, an unclosed
+  header, a quoted or nested `disable-model-invocation`).
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

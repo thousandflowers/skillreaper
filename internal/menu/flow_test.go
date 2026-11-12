@@ -269,7 +269,7 @@ func TestFailedPickIsNamedAndItsRowStays(t *testing.T) {
 	t.Run("the status line names it, and says what was done", func(t *testing.T) {
 		x := failing(t, space, applyKey, 'y')
 
-		mustEqual(t, "status", strings.TrimSpace(statusLine(x.final())), "⚠ 1 not done: srv: permission denied · ✓ 1 gone")
+		mustEqual(t, "status", strings.TrimSpace(statusLine(x.final())), "✓ 1 gone · ⚠ 1 not done: srv: permission denied")
 	})
 
 	t.Run("its row stays in the list, the one that went does not", func(t *testing.T) {

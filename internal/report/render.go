@@ -644,6 +644,16 @@ func groupByVerdict(rows []Row) map[string][]Row {
 	return m
 }
 
+// SourceIs says whether --source names src: by its id, or by the label the
+// report shows for it where that label is one source's alone ("own", "usr").
+func SourceIs(src, want string) bool {
+	if src == want {
+		return true
+	}
+	label := shortSource(src)
+	return label != src && (label == "own" || label == "usr") && label == want
+}
+
 func shortSource(s string) string {
 	switch {
 	case s == "personal":

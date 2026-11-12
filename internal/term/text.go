@@ -36,6 +36,9 @@ func isASCII(s string) bool {
 	return true
 }
 
+// zeroWidthJoiner joins emoji into one that terminals draw each their own way.
+const zeroWidthJoiner = '\u200d'
+
 // Visible makes a string from outside safe to lay out: what could move the
 // cursor or hide text becomes a mark you can see.
 func Visible(s string) string {
@@ -52,6 +55,9 @@ func Visible(s string) string {
 		}
 		if marks > maxMarks {
 			continue
+		}
+		if c == zeroWidthJoiner {
+			continue // the emoji it joins stay, side by side, as the layout counts them
 		}
 		if unicode.IsOneOf(unsafeRunes, c) {
 			c = placeholder

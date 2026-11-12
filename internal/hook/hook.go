@@ -345,6 +345,20 @@ func SaveNudgeState(claudeDir string, s NudgeState) error {
 
 // ShouldNudge reports whether a passive nudge should print now: at least
 // nudgeIntervalDays since the last nudge, and the reap or mute count has grown.
+// Lowered follows a cleanup down: each count that fell below its baseline
+// becomes the baseline, the time of the last nudge untouched. Without it, new
+// dead items would have to pass the old peak before the nudge spoke again.
+func Lowered(st NudgeState, reapCount, muteCount int) (NudgeState, bool) {
+	changed := false
+	if reapCount < st.LastReapCount {
+		st.LastReapCount, changed = reapCount, true
+	}
+	if muteCount < st.LastMuteCount {
+		st.LastMuteCount, changed = muteCount, true
+	}
+	return st, changed
+}
+
 func ShouldNudge(now time.Time, reapCount, muteCount int, st NudgeState) bool {
 	if now.Sub(st.LastNudgeAt) < nudgeIntervalDays*24*time.Hour {
 		return false

@@ -62,6 +62,7 @@ func runProcess(spec procSpec) procResult {
 	ctx, cancel := context.WithTimeout(context.Background(), spec.timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, spec.argv[0], spec.argv[1:]...)
+	ownGroup(cmd) // a timeout ends what the step started, not only the step
 	cmd.Dir = spec.dir
 	cmd.Env = append(os.Environ(), spec.env...)
 	cmd.WaitDelay = pipeGrace

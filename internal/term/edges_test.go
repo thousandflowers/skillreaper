@@ -71,3 +71,15 @@ func TestKeyboardWatcherStopKillsTheHelper(t *testing.T) {
 	}
 	(&keyboardWatcher{cmd: exec.Command("true")}).stop() // never started: nothing to kill
 }
+
+// A joined emoji ("👨‍👩‍👧") keeps its emoji: the joiner between them goes, as
+// terminals do not agree on drawing the joined form and the layout counts each
+// emoji, rather than turning into a replacement mark.
+func TestVisibleDropsTheEmojiJoiner(t *testing.T) {
+	if got, want := Visible("👨\u200d👩\u200d👧-family"), "👨👩👧-family"; got != want {
+		t.Errorf("Visible = %q, want %q", got, want)
+	}
+	if got := Cells(Visible("👨\u200d👩")); got != 4 {
+		t.Errorf("two emoji fill %d cells, want 4", got)
+	}
+}

@@ -163,13 +163,9 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 		// The invocation key is the directory name (plus any plugin prefix) —
 		// that is how the skill is addressed in transcripts. A differing
 		// frontmatter name stays the key's alias: it can fire under either.
-		fmName, desc, bodyChars := parseFrontmatter(b)
+		fmName, _, bodyChars := parseFrontmatter(b)
 		key := namePrefix + e.Name()
-		descChars := len(key) + len(desc)
-		// Run only by hand: Claude Code leaves it out of the listing it injects.
-		if v, _ := frontmatterValue(b, "disable-model-invocation"); strings.EqualFold(v, "true") {
-			descChars = 0
-		}
+		desc, descChars := SkillListing(key, b)
 		items = append(items, Item{
 			Category:        CatSkill,
 			Name:            key,
@@ -195,4 +191,16 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 // so it is a note about the folder rather than a failure to read a skill.
 func brokenLink(path string) Warning {
 	return Warning{Path: path, Advisory: true, Msg: "this link leads nowhere (its target is missing, or it loops), so nothing here was counted"}
+}
+
+// SkillListing is a skill's description and what it weighs in the listing
+// Claude Code injects: its key plus its description, or nothing when it runs
+// only by hand. reinvest weighs a candidate with it, so the two agree.
+func SkillListing(key string, doc []byte) (desc string, chars int) {
+	_, desc, _ = parseFrontmatter(doc)
+	// Run only by hand: Claude Code leaves it out of the listing it injects.
+	if v, _ := frontmatterValue(doc, "disable-model-invocation"); strings.EqualFold(v, "true") {
+		return desc, 0
+	}
+	return desc, len(key) + len(desc)
 }

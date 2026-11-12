@@ -580,7 +580,7 @@ func splitKey(b []byte, anyIndent bool) (rest, removed []byte, found bool) {
 		}
 		out.Write(line)
 	}
-	return out.Bytes(), taken.Bytes(), found
+	return b, nil, false // the header never closed: no frontmatter, as the scanner reads it
 }
 
 // legacyLineLimit is where older versions stopped reading a file.

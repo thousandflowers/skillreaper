@@ -18,3 +18,13 @@ func TestHugeDayCountsAreRefused(t *testing.T) {
 		}
 	}
 }
+
+// A price must be a number JSON can hold: Inf passed the check and then broke
+// --json and snapshot.
+func TestAnEndlessPriceIsRefused(t *testing.T) {
+	for _, p := range []string{"Inf", "1e308", "NaN"} {
+		if code, out := reapRun("--price="+p, "--json"); code != 1 || !strings.Contains(out, "--price") {
+			t.Errorf("--price=%s: exit %d\n%s", p, code, out)
+		}
+	}
+}

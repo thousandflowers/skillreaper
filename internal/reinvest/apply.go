@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -72,11 +74,11 @@ func uninstallCommand(c candidate) []string {
 	return []string{"claude", "mcp", "remove", "-s", "user", mcpName(c)}
 }
 
-func skillsDir() string { return filepath.Join(homeDir(), ".claude", "skills") }
+func skillsDir() string { return filepath.Join(claudeDir(), "skills") }
 
 // writtenDir is where written skills live; Claude Code loads them through a
 // link in skillsDir(), and reap can tell them apart by where the link points.
-func writtenDir() string { return filepath.Join(homeDir(), ".claude", "skills-reinvest") }
+func writtenDir() string { return filepath.Join(claudeDir(), "skills-reinvest") }
 
 // present reports whether anything is at path, a dangling link included. An
 // error other than "not there" is returned: not knowing is not "free to use".
@@ -208,16 +210,33 @@ func uncheckedFiles(c candidate) []string {
 			out = append(out, rel)
 			continue
 		}
-		text := string(raw)
-		same := strings.Contains(c.Doc, fileMark(rel)+"\n"+text)
-		if rel == skillFile {
-			same = c.Doc == text || strings.HasPrefix(c.Doc, text+"\n")
-		}
-		if !same {
+		if !checkedWhole(c.Doc, rel, string(raw)) {
 			out = append(out, rel)
 		}
 	}
+	// a file the verifier read and the install left out is a difference too:
+	// it may be the one that guarded the others
+	for _, m := range fileMarkRE.FindAllStringSubmatch(c.Doc, -1) {
+		if !slices.Contains(files, m[1]) {
+			out = append(out, m[1])
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return lessByParts(out[i], out[j]) })
 	return out
+}
+
+var fileMarkRE = regexp.MustCompile(`(?m)^===== FILE (.+) =====$`)
+
+// checkedWhole says whether text is, whole, what the verifier read as the file
+// rel of doc: the part ends where the next file begins or the document ends, so
+// a file cut short at a line is not taken for it.
+func checkedWhole(doc, rel, text string) bool {
+	next := "\n\n" + fileMark("")[:len("===== FILE ")]
+	if rel == skillFile {
+		return doc == text || strings.HasPrefix(doc, text+next)
+	}
+	part := "\n" + fileMark(rel) + "\n" + text
+	return strings.Contains(doc, part+next) || strings.HasSuffix(doc, part)
 }
 
 const reapVariable = "REAP"

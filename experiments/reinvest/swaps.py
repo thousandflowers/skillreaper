@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import curses
 import json
+import re
 import os
 import shlex
 import shutil
@@ -362,20 +363,29 @@ def unchecked_files(c: dict) -> list[str]:
     """Files now in the skill's folder that are not, byte for byte, what the verifier read. `skills add` takes whatever
     the repo holds at that moment, so this is what ties the install to the check."""
     root, doc = skills_dir() / c["slug"], c.get("doc", "")
-    out = []
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+    nxt = "\n\n" + sources.FILE_MARK.format("")[:len("===== FILE ")]
+    out, seen = [], set()
+    for path in sorted(p for p in root.rglob("*") if p.is_symlink() or not p.is_dir()):
         rel = path.relative_to(root).as_posix()
+        seen.add(rel)
+        if path.is_symlink() or not path.is_file():  # a link can point anywhere once the check is over
+            out.append(rel)
+            continue
         try:
             with path.open(encoding="utf-8", newline="") as f:
                 text = f.read()
         except (OSError, ValueError):
             out.append(rel)
             continue
-        same = doc.startswith(text + "\n") or doc == text if rel == sources.SKILL_FILE \
-            else f"{sources.FILE_MARK.format(rel)}\n{text}" in doc
+        # whole: the part ends where the next file begins or the document ends
+        part = f"\n{sources.FILE_MARK.format(rel)}\n{text}"
+        same = doc == text or doc.startswith(text + nxt) if rel == sources.SKILL_FILE \
+            else part + nxt in doc or doc.endswith(part)
         if not same:
             out.append(rel)
-    return out
+    # a file the verifier read and the install left out is a difference too
+    out += [m for m in re.findall(r"(?m)^===== FILE (.+) =====$", doc) if m not in seen]
+    return sorted(out)
 
 
 def run(cmd: list[str]) -> str | None:

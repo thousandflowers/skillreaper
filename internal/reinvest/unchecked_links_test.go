@@ -14,7 +14,7 @@ import (
 // a link can point anywhere once the check is over.
 func TestUnchecked_anything_but_a_plain_file_is_never_what_was_checked(t *testing.T) {
 	home := tempHome(t)
-	c := candidate{Kind: kindSkill, Slug: "release", Doc: "---\nname: release\n---\n\n" + fileMark("notes.md") + "\nsame text"}
+	c := candidate{Kind: kindSkill, Slug: "release", Doc: renderTree(map[string]string{skillFile: "---\nname: release\n---\n", "notes.md": "same text"})}
 	root := filepath.Join(home, ".claude", "skills", "release")
 	writeFile(t, filepath.Join(root, skillFile), "---\nname: release\n---\n")
 	elsewhere := t.TempDir()

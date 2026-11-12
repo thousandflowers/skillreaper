@@ -114,7 +114,20 @@ really injected, with multi-line descriptions read in full.
 - Model ids with a release date (`claude-haiku-4-5-20251001`) get their
   model's price: they were left out of the blended `$/month`.
 - `--days` and `--grace-days` above 36500 are refused: past a century the date
-  arithmetic wrapped and the window came out wrong.
+  arithmetic wrapped and the window came out wrong. `--price` must be finite.
+- A relative `--claude-dir` or `--claude-json` is made absolute first: mute
+  refused it, and what prune and mute recorded named nothing from another
+  folder.
+- `reap uninstall-hook` leaves a hook group that is someone else's alone, even
+  an empty one; `"hooks": null` or `[]` in settings.json counts as no hooks.
+- The weekly nudge says what grew, items to prune or to mute; `reap diff`
+  counts the snapshots still missing; naming a muted item in `reap prune`
+  says it is muted.
+- Under the `skillreaper` name, `help` keeps its columns.
+- `reap mute` leaves a file whose `---` header never closes as it is: it has
+  no frontmatter, as the scanner reads it.
+- The npm wrapper gives up on a download only when it stops arriving, not
+  after 30 seconds of a slow one.
 - Installed with npm into a folder you cannot write (`sudo npm i -g`), the
   binary goes to `~/.cache/skillreaper/<version>/` instead of failing.
 
@@ -167,6 +180,13 @@ the same cache files and the same checks. What to know before running it:
   cannot guess, said to be data, in every call.
 - A skill written for a gap that drops out of a run stays cached, so it comes
   back with the same text and verdicts.
+- An installed skill must match what was verified whole: a file cut short,
+  emptied or left out is not what was checked, and the install is taken out.
+- It reads sessions and writes skills under `CLAUDE_CONFIG_DIR` when that is
+  set, as Claude Code and reap do.
+- `--days` outside 1–36500, `--max` under 1, and `--mcp` without `--online` are
+  refused; with `--online` the first line also names skills.sh (and the MCP
+  registry).
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

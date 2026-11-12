@@ -408,12 +408,18 @@ type flagBound struct {
 	why string
 	// ceiling is a top that guards the arithmetic, not a range the flag means:
 	// a value under it is told the lower bound alone, a value over it the ceiling.
-	ceiling float64
+	ceiling    float64
+	ceilingWhy string
 }
 
 // outOfRangeFlags returns one message per numeric flag whose value falls
 // outside its accepted range, in flag order. An empty result means every flag
 // is usable.
+// maxPrice is $1,000,000 per million tokens: far over any model, and a number JSON holds.
+const maxPrice = 1e6
+
+const centuryWraps = "past a century the date arithmetic wraps"
+
 // maxDays is a century: day counts above it make time.AddDate wrap.
 const maxDays = 36500
 
@@ -423,14 +429,14 @@ func outOfRangeFlags(opts options) []string {
 		// A window of zero or fewer days yields a complete, well-formed,
 		// entirely empty report — "0 items never fired" is indistinguishable
 		// from a genuinely clean stack, which is the worst way to be wrong.
-		{name: "--days", val: float64(opts.days), min: 1, max: unbounded, ceiling: maxDays, why: "a window of zero days produces an empty report that reads like a clean one"},
+		{name: "--days", val: float64(opts.days), min: 1, max: unbounded, ceiling: maxDays, ceilingWhy: centuryWraps, why: "a window of zero days produces an empty report that reads like a clean one"},
 		{name: "--min-sessions", val: float64(opts.minSessions), min: 0, max: unbounded},
-		{name: "--grace-days", val: float64(opts.graceDays), min: 0, max: unbounded, ceiling: maxDays},
+		{name: "--grace-days", val: float64(opts.graceDays), min: 0, max: unbounded, ceiling: maxDays, ceilingWhy: centuryWraps},
 		{name: "--min-tokens", val: float64(opts.minTokens), min: 0, max: unbounded},
 		{name: "--mute-min-tokens", val: float64(opts.muteMinTokens), min: 0, max: unbounded},
 		{name: "--route-min-skills", val: float64(opts.routeMinSkills), min: 0, max: unbounded},
 		{name: "--top", val: float64(opts.top), min: 1, max: unbounded, why: "use --json for every row"},
-		{name: "--price", val: opts.price, min: 0, max: unbounded, why: "a negative price renders as a negative monthly cost"},
+		{name: "--price", val: opts.price, min: 0, max: unbounded, why: "a negative price renders as a negative monthly cost", ceiling: maxPrice, ceilingWhy: "an endless price is no number JSON can hold"},
 		// Both thresholds are documented as a fraction of sessions. Above 1.0
 		// the comparison is "fired in fewer than 100+% of sessions", which is
 		// true of everything, so every used item changes verdict.
@@ -441,8 +447,8 @@ func outOfRangeFlags(opts options) []string {
 	var msgs []string
 	for _, b := range bounds {
 		if b.ceiling > 0 && b.val > b.ceiling {
-			msgs = append(msgs, fmt.Sprintf("%s must be at most %s, got %s — past a century the date arithmetic wraps",
-				b.name, trimFloat(b.ceiling), trimFloat(b.val)))
+			msgs = append(msgs, fmt.Sprintf("%s must be at most %s, got %s — %s",
+				b.name, trimFloat(b.ceiling), trimFloat(b.val), b.ceilingWhy))
 			continue
 		}
 		if b.val >= b.min && b.val <= b.max {
@@ -473,6 +479,18 @@ func trimFloat(f float64) string {
 }
 
 func fillDefaults(opts *options, stderr io.Writer) error {
+	// The state files record full paths: one recorded relative names nothing
+	// from another folder, and safepath cannot place it either.
+	for _, p := range []*string{&opts.claudeDir, &opts.claudeJSON} {
+		if *p == "" {
+			continue
+		}
+		abs, err := filepath.Abs(*p)
+		if err != nil {
+			return err
+		}
+		*p = abs
+	}
 	opts.claudeDirExplicit = opts.claudeDir != ""
 	opts.hasClaudeCode = opts.claudeDirExplicit
 	if opts.claudeDir == "" {
@@ -1481,6 +1499,19 @@ func cmdUninstallHook(opts options, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// nudgeText says what the nudge counts: unused items to prune, items to mute,
+// or both, whichever is there.
+func nudgeText(dead, mute int) string {
+	var parts []string
+	if dead > 0 {
+		parts = append(parts, fmt.Sprintf("%d unused %s to prune", dead, report.Plural(dead, "item")))
+	}
+	if mute > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s to mute", mute, report.Plural(mute, "item")))
+	}
+	return "skillreaper: " + strings.Join(parts, " and ") + " since the last check. Run `reap` to review."
+}
+
 // cmdNudge is the SessionStart hook entry point: a passive, at-most-weekly
 // reminder. It never fails loudly — a broken audit must not break a session.
 func cmdNudge(opts options, stdout, stderr io.Writer) int {
@@ -1496,7 +1527,7 @@ func cmdNudge(opts options, stdout, stderr io.Writer) int {
 	if !hook.ShouldNudge(now, r.DeadCount, r.MuteCount, st) {
 		return 0
 	}
-	fmt.Fprintf(stderr, "skillreaper: %d %s flagged for pruning since last check. Run `reap` to review.\n", r.DeadCount, report.Plural(r.DeadCount, "skill"))
+	fmt.Fprintln(stderr, nudgeText(r.DeadCount, r.MuteCount))
 	st.LastNudgeAt = now
 	st.LastReapCount = r.DeadCount
 	st.LastMuteCount = r.MuteCount
@@ -1776,7 +1807,8 @@ func cmdDiff(opts options, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "warning: skipped %s\n", msg)
 		}
 		if len(saved) < want {
-			fmt.Fprintf(stderr, "need %d %s to compare, found %d. take one with: reap snapshot\n", want, report.Plural(want, "more snapshot"), len(saved))
+			missing := want - len(saved)
+			fmt.Fprintf(stderr, "need %d %s to compare, found %d. take one with: reap snapshot\n", missing, report.Plural(missing, "more snapshot"), len(saved))
 			return 1
 		}
 		if len(args) == 1 {

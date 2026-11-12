@@ -271,7 +271,9 @@ uploads. Reads config files and session transcripts on disk, and your data never
 leaves your machine, except through `reap reinvest`: it is experimental, says so
 on its first line, and sends Claude, through `claude -p` on your own Claude Code
 account, excerpts of your sessions (with the keys it recognises removed first)
-and the names and descriptions of your installed skills.
+and the names and descriptions of your installed skills. With `--online` it also
+sends search words drawn from them to skills.sh (and, with `--mcp`, the MCP
+registry), and says that too on its first line.
 
 <br>
 

@@ -52,6 +52,10 @@ fixture=/tmp/skillreaper-fixture
 # the before captures in the Makefile.
 SOURCE_DATE_EPOCH="$("$root/docs/gif-helpers/hero-fixture.sh" "$fixture")"
 export SOURCE_DATE_EPOCH
+# A fixture's evidence and parse cache are the fixture's: none of it goes in
+# the real config and cache folders of whoever runs this.
+SKILLREAPER_STATE_DIR="$(mktemp -d)"
+export SKILLREAPER_STATE_DIR
 
 pty() {                                   # run "$@" with a pty on stdout
   python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))' "$@"
@@ -89,7 +93,7 @@ run() {                                   # run <binary> <width|pipe> <color|noc
   local bin=$1 width=$2 color=$3; shift 3
   # -no-banner: with a pty attached the wordmark prints above the report and
   # would sit in the capture as if it were part of it
-  local args=(-claude-dir "$fixture" -claude-json "$fixture/.claude.json" -no-nudge -no-banner "$@")
+  local args=(-claude-dir "$fixture" -claude-json "$fixture/.claude.json" -no-nudge -no-banner -no-cache "$@")
   if [ "$color" = nocolor ]; then args+=(-no-color); fi
   if [ "$width" = pipe ]; then
     env -u COLUMNS "$bin" "${args[@]}"

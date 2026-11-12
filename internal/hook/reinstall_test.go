@@ -40,3 +40,47 @@ func TestInstallAgainRepairsAMovedBinaryAndLeavesTheSameOne(t *testing.T) {
 		t.Error("a dry run wrote")
 	}
 }
+
+// A group of hooks that is someone else's stays, empty or not: uninstall takes
+// only skillreaper's entry, and the group that entry alone was keeping alive.
+func TestUninstallLeavesOtherEmptyGroupsAlone(t *testing.T) {
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	doc := `{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[]},{"hooks":[{"type":"command","command":"echo hi"}]}]}}`
+	if err := os.WriteFile(settings, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if removed, err := Uninstalled(settings); err != nil || removed {
+		t.Errorf("removed %v, %v", removed, err)
+	}
+	if b, _ := os.ReadFile(settings); string(b) != doc {
+		t.Errorf("the file changed:\n%s", b)
+	}
+}
+
+// "hooks": null or [] holds no hook: install puts one there, uninstall finds
+// nothing. Any other hooks value that is not an object is named, not called
+// unreadable.
+func TestHooksThatAreNullOrEmptyAreNoHooks(t *testing.T) {
+	for _, doc := range []string{`{"hooks":null}`, `{"hooks":[]}`, `{"theme":"x","hooks": null }`} {
+		settings := filepath.Join(t.TempDir(), "settings.json")
+		if err := os.WriteFile(settings, []byte(doc), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if removed, err := Uninstalled(settings); err != nil || removed {
+			t.Errorf("%s: uninstall %v, %v", doc, removed, err)
+		}
+		if _, change, err := Installed(settings, Command("/x/reap"), false); err != nil || change != Added {
+			t.Errorf("%s: install %v, %v", doc, change, err)
+		}
+		if _, change, err := Installed(settings, Command("/x/reap"), false); err != nil || change != Unchanged {
+			t.Errorf("%s: installed twice %v, %v", doc, change, err)
+		}
+	}
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(settings, []byte(`{"hooks":"oops"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Installed(settings, Command("/x/reap"), false); err == nil || !strings.Contains(err.Error(), `"hooks" is not an object`) {
+		t.Errorf("a string hooks: %v", err)
+	}
+}

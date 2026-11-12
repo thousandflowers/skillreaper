@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -115,7 +116,23 @@ func hintRewriter(invoked string, args []string) func([]byte) []byte {
 	}
 	re := regexp.MustCompile(`(^|[\s\x60(])reap ((?:` + strings.Join(names, "|") + `))`)
 	with := []byte("${1}" + invoked + " ${2}")
-	return func(p []byte) []byte { return re.ReplaceAll(p, with) }
+	pad := []byte(strings.Repeat(" ", len(invoked)-len("reap")))
+	return func(p []byte) []byte {
+		lines := bytes.SplitAfter(p, []byte("\n"))
+		moved := false // the line before was rewritten, or carries on one that was
+		for i, line := range lines {
+			switch {
+			case re.Match(line):
+				lines[i], moved = re.ReplaceAll(line, with), true
+			case moved && bytes.HasPrefix(line, []byte("   ")):
+				// a description carried on below a rewritten command moves with it
+				lines[i] = append(slices.Clone(pad), line...)
+			default:
+				moved = false
+			}
+		}
+		return bytes.Join(lines, nil)
+	}
 }
 
 // File lets terminal checks see through the tracker.

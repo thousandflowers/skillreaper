@@ -166,6 +166,7 @@ func tempHome(t *testing.T) string {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "") // a real one set on this machine would take the tests there
 	return home
 }
 

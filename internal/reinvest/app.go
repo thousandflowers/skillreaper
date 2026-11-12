@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -73,7 +74,7 @@ func newApp(stdin io.Reader, stdout, stderr io.Writer) *app {
 	a := &app{
 		cacheDir:       defaultCacheDir(),
 		stateDir:       defaultStateDir(),
-		projectsDir:    filepath.Join(homeDir(), ".claude", "projects"),
+		projectsDir:    filepath.Join(claudeDir(), "projects"),
 		stdin:          stdin,
 		term:           stdout,
 		termTTY:        isTerminal(stdout),
@@ -117,6 +118,19 @@ var (
 	executable  = os.Executable
 	createLog   = func(path string) (io.WriteCloser, error) { return os.Create(path) }
 )
+
+// claudeDir is Claude Code's folder: CLAUDE_CONFIG_DIR when set, as Claude
+// Code and reap read it, else ~/.claude.
+func claudeDir() string {
+	d := os.Getenv("CLAUDE_CONFIG_DIR")
+	switch {
+	case d == "":
+		return filepath.Join(homeDir(), ".claude")
+	case d == "~" || strings.HasPrefix(d, "~/"):
+		return filepath.Join(homeDir(), d[1:])
+	}
+	return d
+}
 
 // homeDir is Path.home(): the environment first, then the user database.
 func homeDir() string {

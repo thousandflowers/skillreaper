@@ -30,8 +30,9 @@ readme-numbers:
 	dir="$$(mktemp -d)/hero-claude"; \
 	SOURCE_DATE_EPOCH="$$(docs/gif-helpers/hero-fixture.sh "$$dir")"; \
 	export SOURCE_DATE_EPOCH; \
+	SKILLREAPER_STATE_DIR="$$(mktemp -d)"; export SKILLREAPER_STATE_DIR; \
 	reap() { go run ./cmd/reap -claude-dir "$$dir" -claude-json "$$dir/.claude.json" \
-		-no-nudge -no-color "$$@"; }; \
+		-no-nudge -no-color -no-cache "$$@"; }; \
 	trim() { awk 'NF { seen = 1 } seen { buf[++n] = $$0 } \
 		END { while (n > 0 && buf[n] ~ /^[[:space:]]*$$/) n--; \
 		      for (i = 1; i <= n; i++) print buf[i] }'; }; \

@@ -84,7 +84,28 @@ func parseArgs(args []string, stdout, stderr io.Writer) (opts options, code int,
 		fmt.Fprintf(stderr, "reap reinvest: error: %v\n", err)
 		return opts, exitUsage, false
 	}
+	if why := badArgs(opts); why != "" {
+		fmt.Fprintln(stderr, usageLine)
+		fmt.Fprintf(stderr, "reap reinvest: error: %s\n", why)
+		return opts, exitUsage, false
+	}
 	return opts, exitOK, true
+}
+
+// maxDays is reap's own ceiling: past a century the date arithmetic wraps.
+const maxDays = 36500
+
+// badArgs says why parsed arguments cannot do what they say, or "".
+func badArgs(opts options) string {
+	switch {
+	case opts.days < 1 || opts.days > maxDays:
+		return fmt.Sprintf("--days must be between 1 and %d, got %d: no day reads no session, and past a century the window wraps", maxDays, opts.days)
+	case opts.max < 1:
+		return fmt.Sprintf("--max must be at least 1, got %d", opts.max)
+	case opts.mcp && !opts.online:
+		return "--mcp works with --online only: without it no server is searched"
+	}
+	return ""
 }
 
 // Run is `reap reinvest`. args are what follows the subcommand (--dry-run,
@@ -140,12 +161,23 @@ func (a *app) run(opts options) error {
 // one command that sends anything off the machine.
 const claudeNotice = "experimental · reinvest runs `claude -p` on your Claude Code account and sends it excerpts of your sessions and your skills' names and descriptions"
 
+// noticeFor is claudeNotice, and with --online where the searches go.
+func noticeFor(opts options) string {
+	switch {
+	case opts.online && opts.mcp:
+		return claudeNotice + "; it also sends search words drawn from them to skills.sh and the MCP registry"
+	case opts.online:
+		return claudeNotice + "; it also sends search words drawn from them to skills.sh"
+	}
+	return claudeNotice
+}
+
 // pipeline reads, groups, finds candidates and verifies them.
 func (a *app) pipeline(opts options) (outcome, error) {
 	if _, err := a.lookPath(claudeCLI); err != nil { // every path asks Claude: fail before reading anything
 		return outcome{}, errNoClaude
 	}
-	fmt.Fprintf(a.term, "  %s\n\n", claudeNotice)
+	fmt.Fprintf(a.term, "  %s\n\n", noticeFor(opts))
 	a.step("reading sessions", false)
 	state, err := a.loadReapState()
 	if err != nil {

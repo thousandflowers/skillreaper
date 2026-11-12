@@ -19,3 +19,12 @@ func TestAFileWithAByteOrderMarkIsMutedAndKeepsItsMark(t *testing.T) {
 		t.Errorf("removed %q", removed)
 	}
 }
+
+// A file that opens with --- and never closes it has no frontmatter, as the
+// scanner reads it: mute finds no description in its body to strip.
+func TestAnUnclosedHeaderIsNoFrontmatter(t *testing.T) {
+	doc := []byte("---\n\nSome text\ndescription: not frontmatter\n\nmore\n")
+	if rest, _, found := splitKey(doc, false); found || !bytes.Equal(rest, doc) {
+		t.Errorf("found %v, rest %q", found, rest)
+	}
+}

@@ -129,8 +129,8 @@ func Installed(settingsPath, command string, dryRun bool) ([]byte, Change, error
 		if err != nil {
 			return nil, Unchanged, err
 		}
-		if out, err = jsonedit.Append(doc, entry, sessionStartPath...); err != nil {
-			return nil, Unchanged, fmt.Errorf("unreadable settings %s: %w", settingsPath, err)
+		if out, err = appendGroup(doc, entry); err != nil {
+			return nil, Unchanged, fmt.Errorf("settings %s: %w", settingsPath, err)
 		}
 	}
 	if dryRun {
@@ -173,18 +173,19 @@ func Uninstalled(settingsPath string) (removed bool, err error) {
 	out := doc
 	// Backwards, so the indexes still to come stay valid as elements go.
 	for i := len(groups) - 1; i >= 0; i-- {
-		kept := len(groups[i].Hooks)
+		kept, ours := len(groups[i].Hooks), 0
 		for j := len(groups[i].Hooks) - 1; j >= 0; j-- {
 			if !isOurHook(groups[i].Hooks[j].Command) {
 				continue
 			}
 			kept--
+			ours++
 			path := append(slices.Clone(sessionStartPath), strconv.Itoa(i), "hooks", strconv.Itoa(j))
 			if out, _, err = jsonedit.Delete(out, path...); err != nil {
 				return false, err
 			}
 		}
-		if kept == 0 {
+		if kept == 0 && ours > 0 { // a group someone left empty is theirs to keep
 			if out, _, err = jsonedit.Delete(out, append(slices.Clone(sessionStartPath), strconv.Itoa(i))...); err != nil {
 				return false, err
 			}
@@ -255,6 +256,34 @@ func readSettings(path string) ([]byte, os.FileMode, error) {
 }
 
 // sessionStartGroups decodes just enough of the hooks to find commands.
+// appendGroup adds a SessionStart group. "hooks": null or [] holds no hook, so
+// a hooks object takes its place; any other hooks that is not an object is
+// named, as Claude Code would not read a hook there either.
+func appendGroup(doc, entry []byte) ([]byte, error) {
+	out, err := jsonedit.Append(doc, entry, sessionStartPath...)
+	if err == nil {
+		return out, nil
+	}
+	hooks, getErr := jsonedit.Get(doc, sessionStartPath[0])
+	switch v := string(bytes.TrimSpace(hooks)); {
+	case getErr != nil:
+		return nil, err
+	case v == "null" || strings.ReplaceAll(v, " ", "") == "[]":
+		return jsonedit.Set(doc, []byte(`{"SessionStart": [`+string(entry)+`]}`), sessionStartPath[0])
+	case !strings.HasPrefix(v, "{"):
+		return nil, fmt.Errorf(`"hooks" is not an object (%s): fix it by hand, Claude Code would not read a hook there`, firstWord(v))
+	}
+	return nil, err
+}
+
+// firstWord is the start of a JSON value, enough to name it in a message.
+func firstWord(v string) string {
+	if len(v) > 20 {
+		return v[:20] + "…"
+	}
+	return v
+}
+
 func sessionStartGroups(doc []byte) ([]group, error) {
 	raw, err := jsonedit.Get(doc, sessionStartPath...)
 	if errors.Is(err, jsonedit.ErrNotFound) {

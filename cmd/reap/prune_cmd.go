@@ -310,8 +310,11 @@ func printPrunePlan(opts options, stdout io.Writer, r *report.Report, candidates
 		total += row.Tokens
 	}
 	if named {
-		fmt.Fprintf(stdout, "\n🧹  reap says %s (%s) · reclaim ~%s tok/session\n\n",
-			candidates[0].Verdict, candidates[0].Reason, report.HumanNum(total))
+		said := fmt.Sprintf("says %s (%s)", candidates[0].Verdict, candidates[0].Reason)
+		if candidates[0].Verdict == report.VerdictInfo { // muted, or a kind reap does not judge
+			said = fmt.Sprintf("gives it no verdict (%s)", candidates[0].Reason)
+		}
+		fmt.Fprintf(stdout, "\n🧹  reap %s · reclaim ~%s tok/session\n\n", said, report.HumanNum(total))
 	} else {
 		fmt.Fprintf(stdout, "\n🧹  %d %s unused · reclaim ~%s tok/session\n\n", len(candidates), report.Plural(len(candidates), "item"), report.HumanCount(total))
 	}

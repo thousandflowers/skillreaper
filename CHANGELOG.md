@@ -109,7 +109,8 @@ the same cache files and the same checks. What to know before running it:
 
 - It asks Claude, through `claude -p`, to group your sessions, write the skill
   and read every candidate: about twenty calls and a minute on a first run.
-  Nothing else reap does calls a model or the network.
+  It says so on its first line, before any call. Nothing else reap does calls
+  a model or the network.
 - Every candidate is read in full by Claude, twice, and by a set of risk rules
   first; one refusal is enough, and a refused document stays refused. A swap is
   all or nothing, and an existing skill of the same name is never replaced.

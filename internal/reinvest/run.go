@@ -136,8 +136,13 @@ func (a *app) run(opts options) error {
 	return a.show(result, opts.dryRun)
 }
 
+// claudeNotice is printed before the first `claude -p` call: reinvest is the
+// one command that sends anything off the machine.
+const claudeNotice = "experimental · reinvest runs `claude -p` on your Claude Code account and sends it excerpts of your sessions"
+
 // pipeline reads, groups, finds candidates and verifies them.
 func (a *app) pipeline(opts options) (outcome, error) {
+	fmt.Fprintf(a.term, "  %s\n\n", claudeNotice)
 	a.step("reading sessions", false)
 	state, err := a.loadReapState()
 	if err != nil {

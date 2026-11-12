@@ -458,3 +458,26 @@ func TestRun_accepted_swaps_are_applied_only_after_a_yes(t *testing.T) {
 		t.Errorf("the answer took more than its line: %q is left", rest[:n])
 	}
 }
+
+func TestRun_says_it_calls_Claude_before_the_first_call(t *testing.T) {
+	a, _ := pipelineApp(t, verdict{Keep: true, Risk: noRisk, Fit: 4, Reason: "fits", Use: "Cuts your releases."})
+	ask := a.ask
+	shownFirst := false
+	asked := false
+	a.ask = func(prompt, body string, opts askOptions) (any, error) {
+		if !asked {
+			asked = true
+			shownFirst = strings.Contains(termText(a), claudeNotice)
+		}
+		return ask(prompt, body, opts)
+	}
+	if err := a.run(options{days: defaultDays, max: defaultSwaps, dryRun: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !asked {
+		t.Fatal("the pipeline never asked Claude")
+	}
+	if !shownFirst {
+		t.Errorf("Claude was asked before the terminal said so:\n%s", termText(a))
+	}
+}

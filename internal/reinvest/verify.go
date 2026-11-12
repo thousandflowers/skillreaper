@@ -217,12 +217,11 @@ func checkedVerdict(answer any, doc string) verdict {
 	return verdict{Keep: true, Risk: noRisk, Fit: fit, Reason: oneLine(reason), Use: oneLine(use)}
 }
 
-func randomFence() (string, error) {
+// randomFence is a marker the document cannot guess, to close its data block.
+func randomFence() string {
 	raw := make([]byte, fenceBytes)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(raw), nil
+	_, _ = rand.Read(raw) // since Go 1.24 Read never fails: it ends the program instead
+	return hex.EncodeToString(raw)
 }
 
 // verifyOne checks one candidate: the size limit, then the rules, then Claude.
@@ -233,11 +232,7 @@ func (a *app) verifyOne(req verifyRequest) (verdict, error) {
 	if found := risks(req.Doc, false); len(found) > 0 {
 		return verdict{Keep: false, Reason: securityPrefix + found[0]}, nil
 	}
-	fence, err := randomFence()
-	if err != nil {
-		a.logf("verify: no random marker: %v", err)
-		return failedVerdict, nil // without a marker the document could close the data block
-	}
+	fence := randomFence()
 	answer, err := a.ask(a.verifyPrompt, verifyBody(req, fence), askOptions{think: true, effort: a.verifyEffort, parse: verdictJSON})
 	if err != nil {
 		return failedVerdict, err

@@ -109,12 +109,21 @@ func newApp(stdin io.Reader, stdout, stderr io.Writer) *app {
 	return a
 }
 
+// System calls whose failure has a branch of its own. They are variables only
+// so a test can make each one fail; the program never changes them.
+var (
+	currentUser = user.Current
+	removeAll   = os.RemoveAll
+	executable  = os.Executable
+	createLog   = func(path string) (io.WriteCloser, error) { return os.Create(path) }
+)
+
 // homeDir is Path.home(): the environment first, then the user database.
 func homeDir() string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		return home
 	}
-	if u, err := user.Current(); err == nil {
+	if u, err := currentUser(); err == nil {
 		return u.HomeDir
 	}
 	return ""
@@ -129,8 +138,10 @@ func envOr(name, fallback string) string {
 
 // cacheBase is the user cache directory as reap's own os.UserCacheDir picks
 // it, so reap reads what reinvest leaves here.
-func cacheBase() string {
-	switch runtime.GOOS {
+func cacheBase() string { return cacheBaseOn(runtime.GOOS) }
+
+func cacheBaseOn(goos string) string {
+	switch goos {
 	case "darwin":
 		return filepath.Join(homeDir(), "Library", "Caches")
 	case "windows":
@@ -143,9 +154,11 @@ func defaultCacheDir() string { return filepath.Join(cacheBase(), toolDirName, s
 
 // defaultStateDir is where what cannot be fetched again lives. A cache folder
 // can be emptied at any time, by the system or a cleaner.
-func defaultStateDir() string {
+func defaultStateDir() string { return stateDirOn(runtime.GOOS) }
+
+func stateDirOn(goos string) string {
 	var base string
-	switch runtime.GOOS {
+	switch goos {
 	case "darwin":
 		base = filepath.Join(homeDir(), "Library", "Application Support")
 	case "windows":

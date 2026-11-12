@@ -46,7 +46,10 @@ func parseDigits(text string, underscores bool) (int, bool) {
 		digits++
 		lastWasDigit = true
 	}
-	return n, digits > 0 && lastWasDigit
+	if digits == 0 || !lastWasDigit {
+		return 0, false // "1_" is no number: not 1, which a caller ignoring ok would take
+	}
+	return n, true
 }
 
 // pyInt is int(v or 0) for a JSON value: ok is false where Python would raise.

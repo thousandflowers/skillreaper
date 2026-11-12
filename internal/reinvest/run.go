@@ -117,7 +117,7 @@ func (a *app) run(opts options) error {
 	if err := os.MkdirAll(a.cacheDir, sharedDir); err != nil {
 		return err
 	}
-	log, err := os.Create(a.cachePath(logFile)) // library chatter goes to the log; the terminal gets steps
+	log, err := createLog(a.cachePath(logFile)) // library chatter goes to the log; the terminal gets steps
 	if err != nil {
 		return err
 	}

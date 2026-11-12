@@ -120,7 +120,7 @@ func create(c candidate) error {
 		err = os.Symlink(home, link)
 	}
 	if err != nil {
-		if undo := os.RemoveAll(home); undo != nil { // the folder this call made a moment ago
+		if undo := removeAll(home); undo != nil { // the folder this call made a moment ago
 			return fmt.Errorf("%w (and %s could not be removed: %v)", err, home, undo)
 		}
 		return err
@@ -238,7 +238,7 @@ func reapCommand() ([]string, error) {
 		}
 		return pyFields(value), nil
 	}
-	binary, err := os.Executable()
+	binary, err := executable()
 	if err != nil {
 		return nil, err
 	}

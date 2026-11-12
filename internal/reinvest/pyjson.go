@@ -138,8 +138,9 @@ func truthy(v any) bool {
 }
 
 // jsonEqual is == between two JSON values: objects compare without order,
-// and 1 equals 1.0 as in Python.
+// and 1 equals 1.0 and True as in Python.
 func jsonEqual(a, b any) bool {
+	a, b = boolAsInt(a), boolAsInt(b)
 	switch x := a.(type) {
 	case []any:
 		y, ok := b.([]any)
@@ -166,14 +167,30 @@ func jsonEqual(a, b any) bool {
 		return true
 	case int64:
 		if f, ok := b.(float64); ok {
-			return float64(x) == f
+			return intEqualsFloat(x, f)
 		}
 	case float64:
 		if n, ok := b.(int64); ok {
-			return x == float64(n)
+			return intEqualsFloat(n, x)
 		}
 	}
 	return a == b
+}
+
+// boolAsInt is a bool as the int it is in Python (True == 1).
+func boolAsInt(v any) any {
+	if b, ok := v.(bool); ok {
+		if b {
+			return int64(1)
+		}
+		return int64(0)
+	}
+	return v
+}
+
+// intEqualsFloat compares exactly, as Python does: 2**53 + 1 != 2.0**53.
+func intEqualsFloat(n int64, f float64) bool {
+	return f == math.Trunc(f) && f >= math.MinInt64 && f < -math.MinInt64 && int64(f) == n
 }
 
 // ---------------------------------------------------------------------------
@@ -394,10 +411,9 @@ func (r *jsonReader) number() (any, error) {
 	}
 	text := r.src[start:r.pos]
 	if isFloat {
-		f, err := strconv.ParseFloat(text, 64)
-		if err != nil && !errors.Is(err, strconv.ErrRange) {
-			return nil, r.fail("bad number")
-		}
+		// The text is a JSON number, so the only error is ErrRange, and its ±Inf or 0
+		// is what Python gives too.
+		f, _ := strconv.ParseFloat(text, 64)
 		return f, nil
 	}
 	if n, err := strconv.ParseInt(text, 10, 64); err == nil {

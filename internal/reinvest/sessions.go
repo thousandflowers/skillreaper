@@ -129,7 +129,8 @@ func lessByParts(a, b string) bool {
 func (a *app) transcriptPaths() []string {
 	var paths []string
 	root := a.projectsDir + string(filepath.Separator) // a linked projects folder is followed, as rglob does
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	// The walk itself has no error to give: the callback logs each one and goes on.
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			a.logf("transcripts: %v", err)
 			if d != nil && d.IsDir() {
@@ -142,9 +143,6 @@ func (a *app) transcriptPaths() []string {
 		}
 		return nil
 	})
-	if err != nil {
-		a.logf("transcripts: %v", err)
-	}
 	sort.Slice(paths, func(i, j int) bool { return lessByParts(paths[i], paths[j]) })
 	return paths
 }

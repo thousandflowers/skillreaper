@@ -73,11 +73,7 @@ func (a *app) writeSkill(gap kind, conversations [][]string, installed []skill) 
 		}
 		convs[i] = "Conversation " + strconv.Itoa(i+1) + ":\n" + strings.Join(lines, "\n")
 	}
-	fence, err := randomFence()
-	if err != nil {
-		a.logf("write: no random marker: %v", err)
-		return writtenSkill{}, false, nil
-	}
+	fence := randomFence()
 	body := "KIND OF WORK: " + gap.Name + "\nTASK: " + gap.Task + "\n\nInstalled skills closest to this work:\n" +
 		skillLines(closestInstalled(gap.Task, installed, closestForWriting), defaultLineWidth) +
 		"\n\n<data-" + fence + ">\n" + strings.Join(convs, "\n\n") + "\n</data-" + fence + ">"

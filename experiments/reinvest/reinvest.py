@@ -278,6 +278,10 @@ def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict], r
         cache = json.loads(cache_file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         cache = {}
+    # the cache is read, never trusted: an entry whose name is no slug (a path) is dropped
+    cache = {k: v for k, v in (cache.items() if isinstance(cache, dict) else [])
+             if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str) and isinstance(v[1], str)
+             and llm.SLUG_RE.fullmatch(v[0])}
     by_id = {s["id"]: s for s in sessions}
     keys = [hashlib.sha256("\0".join([llm.WRITE_PROMPT, g["name"], g["task"], *sorted(g["ids"])]).encode()).hexdigest()
             for g in gaps]  # a new prompt rewrites every skill

@@ -317,7 +317,7 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 	}
 
 	if e.Verdict == VerdictMute {
-		field("firing rate", fmt.Sprintf("%.0f%% (below %.0f%% threshold)",
+		field("uses per session", fmt.Sprintf("%.0f%% (below %.0f%% threshold)",
 			e.FiringRate*100, e.MuteThreshold*100))
 	}
 

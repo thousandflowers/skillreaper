@@ -71,7 +71,7 @@ func runProcess(spec procSpec) procResult {
 	}
 	var stdout, stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err := cmd.Run()
+	err := runGrouped(cmd) // Ctrl-C meanwhile ends the step's whole group, then reinvest
 	res := procResult{stdout: decodeUTF8Replace([]byte(stdout.String())), stderr: decodeUTF8Replace([]byte(stderr.String()))}
 	var exit *exec.ExitError
 	switch {

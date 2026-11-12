@@ -54,7 +54,10 @@ func blocks(entry *obj) []*obj {
 // userText is the text the person typed. ok is false for tool results, meta
 // and sidechain entries.
 func userText(entry *obj) (string, bool) {
-	if entry.val("type") != "user" || truthy(entry.val("isMeta")) || truthy(entry.val("isSidechain")) {
+	// a compaction summary is a user entry the model wrote; meta and sidechain
+	// entries are not the person's either
+	if entry.val("type") != "user" || truthy(entry.val("isMeta")) || truthy(entry.val("isSidechain")) ||
+		truthy(entry.val("isCompactSummary")) || truthy(entry.val("isVisibleInTranscriptOnly")) {
 		return "", false
 	}
 	var parts []string

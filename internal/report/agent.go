@@ -100,9 +100,22 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 		fmt.Fprintln(w, "\nTo prune: reap prune   (interactive, reversible via reap restore --all)")
 	}
 
+	// held back only when some were: a warning alone may be an advisory
+	held := 0
+	for _, row := range r.Rows {
+		if row.Reason == ReasonNoEvidence {
+			held++
+		}
+	}
+	if held > 0 {
+		its := "its usage"
+		if held > 1 {
+			its = "their usage"
+		}
+		fmt.Fprintf(w, "\n%d %s held back from a REAP verdict: %s could not be read.\n", held, Plural(held, "item"), its)
+	}
 	if len(r.Warnings) > 0 {
-		fmt.Fprintf(w, "\n%d %s — some evidence was incomplete; those items were held back from a REAP verdict.\n",
-			len(r.Warnings), Plural(len(r.Warnings), "warning"))
+		fmt.Fprintf(w, "\n%d %s — run reap for details.\n", len(r.Warnings), Plural(len(r.Warnings), "warning"))
 	}
 
 	fmt.Fprintf(w, "\n%s\n", agentSignature)

@@ -28,7 +28,7 @@ TOKENS  CATEGORY  NAME                 VERDICT  REASON
 
 To prune: reap prune   (interactive, reversible via reap restore --all)
 
-1 warning — some evidence was incomplete; those items were held back from a REAP verdict.
+1 warning — run reap for details.
 
 measured by skillreaper · github.com/thousandflowers/skillreaper
 ```
@@ -378,7 +378,7 @@ reap uninstall-hook           # remove hook, other hooks untouched
 reap --json                   # structured JSON output
 reap --md                     # markdown report
 reap --days 7                 # shorter evidence window
-reap --mute-threshold 0.20    # firing rate below which MUTE triggers (default 20%)
+reap --mute-threshold 0.20    # uses ÷ sessions below which MUTE triggers (default 20%)
 reap version                  # print version
 ```
 

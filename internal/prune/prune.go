@@ -229,7 +229,9 @@ func chosenRoot(root, src string) string {
 // itemPath is what an item is on disk. A skill is its whole directory, not just
 // SKILL.md.
 func itemPath(it scan.Item) string {
-	if filepath.Base(it.Path) == "SKILL.md" {
+	// a skill's SKILL.md only: an agent file named SKILL.md is the agent, and its
+	// folder is every agent there
+	if it.Category == scan.CatSkill && filepath.Base(it.Path) == "SKILL.md" {
 		return filepath.Dir(it.Path)
 	}
 	return it.Path

@@ -298,7 +298,7 @@ func cmdUnmute(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		res, err = mute.Unmute(opts.claudeDir, name)
 	}
 	for _, e := range res.Cleared {
-		fmt.Fprintf(stdout, "%s: its file is gone (moved by a plugin update, or deleted), so there is nothing to unmute. Taken off the list. Its old copy is at %s\n", e.Name, e.Backup)
+		fmt.Fprintf(stdout, "%s: its file is gone (moved by a plugin update, or deleted), so there is nothing to unmute. Taken off the list. Its old copy is at %s\n", e.Name, shown(e.Backup))
 	}
 	switch {
 	case opts.all:

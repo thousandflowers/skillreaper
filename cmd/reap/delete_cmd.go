@@ -42,12 +42,12 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "\n  %-6s  %s\n  %s\n", row.Category, row.Name, row.Path)
+	fmt.Fprintf(stdout, "\n  %-6s  %s\n  %s\n", row.Category, row.Name, shown(row.Path))
 	if row.PrunedCopyID != "" {
 		fmt.Fprintf(stdout, "  A copy is in quarantine (id %s). It stays there: reap restore %s can still bring that one back.\n", row.PrunedCopyID, row.PrunedCopyID)
 	}
 	if row.LinkTarget != "" {
-		fmt.Fprintf(stdout, "  This is a link: the link goes, and what it points to stays at %s\n", row.LinkTarget)
+		fmt.Fprintf(stdout, "  This is a link: the link goes, and what it points to stays at %s\n", shown(row.LinkTarget))
 	}
 	printChosenNote(stdout, row)
 	if !opts.yes && !confirm(stdin, stderr, fmt.Sprintf("\nDelete %s for good? This cannot be restored, not even with reap restore. [y/N] ", row.Name)) {
@@ -76,3 +76,7 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 	fmt.Fprintf(stdout, "deleted %s for good\n", row.Name)
 	return 0
 }
+
+// shown is a path as it may be printed: a folder name can hold escape
+// sequences, and Path stays raw in a row because prune and mute act on it.
+func shown(path string) string { return scan.SafeText(path) }

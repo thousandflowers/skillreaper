@@ -179,7 +179,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.IntVar(&opts.minSessions, "min-sessions", 10, "sessions required before REAP verdicts")
 	fs.IntVar(&opts.graceDays, "grace-days", 14, "items installed this recently → REVIEW(grace)")
 	fs.IntVar(&opts.minTokens, "min-tokens", 3, "items below this token weight → KEEP(tiny)")
-	fs.Float64Var(&opts.muteThreshold, "mute-threshold", 0.20, "MUTE used skills fired in fewer than this fraction of sessions (0 disables)")
+	fs.Float64Var(&opts.muteThreshold, "mute-threshold", 0.20, "MUTE used skills whose uses number fewer than this fraction of the sessions: uses ÷ sessions, so 5 uses in one session count 5 (0 disables)")
 	fs.IntVar(&opts.muteMinTokens, "mute-min-tokens", 50, "only MUTE skills heavier than this token weight")
 	fs.StringVar(&opts.source, "source", "", "prune, mute: act only on items from this source (see the by-source summary)")
 	fs.Float64Var(&opts.routeThreshold, "route-threshold", 0.10, "route: skills fired in fewer than this fraction of sessions get routed behind a leaf router")
@@ -324,6 +324,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "version":
 		fmt.Fprintln(stdout, "reap", version())
 		return 0
+	case reinvestCommand: // reached only with a flag in front of it
+		fmt.Fprintf(stderr, "error: reinvest reads its own flags, so it comes first: reap reinvest %s\n", strings.Join(args[slices.Index(args, reinvestCommand)+1:], " "))
+		return 2
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		fs.Usage()
@@ -440,7 +443,7 @@ func outOfRangeFlags(opts options) []string {
 		// Both thresholds are documented as a fraction of sessions. Above 1.0
 		// the comparison is "fired in fewer than 100+% of sessions", which is
 		// true of everything, so every used item changes verdict.
-		{name: "--mute-threshold", val: opts.muteThreshold, min: 0, max: 1, why: "it is a fraction of sessions (0 disables)"},
+		{name: "--mute-threshold", val: opts.muteThreshold, min: 0, max: 1, why: "it is uses per session (0 disables)"},
 		{name: "--route-threshold", val: opts.routeThreshold, min: 0, max: 1, why: "it is a fraction of sessions"},
 	}
 
@@ -586,7 +589,9 @@ func dedupeByPath(items []scan.Item) []scan.Item {
 		if it.Category == scan.CatProse {
 			platformKey = ""
 		}
-		key := string(it.Category) + "\x00" + platformKey + "\x00" + it.Path + "\x00" + it.Name
+		// the source too: one config file declares a server of the same name in
+		// several projects, and each is a server of its own
+		key := string(it.Category) + "\x00" + platformKey + "\x00" + it.Path + "\x00" + it.Name + "\x00" + it.Source
 		if seen[key] {
 			continue
 		}
@@ -1307,7 +1312,7 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 	// The key is one name, so it holds every copy of that name on every platform.
 	for _, row := range r.Rows {
 		if override.ItemKey(string(row.Category), row.Name) == itemKey {
-			fmt.Fprintf(stdout, "  covers %s: %s\n", row.Platform, row.Path)
+			fmt.Fprintf(stdout, "  covers %s: %s\n", row.Platform, shown(row.Path))
 		}
 	}
 	fmt.Fprintf(stdout, "This item will be excluded from prune. Undo: reap keep --remove %s\n", itemKey)
@@ -1373,7 +1378,7 @@ func findRow(r *report.Report, typed string, eligible func(report.Row) bool) ([]
 	}
 	lines := make([]string, len(matches))
 	for i, m := range matches {
-		lines[i] = fmt.Sprintf("  %s:%s:%s  %s", m.Platform, m.Category, m.Name, m.Path)
+		lines[i] = fmt.Sprintf("  %s:%s:%s  %s", m.Platform, m.Category, m.Name, shown(m.Path))
 	}
 	return nil, fmt.Errorf("%s matches %d items; name one of them, by this form or by its path:\n%s", typed, len(matches), strings.Join(lines, "\n"))
 }
@@ -1532,7 +1537,7 @@ func nudgeText(dead, mute int) string {
 	if mute > 0 {
 		parts = append(parts, fmt.Sprintf("%d %s to mute", mute, report.Plural(mute, "item")))
 	}
-	return "skillreaper: " + strings.Join(parts, " and ") + " since the last check. Run `reap` to review."
+	return "skillreaper: " + strings.Join(parts, " and ") + ", more than at the last check. Run `reap` to review."
 }
 
 // cmdNudge is the SessionStart hook entry point: a passive, at-most-weekly
@@ -1718,7 +1723,7 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 	}
 	for _, m := range matches {
 		if len(matches) > 1 {
-			fmt.Fprintf(stdout, "%s: %s\n", m.Platform, m.Path)
+			fmt.Fprintf(stdout, "%s: %s\n", m.Platform, shown(m.Path))
 		}
 		report.RenderWhy(stdout, explain(m), colorEnabled(opts, stdout))
 	}

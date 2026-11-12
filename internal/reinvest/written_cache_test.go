@@ -40,3 +40,17 @@ func TestWrittenCache_is_bounded(t *testing.T) {
 		t.Errorf("%d kept, want the cap %d", n, writtenCacheCap)
 	}
 }
+
+// The cache is read, never trusted: an entry whose name is no slug reinvest
+// would have written (a path, say) is dropped, not offered.
+func TestWrittenCache_an_entry_with_no_valid_name_is_dropped(t *testing.T) {
+	a := fakeApp(t)
+	writeFile(t, a.cachePath(writtenFile), `{"k1": ["../../../escaped", "---\nname: x\n---\n"], "k2": ["fine-name", "---\nname: fine-name\n---\n"]}`)
+	got := a.loadWritten()
+	if _, has := got["k1"]; has {
+		t.Error("a cached entry named ../../../escaped was taken")
+	}
+	if _, has := got["k2"]; !has {
+		t.Error("a good entry was dropped")
+	}
+}

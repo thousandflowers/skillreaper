@@ -295,7 +295,7 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 func printChosenNote(stdout io.Writer, row report.Row) {
 	switch {
 	case row.ViaLink != "":
-		fmt.Fprintf(stdout, "  This is a link: the link goes, and what it points to stays at %s\n", row.ViaLink)
+		fmt.Fprintf(stdout, "  This is a link: the link goes, and what it points to stays at %s\n", shown(row.ViaLink))
 	case report.IsPluginSource(row.Source):
 		fmt.Fprintf(stdout, "  This is part of %s: an update can bring it back.\n", strings.TrimPrefix(row.Source, "plugin:"))
 	case !row.Removable && row.LinkTarget == "":
@@ -488,7 +488,7 @@ func pruneNameMiss(r *report.Report, name string) string {
 		if report.IsPluginSource(row.Source) {
 			return fmt.Sprintf("error: %s is inside a plugin and can only be disabled via /plugin in Claude Code", row.Name)
 		}
-		return fmt.Sprintf("error: %s %s cannot be removed by reap; edit %s by hand", row.Category, row.Name, row.Path)
+		return fmt.Sprintf("error: %s %s cannot be removed by reap; edit %s by hand", row.Category, row.Name, shown(row.Path))
 	}
 	return fmt.Sprintf("error: no skill, agent or MCP server found: %s", name)
 }

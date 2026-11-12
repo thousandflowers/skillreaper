@@ -136,6 +136,17 @@ really injected, with multi-line descriptions read in full.
   a mute with no match lists the sources there are.
 - A joined emoji in a name shows as its emoji in the menu, not with
   replacement marks.
+- Pruning an agent whose file is named `SKILL.md` moves that file, not the
+  whole agents folder.
+- MCP servers of one name in several projects are each listed; one of them,
+  picked at random, used to stand for all.
+- `--agent` says items were held back from REAP only when some were.
+- `--mute-threshold` is described as what it counts: uses ÷ sessions.
+- Paths reap prints (delete's confirmation among them) carry no control
+  characters from a folder's name.
+- `install-hook` repairs every stale hook of ours, not the last one.
+- `reap <flag> reinvest` says reinvest comes first, instead of calling it
+  unknown.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -199,8 +210,11 @@ the same cache files and the same checks. What to know before running it:
 - `--days` outside 1–36500, `--max` under 1, and `--mcp` without `--online` are
   refused; with `--online` the first line also names skills.sh (and the MCP
   registry).
-- A step that runs out of time ends with everything it started (npx, node,
-  git), and a skill a failed step half wrote is taken out again.
+- A step that runs out of time, or is cut short by Ctrl-C, ends with
+  everything it started (npx, node, git), and a skill a failed step half
+  wrote is taken out again.
+- Claude Code's compaction summaries are not read as messages you wrote.
+- A cached written skill whose name is no slug (a path) is dropped.
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

@@ -118,7 +118,7 @@ func (a *app) loadWritten() map[string]writtenSkill {
 		}
 		slug, okSlug := pair[0].(string)
 		doc, okDoc := pair[1].(string)
-		if okSlug && okDoc {
+		if okSlug && okDoc && writtenSlugRE.MatchString(slug) { // the cache is read, never trusted: a path is no name
 			out[key] = writtenSkill{slug, doc}
 		}
 	}

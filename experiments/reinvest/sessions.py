@@ -39,7 +39,9 @@ def blocks(entry: dict) -> list[dict]:
 
 def user_text(entry: dict) -> str | None:
     """Text the person typed, or None for tool results, meta and sidechain entries."""
-    if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isSidechain"):
+    # a compaction summary is a user entry the model wrote
+    if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isSidechain") \
+            or entry.get("isCompactSummary") or entry.get("isVisibleInTranscriptOnly"):
         return None
     parts = []
     for b in blocks(entry):

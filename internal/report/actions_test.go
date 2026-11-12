@@ -35,3 +35,19 @@ func TestSourceIsTakesAnIdOrAOneSourceLabel(t *testing.T) {
 		}
 	}
 }
+
+// The --agent footer says items were held back only when some were; a
+// warning alone (a retention advisory, say) is counted, not explained away.
+func TestTheAgentFooterSaysOnlyWhatHappened(t *testing.T) {
+	advisory := &Report{Warnings: []scan.Warning{{Msg: "oldest transcript is 28 days old", Advisory: true}}}
+	held := &Report{Warnings: advisory.Warnings, Rows: []Row{{Item: scan.Item{Category: scan.CatSkill, Name: "x"}, Verdict: VerdictReview, Reason: ReasonNoEvidence}}}
+	var a, b bytes.Buffer
+	RenderAgent(&a, advisory, 10)
+	RenderAgent(&b, held, 10)
+	if strings.Contains(a.String(), "held back") || !strings.Contains(a.String(), "1 warning — run reap for details") {
+		t.Errorf("advisory only:\n%s", a.String())
+	}
+	if !strings.Contains(b.String(), "1 item held back from a REAP verdict: its usage could not be read") {
+		t.Errorf("one held back:\n%s", b.String())
+	}
+}

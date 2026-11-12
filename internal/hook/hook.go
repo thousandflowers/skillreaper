@@ -110,19 +110,25 @@ func Installed(settingsPath, command string, dryRun bool) ([]byte, Change, error
 			if !isOurHook(h.Command) {
 				continue
 			}
+			if change == Added {
+				change = Unchanged // ours is there: only a stale one changes this
+			}
 			if h.Command == command {
-				return doc, Unchanged, nil
+				continue
 			}
 			value, err := marshalNoEscape(command)
 			if err != nil {
 				return nil, Unchanged, err
 			}
 			path := append(slices.Clone(sessionStartPath), strconv.Itoa(i), "hooks", strconv.Itoa(j), "command")
-			if out, err = jsonedit.Set(doc, value, path...); err != nil {
+			if out, err = jsonedit.Set(out, value, path...); err != nil { // on out: every stale one, not the last
 				return nil, Unchanged, err
 			}
 			change = Updated
 		}
+	}
+	if change == Unchanged {
+		return doc, Unchanged, nil
 	}
 	if change == Added {
 		entry, err := marshalNoEscape(group{Hooks: []cmdEntry{{Type: "command", Command: command}}})

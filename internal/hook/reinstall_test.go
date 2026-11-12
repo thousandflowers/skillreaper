@@ -100,3 +100,28 @@ func TestTheNudgeBaselineFollowsACleanupDown(t *testing.T) {
 		t.Errorf("one count down, one up: %+v, %v", got, changed)
 	}
 }
+
+// Two hooks of ours (a file edited by hand) both point at this reap after an
+// install: repairing one left the other naming a program that may be gone.
+func TestInstallRepairsEveryHookOfOurs(t *testing.T) {
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	doc := `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":` + quoteJSON(Command("/old1/reap")) + `}]},{"hooks":[{"type":"command","command":` + quoteJSON(Command("/old2/reap")) + `}]}]}}`
+	if err := os.WriteFile(settings, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, change, err := Installed(settings, Command("/new/reap"), false); err != nil || change != Updated {
+		t.Fatalf("install: %v, %v", change, err)
+	}
+	b, _ := os.ReadFile(settings)
+	if strings.Contains(string(b), "/old1/") || strings.Contains(string(b), "/old2/") {
+		t.Errorf("an old hook stayed:\n%s", b)
+	}
+	if _, change, _ := Installed(settings, Command("/new/reap"), false); change != Unchanged {
+		t.Errorf("both repaired, a second install says %v", change)
+	}
+}
+
+func quoteJSON(s string) string {
+	b, _ := marshalNoEscape(s)
+	return string(b)
+}

@@ -141,7 +141,10 @@ func (a *app) transcriptPaths() []string {
 			}
 			return nil
 		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), transcriptExt) && !hasPart(path, subagentsDir) {
+		// Only what is below the projects folder says whose transcript it is: the
+		// config folder may itself sit under a folder named "subagents".
+		below := strings.TrimPrefix(filepath.Clean(path), filepath.Clean(a.projectsDir))
+		if !d.IsDir() && strings.HasSuffix(d.Name(), transcriptExt) && !hasPart(below, subagentsDir) {
 			paths = append(paths, filepath.Clean(path))
 		}
 		return nil

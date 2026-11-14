@@ -44,6 +44,19 @@ class SessionWindow(unittest.TestCase):
         self.assertEqual(got, ["old"])
 
 
+    def test_a_subagents_folder_above_the_projects_folder_hides_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 3600))
+            projects = Path(d, "subagents", ".claude", "projects")
+            mine = projects / "p" / "mine.jsonl"
+            agent = projects / "p" / "x" / "subagents" / "agent.jsonl"
+            for path in (mine, agent):
+                path.parent.mkdir(parents=True)
+                path.write_text(json.dumps(entry(iso)) + "\n")
+            with mock.patch.object(sessions, "PROJECTS", projects):
+                got = [p.stem for p, _ in sessions.read_transcripts(120)]
+        self.assertEqual(got, ["mine"])
+
 class ReapTokens(unittest.TestCase):
     """Known issue 6: weights now match reap's formula (checked against all 301 installed skills)."""
 

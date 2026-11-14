@@ -115,7 +115,11 @@ reap version
 | Go | `rm $(which reap)` |
 | Binary | `rm /usr/local/bin/reap` (or wherever placed) |
 
-Clean up quarantine manifests (optional):
+`~/.claude/reaped` is not a cache. It holds every item you pruned (the only
+copy), the descriptions `reap mute` took out, your keep list and the backups
+of `.claude.json`. Before you uninstall, put back what you want to keep:
 ```bash
-rm -rf ~/.claude/reaped
+reap restore --all
+reap unmute --all
 ```
+After that the folder can go. Whatever is still in it goes for good.

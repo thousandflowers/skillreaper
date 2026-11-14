@@ -76,7 +76,7 @@ def read_transcripts(days: int):
     now = datetime.now(timezone.utc)
     oldest, newest = now - timedelta(days=days), now - timedelta(minutes=LIVE_MINUTES)
     for path in sorted(PROJECTS.rglob("*.jsonl")):
-        if "subagents" in path.parts:  # subagent transcripts hold no user prompts
+        if "subagents" in path.relative_to(PROJECTS).parts:  # subagent transcripts hold no user prompts
             continue
         try:
             # mtime only rules out old files: Claude Code later appends untimestamped metadata lines

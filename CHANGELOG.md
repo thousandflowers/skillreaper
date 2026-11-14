@@ -152,6 +152,12 @@ really injected, with multi-line descriptions read in full.
   suggestion. Esc pressed twice quickly is one Esc, not nothing.
 - The README lists Hermes as inventory only, as the code has it: its history
   is not parsed yet, so its items are REVIEW, never REAP.
+- `reap --agent` and `reap gap --agent` say `n/a`, not `0%`, when the window
+  holds no session, and the gap view says so in a line: nothing was read, so
+  nothing is measured.
+- INSTALL.md no longer offers `~/.claude/reaped` as leftovers to clear after
+  an uninstall: it holds the pruned items and the mute backups. It now says
+  to restore and unmute first.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -220,6 +226,8 @@ the same cache files and the same checks. What to know before running it:
   wrote is taken out again.
 - Claude Code's compaction summaries are not read as messages you wrote.
 - A cached written skill whose name is no slug (a path) is dropped.
+- A config folder kept under a folder named `subagents` has its sessions
+  read; only a `subagents` folder inside `projects` marks a subagent's.
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

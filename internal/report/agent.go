@@ -38,6 +38,16 @@ func PctOf(part, whole int) string {
 	return fmt.Sprintf("%d%%", p)
 }
 
+// pctSeen is PctOf for a ratio of what fired: with no session in the window
+// nothing was read, so there is no measurement to give, and "0%" would read as
+// "none of it is used".
+func pctSeen(part, whole, sessions int) string {
+	if sessions == 0 {
+		return "n/a"
+	}
+	return PctOf(part, whole)
+}
+
 // RenderAgent writes the report as compact plain text meant to be pasted
 // verbatim by an agent: no ANSI, no bars, no box drawing, no terminal-width
 // padding. Deterministic for a given Report — the same input always yields the
@@ -57,7 +67,7 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 
 	if r.Gap != nil && r.Gap.Loaded > 0 {
 		fmt.Fprintf(w, "%d/%d items fired · %s utilization\n",
-			r.Gap.Fired, r.Gap.Loaded, PctOf(r.Gap.Fired, r.Gap.Loaded))
+			r.Gap.Fired, r.Gap.Loaded, pctSeen(r.Gap.Fired, r.Gap.Loaded, r.Sessions))
 	} else {
 		fmt.Fprintln(w, "no items loaded")
 	}
@@ -165,8 +175,11 @@ func RenderGapAgent(w io.Writer, r *Report) {
 	}
 
 	g := r.Gap
-	fmt.Fprintf(w, "%d/%d items fired · %s utilization\n", g.Fired, g.Loaded, PctOf(g.Fired, g.Loaded))
-	fmt.Fprintf(w, "%d/%d tokens touched · %s token reach\n", g.FiredTok, g.LoadedTok, PctOf(g.FiredTok, g.LoadedTok))
+	if r.Sessions == 0 {
+		fmt.Fprintf(w, "no sessions in the last %d days: nothing was read, so nothing is measured\n", r.WindowDays)
+	}
+	fmt.Fprintf(w, "%d/%d items fired · %s utilization\n", g.Fired, g.Loaded, pctSeen(g.Fired, g.Loaded, r.Sessions))
+	fmt.Fprintf(w, "%d/%d tokens touched · %s token reach\n", g.FiredTok, g.LoadedTok, pctSeen(g.FiredTok, g.LoadedTok, r.Sessions))
 
 	fmt.Fprintln(w)
 	tw := newTable(w)
@@ -180,15 +193,15 @@ func RenderGapAgent(w io.Writer, r *Report) {
 			string(c.Category),
 			fmt.Sprintf("%d", c.Loaded),
 			fmt.Sprintf("%d", c.Fired),
-			PctOf(c.Fired, c.Loaded),
+			pctSeen(c.Fired, c.Loaded, r.Sessions),
 			fmt.Sprintf("%d", c.LoadedTok),
 			fmt.Sprintf("%d", c.FiredTok),
-			PctOf(c.FiredTok, c.LoadedTok),
+			pctSeen(c.FiredTok, c.LoadedTok, r.Sessions),
 		)
 	}
 	tw.flush()
 
-	if zeroWeight {
+	if zeroWeight && r.Sessions > 0 {
 		fmt.Fprintln(w, "\nREACH n/a means there are no loaded tokens to divide by: that weight lives")
 		fmt.Fprintln(w, "in tool schemas rather than in an injected description, so it is not counted.")
 	}

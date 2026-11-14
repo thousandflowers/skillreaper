@@ -391,3 +391,26 @@ func TestPctOf(t *testing.T) {
 		}
 	}
 }
+
+// With no session in the window nothing was read, so a ratio of fired items is
+// no measurement: the agent views say n/a, as the report and the gap view do,
+// and never "0%", which reads as "all of it is unused".
+func TestAgentViewsWithNoSessionsGiveNoPercent(t *testing.T) {
+	r := agentFixture()
+	r.Sessions = 0
+	for name, out := range map[string]string{"RenderAgent": renderAgentString(r), "RenderGapAgent": renderGapAgentString(r)} {
+		if strings.Contains(out, "%") {
+			t.Errorf("%s gives a percent with no sessions:\n%s", name, out)
+		}
+		if !strings.Contains(out, "n/a utilization") {
+			t.Errorf("%s: want n/a utilization:\n%s", name, out)
+		}
+	}
+	gap := renderGapAgentString(r)
+	if !strings.Contains(gap, "no sessions in the last 30 days") {
+		t.Errorf("RenderGapAgent does not say why:\n%s", gap)
+	}
+	if strings.Contains(gap, "tool schemas") {
+		t.Errorf("RenderGapAgent explains n/a by tool schemas when it is the missing sessions:\n%s", gap)
+	}
+}

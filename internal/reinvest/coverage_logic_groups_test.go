@@ -474,6 +474,19 @@ func TestLogicCov_transcriptPaths_without_a_projects_folder(t *testing.T) {
 	}
 }
 
+// A config folder that itself lives under a folder named "subagents" is not a
+// subagent's: only the part below the projects folder says what a transcript is.
+func TestTranscriptPaths_a_subagents_folder_above_the_projects_folder(t *testing.T) {
+	a := fakeApp(t)
+	a.projectsDir = filepath.Join(t.TempDir(), "subagents", ".claude", "projects")
+	writeFile(t, filepath.Join(a.projectsDir, "p", "mine.jsonl"), "{}\n")
+	writeFile(t, filepath.Join(a.projectsDir, "p", "x", "subagents", "agent.jsonl"), "{}\n")
+	got := a.transcriptPaths()
+	if len(got) != 1 || filepath.Base(got[0]) != "mine.jsonl" {
+		t.Errorf("paths %q, want only mine.jsonl", got)
+	}
+}
+
 func logicCovNeedsPermissions(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {

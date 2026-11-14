@@ -676,7 +676,7 @@ installed.</sub></p>
 |---|---|
 | **Claude Code** | ✅ |
 | **Codex CLI** | ✅ |
-| **Hermes** | ✅ |
+| **Hermes** | Inventory only (session history is in `state.db`, which skillreaper does not parse yet, so its items surface as REVIEW, never REAP) |
 | **OpenCode** | ✅ (usage evidence needs the `sqlite3` CLI; inventory-only without it) |
 | **Cursor** | Inventory only (no local transcripts) |
 | **OpenClaw** | Inventory only (no session history) |
@@ -690,8 +690,8 @@ installed.</sub></p>
    platforms are scanned. No flags needed.
 2. **Inventory** - scans skills, agents, MCP servers, hooks, and prose
    files across all detected platforms.
-3. **Evidence** - parses JSONL session transcripts (Claude Code, Codex CLI,
-   Hermes). Counts `tool_use` blocks and command invocations with timestamps.
+3. **Evidence** - parses JSONL session transcripts (Claude Code, Codex CLI).
+   Counts `tool_use` blocks and command invocations with timestamps.
    OpenCode's SQLite history is read via the `sqlite3` CLI (read-only) when it
    is on `PATH`; without it, OpenCode stays inventory-only.
 4. **Cost** - character weight (`ceil(chars / 3.7)`) + init parser tool
@@ -742,7 +742,7 @@ lazy tool loading. These two optimizations are complementary, not competing.
 - **100 % local**, zero dependencies, single static binary (Go ≥ 1.24)
 - **Multi-platform** - adding a new platform is one struct in
   `internal/platform/`
-- **Reversible quarantine** - never deletes, never destructive
+- **Reversible quarantine** - prune moves, never deletes; the only permanent removal is `reap delete`, which you name and confirm
 - **MIT licensed**
 
 ```

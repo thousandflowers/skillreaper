@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/thousandflowers/skillreaper/internal/clock"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/usage"
 )
@@ -333,13 +334,13 @@ func TestAgeAnswersStalenessNotDate(t *testing.T) {
 	if got := age(time.Time{}); got != "never" {
 		t.Errorf("zero time = %q, want never", got)
 	}
-	if got := age(time.Now()); got != "today" {
+	if got := age(clock.Now()); got != "today" {
 		t.Errorf("now = %q, want today", got)
 	}
-	if got := age(time.Now().AddDate(0, 0, -8)); got != "8d" {
+	if got := age(clock.Now().AddDate(0, 0, -8)); got != "8d" {
 		t.Errorf("8 days ago = %q", got)
 	}
-	if got := age(time.Now().AddDate(0, 0, -400)); got != "13mo" {
+	if got := age(clock.Now().AddDate(0, 0, -400)); got != "13mo" {
 		t.Errorf("400 days ago = %q", got)
 	}
 }

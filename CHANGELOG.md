@@ -147,6 +147,11 @@ really injected, with multi-line descriptions read in full.
 - `install-hook` repairs every stale hook of ours, not the last one.
 - `reap <flag> reinvest` says reinvest comes first, instead of calling it
   unknown.
+- In the menu, Option+arrow (Option as Meta) is no key, as other Alt keys
+  are; its tail no longer arrived as `[` and `a`, which chose every
+  suggestion. Esc pressed twice quickly is one Esc, not nothing.
+- The README lists Hermes as inventory only, as the code has it: its history
+  is not parsed yet, so its items are REVIEW, never REAP.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not

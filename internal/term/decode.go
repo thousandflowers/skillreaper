@@ -99,6 +99,13 @@ func (d *decoder) afterEsc() (Key, bool) {
 		return 0, false
 	case b == '\r' || b == '\n':
 		return KeyShiftEnter, true // ESC CR: what Terminal sends for Shift+Return when a profile binds it
+	case b == esc:
+		// Esc twice, or Alt (Option as Meta) plus a sequence such as ESC ESC [ A.
+		// The inner sequence is read whole, so none of it leaks as typed keys.
+		if k, _ := d.afterEsc(); k == KeyEsc {
+			return KeyEsc, true
+		}
+		return 0, false
 	}
 	return 0, false // Alt plus a key
 }

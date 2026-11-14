@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/thousandflowers/skillreaper/internal/clock"
 	"github.com/thousandflowers/skillreaper/internal/evidence"
 )
 
@@ -18,6 +19,11 @@ import (
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "skillreaper-test-state")
 	if err != nil {
+		panic(err)
+	}
+	// The fixtures date their sessions and files by the real clock; a
+	// SOURCE_DATE_EPOCH exported by the shell would pin reap to another day.
+	if err := os.Unsetenv(clock.EnvVar); err != nil {
 		panic(err)
 	}
 	if err := os.Setenv(evidence.StateDirEnv, dir); err != nil {

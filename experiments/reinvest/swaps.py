@@ -202,19 +202,28 @@ def _draw(scr, swaps: list[dict], cur: int):
 
     put(0, 2, "reinvest · swaps   ↑↓ swap · ←→ candidate · enter accept · p read · m mute on/off · q done",
         curses.A_BOLD)
-    y = 2
+    # The list lives between the title and the totals, and scrolls just far enough for the swap under the
+    # cursor (one row taller) to end above the totals: a swap nobody can see must not be one Enter away.
+    top, bottom = 2, h - 2
+    scroll = max(0, top + (cur + 1) * 4 + 1 - bottom)
+
+    def row(y: int, x: int, text: str, attr=0):
+        if top <= y - scroll < bottom:
+            put(y - scroll, x, text, attr)
+
+    y = top
     for i, s in enumerate(swaps):
         c, sel = s["cands"][s["idx"]], i == cur
         taken = any(o["ok"] and o is not s and o["cands"][o["idx"]]["name"] == c["name"] for o in swaps)
-        put(y, 2, f"{'✓' if s['ok'] else ' '}  mute      {mute_text(s)}",
+        row(y, 2, f"{'✓' if s['ok'] else ' '}  mute      {mute_text(s)}",
             curses.A_REVERSE if sel else 0)
         pick = f"◂ {c['name']} ▸" if len(s["cands"]) > 1 else c["name"]
-        put(y + 1, 5, f"{verb(c):<9} {pick}   {weight(c['cost'], c.get('installed', False))} · {kind_text(c)}"
+        row(y + 1, 5, f"{verb(c):<9} {pick}   {weight(c['cost'], c.get('installed', False))} · {kind_text(c)}"
             f"   {s['idx'] + 1}/{len(s['cands'])}"
             + ("   (already picked above)" if taken else ""), curses.A_BOLD if sel else 0)
-        put(y + 2, 15, f"for {c['gap']}")
+        row(y + 2, 15, f"for {c['gap']}")
         if sel:
-            put(y + 3, 15, c["why"], curses.A_DIM)
+            row(y + 3, 15, c["why"], curses.A_DIM)
             y += 1
         y += 4
     chosen = [s for s in swaps if s["ok"]]

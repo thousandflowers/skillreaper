@@ -145,6 +145,10 @@ func (a *menuApplier) Apply(picks []menu.Pick) []menu.Outcome {
 	if a.hold != nil {
 		defer a.hold()()
 	}
+	// Before the wait for the lock, which can last seconds: a Ctrl-C pressed
+	// then must stop the apply, not be lost and let all of it through.
+	stopped, release := applyGuard()
+	defer release()
 	lock, err := prune.AcquireLockWait(a.dir, stateLockWait)
 	if err != nil {
 		if errors.Is(err, prune.ErrLocked) {
@@ -156,8 +160,6 @@ func (a *menuApplier) Apply(picks []menu.Pick) []menu.Outcome {
 		return out
 	}
 	defer lock.Release()
-	stopped, release := applyGuard()
-	defer release()
 
 	notes := map[string]prune.Note{}
 	disabled := map[string]error{}

@@ -397,6 +397,13 @@ class WrittenSkills(unittest.TestCase):
         self.assertTrue(first[0]["created"])
         self.assertEqual(first[0]["gap"], "releasing (2 sessions)")
 
+    def test_a_write_with_no_answer_is_reported(self):
+        screen = io.StringIO()
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(sources, "CACHE", Path(d)), \
+                mock.patch.object(reinvest, "TERM", screen), mock.patch("llm.ask_json", return_value=None):
+            self.assertEqual(reinvest.created_for([self.gap], self.sessions, []), [])
+        self.assertIn("✗ 1 of 1 skills not written: no usable answer · trying again next run", screen.getvalue())
+
     def test_failed_write_not_cached(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(sources, "CACHE", Path(d)), \
                 mock.patch("llm.ask_json", side_effect=[None, self.answer]) as ask:

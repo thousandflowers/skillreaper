@@ -3,6 +3,7 @@ package scan
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // SafeText returns s with everything a terminal or a pasted report would act on
@@ -40,4 +41,25 @@ func RedactSecrets(s string) string {
 		s = p.re.ReplaceAllString(s, p.with)
 	}
 	return s
+}
+
+// plainShellRunes are the marks a shell reads as part of a word, wherever
+// they stand in it.
+const plainShellRunes = "-_./:@+,%="
+
+// ShellArg writes s as one word of a command line someone will paste: as it is
+// when a shell would read it whole, in single quotes otherwise. A name with a
+// space, a quote or a "$" must not turn into two arguments or into something
+// the shell expands.
+func ShellArg(s string) string {
+	plain := s != ""
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune(plainShellRunes, r) {
+			plain = false
+		}
+	}
+	if plain {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

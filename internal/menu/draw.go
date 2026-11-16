@@ -223,10 +223,25 @@ func (m *Menu) legend(h int, keys []string) {
 		}
 	}
 	rows = append(rows, row)
-	for n, text := range rows[:min(2, len(rows))] {
+	shown := rows[:min(2, len(rows))]
+	if len(rows) > len(shown) && strings.Contains(strings.Join(rows[len(shown):], sep), quitKey) {
+		// The way out is never the key that is cut: it takes the place of the
+		// last keys shown, as many as it needs.
+		last := strings.Split(shown[len(shown)-1], sep)
+		for len(last) > 0 && runes(strings.Join(last, sep)+sep+quitKey) > wd-6 {
+			last = last[:len(last)-1]
+		}
+		shown[len(shown)-1] = strings.Join(append(last, quitKey), sep)
+	}
+	for n, text := range shown {
 		m.put(h-2+n, 3, text, dim)
 	}
 }
+
+const (
+	sep     = " · "
+	quitKey = "q quit"
+)
 
 // strike runs a line through text. A space keeps its gap.
 func strike(s string) string {

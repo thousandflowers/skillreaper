@@ -161,6 +161,22 @@ really injected, with multi-line descriptions read in full.
 - INSTALL.md no longer offers `~/.claude/reaped` as leftovers to clear after
   an uninstall: it holds the pruned items and the mute backups. It now says
   to restore and unmute first.
+- Ctrl-C pressed while the menu waits behind another run's lock stops the
+  apply. It used to be lost, and everything went through once the lock came
+  free.
+- Two projects whose folders share a name are two groups in the menu, each
+  named by its whole path; they used to share one name and open together.
+- In a narrow window the menu's legend keeps `q quit`: it takes the place of
+  the last keys shown instead of being the one cut.
+- `reap why` on an item held for a use before the window says so, and how to
+  overrule it, instead of asking for more sessions that change nothing.
+- A command reap prints to be pasted (`reap unmute`, `reap keep --remove`,
+  the hints of `reap why`) carries a name or a path with a space as one
+  quoted word.
+- The README's `reap why` and `reap share` examples are generated with the
+  other blocks now; both had drifted from what reap prints.
+- The plugin's `reap` skill no longer says a piped word answers the prune
+  question: without a terminal prune and mute stop and ask for `--yes`.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -233,6 +249,14 @@ the same cache files and the same checks. What to know before running it:
   read; only a `subagents` folder inside `projects` marks a subagent's.
 - With no session in the window it asks Claude nothing. It used to send the
   grouping question twice, empty, and report the reply as a failure.
+- The picker scrolls. On a 24-row terminal a fifth or sixth swap was drawn
+  below the screen and could be accepted unseen.
+- A kill or a closed window while the picker is open gives the terminal
+  back, as Ctrl-C does.
+- A skill that could not be written is reported (`✗ 1 of 2 skills not
+  written`); it used to read as `0 skills written` with no reason.
+- The help says what `--days` bounds: the transcripts read. Sessions
+  remembered from earlier runs still count.
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

@@ -148,13 +148,19 @@ func (a *app) writeMissing(gaps []kind, keys []string, cache map[string]writtenS
 		w, ok, err := a.writeSkill(gaps[i], longestConversations(gaps[i], byID), installed)
 		return writeResult{w, ok, err}
 	})
+	missed := 0
 	for n, res := range results {
 		if res.err != nil {
 			return res.err
 		}
 		if res.ok { // an unusable answer is not cached: the next run tries again
 			cache[keys[todo[n]]] = res.written
+		} else {
+			missed++
 		}
+	}
+	if missed > 0 { // said, as a grouping that fails is: "0 skills written" alone reads as nothing worth writing
+		a.failed(strconv.Itoa(missed) + " of " + strconv.Itoa(len(todo)) + " skills not written: no usable answer · trying again next run")
 	}
 	return nil
 }

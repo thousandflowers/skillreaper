@@ -50,8 +50,9 @@ upgrade, never the install block above, which they have already done.
 ## Pruning
 
 Never prune on your own initiative, and never run `reap prune` or `reap mute`
-from here to see what they would do. Their question reads stdin, not a terminal:
-a piped word answers it and the change goes through.
+from here to see what they would do. They ask on a terminal, and here there is
+none: they stop with `no terminal to ask on; pass --yes to go ahead`, and
+`--yes` is the change itself, not a preview.
 
 If the user explicitly asks in this turn: get an unambiguous yes, run
 `reap prune --yes`, and remind them of `reap restore --all`. If the request is

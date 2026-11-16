@@ -5,11 +5,14 @@ package main
 import (
 	"bytes"
 	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/menu"
+	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/ptytest"
 	"github.com/thousandflowers/skillreaper/internal/term"
 )
@@ -68,5 +71,33 @@ func TestAMenuThatPanicsGivesTheTerminalBack(t *testing.T) {
 	}
 	if after.Lflag != before.Lflag || after.Iflag != before.Iflag {
 		t.Errorf("after a panic the terminal is left changed: lflag %#x (was %#x); stderr %q", after.Lflag, before.Lflag, errOut.String())
+	}
+}
+
+// Ctrl-C while the apply waits behind another run's lock stops the apply too.
+// The guard used to start after the wait, so the key was lost and everything
+// the person had tried to stop was carried out once the lock came free.
+func TestMenuApplyStoppedWhileWaitingForTheLockChangesNothing(t *testing.T) {
+	home := deleteHome(t)
+	dir := filepath.Join(home, ".claude")
+	row := menuRow(t, reportRows(t), "skill", "copied")
+	held, err := prune.AcquireLock(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		_ = syscall.Kill(os.Getpid(), syscall.SIGINT)
+		time.Sleep(200 * time.Millisecond)
+		held.Release()
+	}()
+
+	err = applyOne(t, dir, row, menu.Prune)
+
+	if err == nil || !strings.Contains(err.Error(), "interrupted before it was done") {
+		t.Errorf("a stopped apply gave %v", err)
+	}
+	if !lexist(filepath.Join(dir, "skills", "copied", "SKILL.md")) {
+		t.Error("the skill was pruned although the apply was stopped")
 	}
 }

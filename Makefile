@@ -1,6 +1,6 @@
 # Regenerate every measured block in README.md from a generated sample stack, so
 # the page cannot drift from what reap actually prints, and so the blocks cannot
-# drift from each other: all three come from one run against one fixture.
+# drift from each other: all of them come from one run against one fixture.
 #
 # Idempotent by construction: each block between its two markers is replaced
 # wholesale, so running the target twice leaves README.md byte-identical.
@@ -52,9 +52,13 @@ readme-numbers:
 	{ cat docs/wordmark.txt; echo '$(SAMPLE_NOTE)'; echo; reap -agent | trim; } > "$$dir/numbers.txt"; \
 	reap gap | trim > "$$dir/gap.txt"; \
 	reap | grep utilization | trim > "$$dir/utilization.txt"; \
+	reap why import-timesheet | trim > "$$dir/why.txt"; \
+	reap share | trim > "$$dir/share.txt"; \
 	replace numbers "$$dir/numbers.txt"; \
 	replace gap "$$dir/gap.txt"; \
 	replace utilization "$$dir/utilization.txt"; \
+	replace why "$$dir/why.txt"; \
+	replace share "$$dir/share.txt"; \
 	echo "README.md: measured blocks regenerated"
 
 # MAINTAINER ONLY — do not run this unless the README's "measured on my own

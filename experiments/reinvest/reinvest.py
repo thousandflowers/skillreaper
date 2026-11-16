@@ -292,10 +292,15 @@ def created_for(gaps: list[dict], sessions: list[dict], installed: list[dict], r
         ss = sorted((by_id[i] for i in gap["ids"] if i in by_id), key=lambda s: -len(s["prompts"]))
         return llm.write_skill(gap, [s["prompts"] for s in ss[:WRITE_SESSIONS]], installed)
     todo = [(k, g) for k, g in zip(keys, gaps) if k not in cache]
+    missed = 0
     with ThreadPoolExecutor(max(1, len(todo))) as ex:
         for (k, _), out in zip(todo, ex.map(lambda kg: write(kg[1]), todo)):
             if out:  # an unusable answer is not cached: the next run tries again
                 cache[k] = list(out)
+            else:
+                missed += 1
+    if missed:  # said, as a grouping that fails is: "0 skills written" alone reads as nothing worth writing
+        failed(f"{missed} of {len(todo)} skills not written: no usable answer · trying again next run")
     # this run's first, then other gaps' (a gap that comes back keeps its text and verdicts), up to the cap
     order = [k for k in keys if k in cache] + sorted(k for k in cache if k not in keys)
     flagged, kept = {}, {}

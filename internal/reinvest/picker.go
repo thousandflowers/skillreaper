@@ -101,6 +101,7 @@ const (
 	candIndent   = 5
 	detailIndent = 15
 	rowsPerSwap  = 4
+	listTop      = 2 // the first row of the list, under the title
 )
 
 func alreadyPicked(swaps []swap, at int) bool {
@@ -161,7 +162,17 @@ func frame(swaps []swap, cur, height, width int) []drawn {
 		out = append(out, drawn{y, x, firstRunes(text, room), attr})
 	}
 	put(0, swapIndent, pickerTitle, attrBold)
-	y := 2
+	// The list lives between the title and the totals, and scrolls just far
+	// enough for the swap under the cursor (one row taller) to end above the
+	// totals: a swap nobody can see must not be one Enter away from accepted.
+	bottom := height - 2
+	scroll := max(0, listTop+(cur+1)*rowsPerSwap+1-bottom)
+	row := func(y, x int, text string, attr int) {
+		if y -= scroll; y >= listTop && y < bottom {
+			put(y, x, text, attr)
+		}
+	}
+	y := listTop
 	for i, s := range swaps {
 		selected := i == cur
 		mark, muteAttr, candAttr := " ", attrPlain, attrPlain
@@ -171,16 +182,16 @@ func frame(swaps []swap, cur, height, width int) []drawn {
 		if selected {
 			muteAttr, candAttr = attrReverse, attrBold
 		}
-		put(y, swapIndent, mark+"  mute      "+muteText(s), muteAttr)
-		put(y+1, candIndent, candLine(s, alreadyPicked(swaps, i)), candAttr)
-		put(y+2, detailIndent, "for "+s.cand().Gap, attrPlain)
+		row(y, swapIndent, mark+"  mute      "+muteText(s), muteAttr)
+		row(y+1, candIndent, candLine(s, alreadyPicked(swaps, i)), candAttr)
+		row(y+2, detailIndent, "for "+s.cand().Gap, attrPlain)
 		if selected {
-			put(y+3, detailIndent, s.cand().Why, attrDim)
+			row(y+3, detailIndent, s.cand().Why, attrDim)
 			y++
 		}
 		y += rowsPerSwap
 	}
-	put(height-2, swapIndent, totals(swaps), attrBold)
+	put(bottom, swapIndent, totals(swaps), attrBold)
 	return out
 }
 

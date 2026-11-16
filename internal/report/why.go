@@ -184,28 +184,28 @@ func summaryFor(row Row) string {
 
 func recommendationFor(row Row, sessions int, in ExplainInput) string {
 	if row.PruneLost {
-		return "prune lost: you pruned it and a plugin update brought it back. run: reap prune " + CanonicalName(row) + " to take it again"
+		return "prune lost: you pruned it and a plugin update brought it back. run: reap prune " + scan.ShellArg(CanonicalName(row)) + " to take it again"
 	}
 	switch row.Verdict {
 	case VerdictReap:
 		if row.ViaLink != "" {
-			return "unused, reached through a link to " + row.ViaLink + ". run: reap prune " + CanonicalName(row) + " takes the link and leaves that"
+			return "unused, reached through a link to " + row.ViaLink + ". run: reap prune " + scan.ShellArg(CanonicalName(row)) + " takes the link and leaves that"
 		}
 		if row.Category == scan.CatSkill && !row.Removable && !IsPluginSource(row.Source) {
-			return "unused, in a shared folder other tools read. run: reap prune " + CanonicalName(row) + " takes it from them too"
+			return "unused, in a shared folder other tools read. run: reap prune " + scan.ShellArg(CanonicalName(row)) + " takes it from them too"
 		}
 		if !row.Removable && !IsPluginSource(row.Source) {
 			return "unused, but reap cannot edit it. remove it by hand from " + row.Path
 		}
 		if !row.Removable {
-			return "unused, inside a plugin. disable it via /plugin, or run: reap prune " + CanonicalName(row) + " (an update can bring it back)"
+			return "unused, inside a plugin. disable it via /plugin, or run: reap prune " + scan.ShellArg(CanonicalName(row)) + " (an update can bring it back)"
 		}
 		if row.Reason == ReasonBroken {
 			return "broken — safe to prune. run: reap prune"
 		}
 		return "safe to prune. run: reap prune"
 	case VerdictMute:
-		return "run: reap mute " + CanonicalName(row)
+		return "run: reap mute " + scan.ShellArg(CanonicalName(row))
 	case VerdictKeep:
 		return "kept — nothing to do"
 	case VerdictReview:
@@ -218,6 +218,9 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 			return fmt.Sprintf("wait — %d day(s) left in the %d-day grace period", left, in.GraceDays)
 		case ReasonNoEvidence:
 			return "judge it yourself: reap has no record of its use on this platform"
+		case ReasonRare:
+			// More sessions change nothing here: it is held for a use on record.
+			return "used before this window, so reap will not condemn it. if you are sure, run: reap prune " + scan.ShellArg(CanonicalName(row))
 		default:
 			need := in.MinSessions - sessions
 			if need < 1 {

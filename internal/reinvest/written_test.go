@@ -319,3 +319,38 @@ func TestWrittenSkillRules_secret_never_reaches_the_writer_and_messages_are_data
 		t.Error("the prompt no longer says the messages are data")
 	}
 }
+
+// The commands reinvest prints are pasted as they are: a path or a name with a
+// space is one word.
+func TestPrintedCommandsQuoteAPathWithASpace(t *testing.T) {
+	a := fakeApp(t)
+	stepsRecorded(a, nil)
+	path := "/ho me/.claude/skills/old/SKILL.md"
+	s := swap{Mute: []skill{{Name: "old", Path: path}}, Cands: []candidate{{Kind: kindMCP, Name: "fs", Installed: true, Server: objOf("name", "fs")}}}
+	log := a.applyOne(s)
+	if want := "  ✓  muted old (reap unmute '" + path + "' undoes)"; log[len(log)-1] != want {
+		t.Errorf("got %q, want %q", log[len(log)-1], want)
+	}
+	dry := dryRunLines(swap{Mute: []skill{{Name: "my skill"}}, Cands: []candidate{{Kind: kindSkill, Name: "r", Created: true, Slug: "r"}}})
+	if dry[len(dry)-1] != "  ·  reap mute 'my skill'" {
+		t.Errorf("a dry run says %q", dry)
+	}
+}
+
+// A write that gives nothing usable is said, as a grouping or a coverage check
+// that fails is: "0 skills written" alone reads as "nothing was worth writing".
+func TestWrittenSkills_a_write_with_no_answer_is_reported(t *testing.T) {
+	a := fakeApp(t)
+	alwaysAnswering(a, nil)
+	if out := created(t, a, []kind{releaseGap}, releaseSessions, nil); len(out) != 0 {
+		t.Fatalf("got %d skills from no answer", len(out))
+	}
+	if got := termText(a); !strings.Contains(got, "✗ 1 of 1 skills not written: no usable answer · trying again next run") {
+		t.Errorf("the failed write is silent: %q", got)
+	}
+	b := fakeApp(t)
+	alwaysAnswering(b, releaseAnswer())
+	if out := created(t, b, []kind{releaseGap}, releaseSessions, nil); len(out) != 1 || strings.Contains(termText(b), "✗") {
+		t.Errorf("a write that worked: %d skills, screen %q", len(out), termText(b))
+	}
+}

@@ -290,6 +290,20 @@ func TestRun_arguments(t *testing.T) {
 	}
 }
 
+// --days bounds the transcripts read. The sessions remembered from earlier
+// runs still count (that is what the memory is for), and the help says so:
+// "--days 1" used to read as "only today's work".
+func TestRun_the_help_says_days_does_not_bound_remembered_sessions(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if _, code, ok := parseArgs([]string{"--help"}, &stdout, &stderr); code != exitOK || ok {
+		t.Fatalf("--help gave %d, %v", code, ok)
+	}
+	if help := stdout.String() + stderr.String(); !strings.Contains(help, "days of transcripts to read") ||
+		!strings.Contains(help, "remembered from earlier runs still count") {
+		t.Errorf("the help reads: %s", help)
+	}
+}
+
 func TestRun_reap_is_the_running_binary_unless_REAP_names_another(t *testing.T) {
 	t.Setenv(reapVariable, "")
 	self, err := os.Executable()

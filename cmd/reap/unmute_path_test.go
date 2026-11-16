@@ -37,3 +37,22 @@ func TestUnmuteByPathUndoesOnlyThatCopy(t *testing.T) {
 		t.Errorf("a path that is not muted was unmuted: %s", out)
 	}
 }
+
+// The undo line is pasted as it is: a skill named with a space is one word.
+func TestUndoHintsQuoteANameWithASpace(t *testing.T) {
+	home := deleteHome(t)
+	p := filepath.Join(home, ".claude/skills/my skill/SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("---\nname: my skill\ndescription: some words here that are long enough\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	backdated(t, p)
+	if code, out := reapRun("mute", "my skill", "--yes"); code != 0 || !strings.Contains(out, "Undo: reap unmute 'my skill'\n") {
+		t.Errorf("mute: %d %s", code, out)
+	}
+	if code, out := reapRun("keep", "my skill"); code != 0 || !strings.Contains(out, "Undo: reap keep --remove 'skill:my skill'\n") {
+		t.Errorf("keep: %d %s", code, out)
+	}
+}

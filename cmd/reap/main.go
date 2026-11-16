@@ -1315,7 +1315,7 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "  covers %s: %s\n", row.Platform, shown(row.Path))
 		}
 	}
-	fmt.Fprintf(stdout, "This item will be excluded from prune. Undo: reap keep --remove %s\n", itemKey)
+	fmt.Fprintf(stdout, "This item will be excluded from prune. Undo: reap keep --remove %s\n", scan.ShellArg(itemKey))
 	return 0
 }
 

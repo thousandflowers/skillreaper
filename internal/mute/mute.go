@@ -17,6 +17,7 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/atomicfile"
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/safepath"
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 func mutedDir(claudeDir string) string  { return filepath.Join(claudeDir, "reaped", "muted") }
@@ -465,7 +466,7 @@ func restoreWithin(claudeDir string, e Entry) error {
 	}
 	if _, err := os.Lstat(e.Path); os.IsNotExist(err) {
 		if id, _ := quarantineID(claudeDir, e.Path); id != "" {
-			return fmt.Errorf("it is in quarantine: run reap restore %s, then reap unmute %s", id, e.Name)
+			return fmt.Errorf("it is in quarantine: run reap restore %s, then reap unmute %s", id, scan.ShellArg(e.Name))
 		}
 	}
 	path, err := resolveMutableExisting(root, e.Path)

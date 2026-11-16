@@ -492,16 +492,25 @@ func (m *Menu) bySource() []group {
 	for _, s := range order {
 		taken[sourceName(by[s][0])]++
 	}
-	out := make([]group, 0, len(order))
-	for _, s := range order {
-		rows := by[s]
-		label := sourceName(rows[0])
-		if taken[label] > 1 {
+	labels := make([]string, len(order))
+	again := map[string]int{}
+	for i, s := range order {
+		labels[i] = sourceName(by[s][0])
+		if taken[labels[i]] > 1 {
 			tail := filepath.Base(s)
 			if strings.HasPrefix(s, sourcePlugin) {
 				tail = s[strings.LastIndex(s, "@")+1:]
 			}
-			label += " · " + tail
+			labels[i] += " · " + tail
+		}
+		again[labels[i]]++
+	}
+	out := make([]group, 0, len(order))
+	for i, s := range order {
+		rows := by[s]
+		label := labels[i]
+		if again[label] > 1 { // two folders of one name: the whole of where each is
+			label = sourceName(rows[0]) + " · " + s[strings.Index(s, ":")+1:]
 		}
 		sort.SliceStable(rows, func(i, j int) bool {
 			if isDead(rows[i]) != isDead(rows[j]) {

@@ -6,6 +6,7 @@ package menu
 // for the big font, a project's own skill.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -213,6 +214,38 @@ func TestProjectSkillIsThisProjects(t *testing.T) {
 			mustEqual(t, "source name of "+from, sourceName(row("x", source(from))), want)
 		}
 	})
+}
+
+// Two projects whose folders share a name are two groups with two names: the
+// list opens and closes a group by its name, so one name opened both at once
+// and nothing told them apart.
+func TestProjectsWithTheSameFolderNameStayApart(t *testing.T) {
+	rows := []report.Row{raw("alpha", source("project:/work/a/app")), raw("beta", source("project:/work/b/app")),
+		raw("gamma", source("project:/work/site"))}
+	m, _, _ := newMenu(t, one(rows...))
+
+	names := map[string]int{}
+	for _, g := range m.bySource() {
+		names[g.name]++
+	}
+
+	for _, want := range []string{"this project · /work/a/app", "this project · /work/b/app", "this project · site"} {
+		mustEqual(t, "groups named "+want, names[want], 1)
+	}
+}
+
+// The way out is never the key the legend cuts: in a narrow window "q quit"
+// was the tenth key of two short rows, and was on no screen at all.
+func TestLegendAlwaysShowsTheWayOut(t *testing.T) {
+	for _, cols := range []int{listCols, 60, 64, 80, 120} {
+		x := openSized(t, 24, cols, one(raw("x"))).run()
+		legend := strings.Join(x.final()[22:], "\n")
+
+		mustEqual(t, fmt.Sprintf("q quit in the legend at %d columns", cols), strings.Contains(legend, "q quit"), true)
+		for _, line := range x.final()[22:] {
+			mustEqual(t, fmt.Sprintf("legend row fits %d columns", cols), runes(strings.TrimRight(line, " ")) <= cols, true)
+		}
+	}
 }
 
 func TestReasonReapHasNoSentenceFor(t *testing.T) {

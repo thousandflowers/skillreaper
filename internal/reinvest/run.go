@@ -47,7 +47,7 @@ type options struct {
 func newFlagSet(opts *options) *flag.FlagSet {
 	fs := flag.NewFlagSet("reap reinvest", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.IntVar(&opts.days, "days", defaultDays, "sessions to read (longer than reap's window: recurring work needs history)")
+	fs.IntVar(&opts.days, "days", defaultDays, "days of transcripts to read (longer than reap's window: recurring work needs history); sessions remembered from earlier runs still count")
 	fs.IntVar(&opts.max, "max", defaultSwaps, "swaps proposed at most")
 	fs.BoolVar(&opts.regroup, "regroup", false, "group every session from scratch now, instead of weekly")
 	fs.BoolVar(&opts.online, "online", false, "search skills.sh instead of writing skills from your sessions")

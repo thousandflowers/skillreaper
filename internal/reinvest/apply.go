@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 const (
@@ -428,7 +430,7 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 		}
 	}
 	for _, x := range muted {
-		log = append(log, "  ✓  muted "+x.Name+" (reap unmute "+x.target()+" undoes)")
+		log = append(log, "  ✓  muted "+x.Name+" (reap unmute "+scan.ShellArg(x.target())+" undoes)")
 	}
 	return log, true
 }
@@ -464,7 +466,7 @@ func dryRunLines(s swap) []string {
 		lines = append(lines, "  ·  "+strings.Join(command, " "))
 	}
 	for _, x := range s.Mute {
-		lines = append(lines, "  ·  reap mute "+x.Name)
+		lines = append(lines, "  ·  reap mute "+scan.ShellArg(x.Name))
 	}
 	return lines
 }

@@ -168,7 +168,9 @@ func (a *app) pickSwaps(swaps []swap) (chosen []swap, err error) {
 	}
 	defer func() { err = errors.Join(err, scr.giveBack()) }()
 	interrupts, resizes := make(chan os.Signal, 1), make(chan os.Signal, 1)
-	signal.Notify(interrupts, os.Interrupt)
+	// A kill and a closed window end the picker as Ctrl-C does: uncaught, they
+	// would end reap before the terminal is given back.
+	signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	signal.Notify(resizes, syscall.SIGWINCH)
 	defer signal.Stop(interrupts)
 	defer signal.Stop(resizes)

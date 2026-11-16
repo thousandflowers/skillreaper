@@ -4,6 +4,7 @@ package reinvest
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/signal"
@@ -234,6 +235,43 @@ func TestAppCov_a_candidate_accepted_above_is_marked_below(t *testing.T) {
 	}
 	if alreadyPicked(swaps, 0) {
 		t.Error("the first is marked although nothing above picked it")
+	}
+}
+
+// The list scrolls: on a 24-row terminal six swaps do not fit, and the one
+// under the cursor used to be drawn below the screen, its first line under
+// the totals. It could be accepted without ever being seen.
+func TestPickerScrollsToTheSwapUnderTheCursor(t *testing.T) {
+	var swaps []swap
+	for i := 0; i < 6; i++ {
+		s := ttyCovSwaps()[0]
+		s.Cands = []candidate{{Name: fmt.Sprintf("cand-%d", i), Gap: fmt.Sprintf("gap-%d", i), Why: fmt.Sprintf("why-%d", i)}}
+		swaps = append(swaps, s)
+	}
+	const height, width = 24, 200
+	for cur := range swaps {
+		rows := map[int]string{}
+		for _, d := range frame(swaps, cur, height, width) {
+			if d.y != 0 && d.y != height-2 && (d.y < 2 || d.y > height-3) {
+				t.Errorf("cursor %d: %q is drawn on row %d, outside the list", cur, d.text, d.y)
+			}
+			if d.y == height-2 && !strings.Contains(d.text, "accepted") {
+				t.Errorf("cursor %d: %q is drawn over the totals", cur, d.text)
+			}
+			rows[d.y] += d.text
+		}
+		screen := fmt.Sprint(rows)
+		for _, want := range []string{fmt.Sprintf("cand-%d", cur), fmt.Sprintf("gap-%d", cur), fmt.Sprintf("why-%d", cur)} {
+			if !strings.Contains(screen, want) {
+				t.Errorf("cursor %d: %s is not on the screen", cur, want)
+			}
+		}
+	}
+	// A list that fits is drawn from the top, as before.
+	for _, d := range frame(swaps[:2], 1, height, width) {
+		if strings.Contains(d.text, "cand-0") && d.y != 3 {
+			t.Errorf("a list that fits moved: cand-0 on row %d", d.y)
+		}
 	}
 }
 

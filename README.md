@@ -189,6 +189,7 @@ evidence was incomplete stays `REVIEW` rather than being flagged.
 **2. `reap why <name>`** is how you argue with a verdict before acting on it.
 It shows the whole case for one item, so you are not trusting a label:
 
+<!-- readme-why:start -->
 ```
 skill:import-timesheet
 
@@ -198,11 +199,13 @@ token weight ~185 tok  (description: 684 chars)
 sessions     34 total in window
 uses         0
 last seen    never
-installed    unknown
+installed    2026-07-01 (60 days ago)
+             grace period expired (grace: 14 days)
 keep-list    no
 claude-md    not referenced
 → safe to prune. run: reap prune
 ```
+<!-- readme-why:end -->
 
 **3. `reap prune`** asks before it moves anything, quarantines what you confirm
 into `reaped/`, and ends by printing `reap restore --all`. If a verdict looks
@@ -450,17 +453,19 @@ The menu runs on macOS and Linux. On Windows, in a pipe, or with any argument,
 
 ### share - the number, ready to paste
 
-`reap share` prints one line about what you reclaimed, with the install command
-under it. Read-only: it measures and prints, nothing else. `--json` and `--md`
+`reap share` prints one line about what you reclaimed (or, before a prune, what
+you could), with the install command under it. Read-only: it measures and prints, nothing else. `--json` and `--md`
 are there for anything that wants to post it automatically.
 
+<!-- readme-share:start -->
 ```
-Just cut ~22.8k tokens/session of dead context from my AI agent with skillreaper.
+skillreaper says I could cut ~22.8k tokens/session of dead context from my AI agent.
 One read-only command, 100% local:
 
   brew install thousandflowers/tap/skillreaper
   github.com/thousandflowers/skillreaper
 ```
+<!-- readme-share:end -->
 
 <p align="center"><sub>Same generated sample stack as the report at the top of
 this page - the figure is the fixture's, not mine.</sub></p>

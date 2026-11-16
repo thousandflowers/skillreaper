@@ -560,6 +560,29 @@ func TestTTYCov_ctrl_c_stops_the_picker_and_gives_the_terminal_back(t *testing.T
 	}
 }
 
+// A closed window (SIGHUP) or a kill (SIGTERM) ends the picker as Ctrl-C does:
+// uncaught, they ended reap with the terminal still raw, on the other screen
+// and with no cursor.
+func TestTTYCov_a_kill_or_a_hangup_gives_the_terminal_back_too(t *testing.T) {
+	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGHUP} {
+		pt := ttyCovOpen(t, 30, 160)
+		before := ttyCovSettings(t, pt.slave)
+		a := fakeApp(t)
+		a.stdin, a.term = pt.slave, pt.slave
+		done := ttyCovPick(a, ttyCovSwaps())
+		ttyCovFirstFrame(t, pt)
+		if err := syscall.Kill(os.Getpid(), sig); err != nil {
+			t.Fatal(err)
+		}
+		if got := ttyCovResult(t, done); !errors.Is(got.err, errInterrupted) || got.chosen != nil {
+			t.Errorf("%v gave %v %v", sig, ttyCovNames(got.chosen), got.err)
+		}
+		if ttyCovSettings(t, pt.slave) != before {
+			t.Errorf("a picker ended by %v left the terminal in raw mode", sig)
+		}
+	}
+}
+
 func TestTTYCov_the_picker_loop_acts_on_signals_before_keys(t *testing.T) {
 	pt := ttyCovOpen(t, 30, 160)
 	a := fakeApp(t)

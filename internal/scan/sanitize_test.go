@@ -112,3 +112,26 @@ func TestAppendYAMLMCP(t *testing.T) {
 		t.Errorf("secret kept: %q", items[0].Description)
 	}
 }
+
+// A word of a command someone will paste: left alone when plain, one quoted
+// word otherwise.
+func TestShellArg(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain-name_1":          "plain-name_1",
+		"skill:ecc:plan":        "skill:ecc:plan",
+		"/Users/a/.claude/x.md": "/Users/a/.claude/x.md",
+		"café":                  "café",
+		"my skill":              "'my skill'",
+		"/ho me é/SKILL.md":     "'/ho me é/SKILL.md'",
+		"it's":                  `'it'\''s'`,
+		"a;b":                   "'a;b'",
+		"$HOME":                 "'$HOME'",
+		"~/x":                   "'~/x'",
+		"a*":                    "'a*'",
+		"":                      "''",
+	} {
+		if got := ShellArg(in); got != want {
+			t.Errorf("ShellArg(%q) = %s, want %s", in, got, want)
+		}
+	}
+}

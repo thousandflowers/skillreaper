@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const skillMD = "---\nname: heavy\ndescription: a very long description that costs tokens every session\n---\nbody stays\n"
@@ -102,6 +103,36 @@ func TestMuteUnmuteRoundtrip(t *testing.T) {
 	if string(b) != skillMD {
 		t.Errorf("unmute did not restore original:\n%q", string(b))
 	}
+}
+
+// A personal skill is dated by its file, so a mute and an unmute must leave the
+// file's date alone: otherwise a skill installed months ago reads as installed
+// today and sits in the grace period again.
+func TestMuteAndUnmuteKeepTheFileDate(t *testing.T) {
+	claudeDir := filepath.Join(t.TempDir(), ".claude")
+	skillPath := writeSkill(t, claudeDir, "heavy")
+	installed := time.Unix(time.Now().AddDate(0, -4, 0).Unix(), 0)
+	if err := os.Chtimes(skillPath, installed, installed); err != nil {
+		t.Fatal(err)
+	}
+	dated := func(step string) {
+		t.Helper()
+		info, err := os.Stat(skillPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !info.ModTime().Equal(installed) {
+			t.Errorf("after %s the file is dated %s, want %s", step, info.ModTime(), installed)
+		}
+	}
+	if err := Mute(claudeDir, claudeDir, "heavy", skillPath); err != nil {
+		t.Fatalf("Mute: %v", err)
+	}
+	dated("mute")
+	if _, err := Unmute(claudeDir, "heavy"); err != nil {
+		t.Fatalf("Unmute: %v", err)
+	}
+	dated("unmute")
 }
 
 func TestMuteRefusesSymlinkOutsideClaudeDir(t *testing.T) {

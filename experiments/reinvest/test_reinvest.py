@@ -272,6 +272,16 @@ class IncrementalGroups(unittest.TestCase):
         self.assertEqual(groups[0]["session_ids"], ["a", "b"])
         self.assertEqual(self.calls, [reinvest.llm.GROUP_PROMPT])
 
+    def test_no_sessions_asks_nothing_and_keeps_the_cache(self):
+        with self.fake([self.full(), {"assign": {"0": 0}, "new": []}]):
+            self.assertEqual(reinvest.load_groups([], regroup=False), [])
+            self.assertEqual(self.calls, [])
+            reinvest.load_groups(self.sess("a", "b"), regroup=False)
+            self.assertEqual(reinvest.load_groups([], regroup=True), [])
+            groups = reinvest.load_groups(self.sess("a", "b", "c"), regroup=False)
+        self.assertEqual(groups[0]["session_ids"], ["a", "b", "c"])
+        self.assertEqual(self.calls, [reinvest.llm.GROUP_PROMPT, reinvest.llm.ASSIGN_PROMPT])
+
     def test_new_session_is_placed_not_regrouped(self):
         with self.fake([self.full(), {"assign": {"0": 0}, "new": []}]):
             reinvest.load_groups(self.sess("a", "b"), regroup=False)

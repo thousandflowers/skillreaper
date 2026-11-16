@@ -377,6 +377,29 @@ func TestIncrementalGroups_first_run_groups_everything(t *testing.T) {
 	equalStrings(t, prompts(*calls), []string{groupPrompt})
 }
 
+// No session in the window is nothing to group: Claude is not asked (each call
+// is paid for), nothing is reported as failed, and the groups kept from an
+// earlier run stay as they were.
+func TestIncrementalGroups_no_sessions_asks_nothing_and_keeps_the_cache(t *testing.T) {
+	a := fakeApp(t)
+	var screen strings.Builder
+	a.term = &screen
+	calls := answering(t, a, js(t, fullGrouping), js(t, `{"assign": {"0": 0}, "new": []}`))
+	if groups := grouped(t, a, false); len(groups) != 0 || len(*calls) != 0 {
+		t.Fatalf("no sessions gave %d groups after %d calls", len(groups), len(*calls))
+	}
+	grouped(t, a, false, "a", "b")
+	if groups := grouped(t, a, true); len(groups) != 0 { // even a forced regroup has nothing to ask
+		t.Fatalf("no sessions gave %d groups", len(groups))
+	}
+	groups := grouped(t, a, false, "a", "b", "c")
+	equalStrings(t, sessionIDsOf(groups[0]), []string{"a", "b", "c"})
+	equalStrings(t, prompts(*calls), []string{groupPrompt, assignPrompt})
+	if strings.Contains(screen.String(), "no answer") {
+		t.Errorf("an empty window is reported as a failed call: %q", screen.String())
+	}
+}
+
 func TestIncrementalGroups_new_session_is_placed_not_regrouped(t *testing.T) {
 	a := fakeApp(t)
 	calls := answering(t, a, js(t, fullGrouping), js(t, `{"assign": {"0": 0}, "new": []}`))

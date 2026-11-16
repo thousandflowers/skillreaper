@@ -247,7 +247,17 @@ func Mute(claudeDir, rootDir, name, skillPath string) error {
 		_ = os.Remove(backup)
 		return err
 	}
+	keepDate(resolvedSkillPath, info)
 	return nil
+}
+
+// keepDate gives a rewritten file the date it had. A personal skill is dated by
+// its file, so a mute or an unmute that left today's date on it would make a
+// skill installed months ago read as new, and hold it in the grace period.
+// The file is already as it should be, so a date that cannot be set is no
+// reason to report the mute as failed.
+func keepDate(path string, before os.FileInfo) {
+	_ = os.Chtimes(path, before.ModTime(), before.ModTime())
 }
 
 // freeBackupPath does not reuse a backup left by an entry dropped earlier: it
@@ -486,6 +496,7 @@ func restoreWithin(claudeDir string, e Entry) error {
 	if err := atomicfile.Write(path, restored, info.Mode().Perm()); err != nil {
 		return err
 	}
+	keepDate(path, info)
 	return os.Remove(backup)
 }
 

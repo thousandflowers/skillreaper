@@ -186,6 +186,9 @@ func (a *app) isDue(saved savedGroups) bool {
 // a week old (or on request), else the cached groups with the new sessions
 // placed in them.
 func (a *app) loadGroups(sessions []session, regroup bool) ([]*obj, error) {
+	if len(sessions) == 0 { // nothing to group: no paid call, no failure to report, the cache left as it is
+		return nil, nil
+	}
 	saved, usable := a.loadSavedGroups()
 	var groups []*obj
 	var at any

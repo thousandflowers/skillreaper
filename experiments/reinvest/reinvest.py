@@ -169,6 +169,8 @@ def remember_sessions(current: list[dict]) -> list[dict]:
 
 
 def load_groups(sessions: list[dict], regroup: bool) -> list[dict]:
+    if not sessions:  # nothing to group: no paid call, no failure to report, the cache left as it is
+        return []
     cache = sources.CACHE / "groups.json"
     try:
         saved = json.loads(cache.read_text(encoding="utf-8"))

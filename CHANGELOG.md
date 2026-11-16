@@ -155,6 +155,9 @@ really injected, with multi-line descriptions read in full.
 - `reap --agent` and `reap gap --agent` say `n/a`, not `0%`, when the window
   holds no session, and the gap view says so in a line: nothing was read, so
   nothing is measured.
+- `reap mute` and `reap unmute` leave the file's date as it was. A personal
+  skill is dated by its file, so one muted and unmuted read as installed
+  today and sat in the grace period again.
 - INSTALL.md no longer offers `~/.claude/reaped` as leftovers to clear after
   an uninstall: it holds the pruned items and the mute backups. It now says
   to restore and unmute first.
@@ -228,6 +231,8 @@ the same cache files and the same checks. What to know before running it:
 - A cached written skill whose name is no slug (a path) is dropped.
 - A config folder kept under a folder named `subagents` has its sessions
   read; only a `subagents` folder inside `projects` marks a subagent's.
+- With no session in the window it asks Claude nothing. It used to send the
+  grouping question twice, empty, and report the reply as a failure.
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

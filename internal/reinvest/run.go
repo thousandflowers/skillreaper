@@ -120,6 +120,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if !ok {
 		return code
 	}
+	pinConfigDir()
 	err := newApp(stdin, stdout, stderr).run(opts)
 	switch {
 	case err == nil:

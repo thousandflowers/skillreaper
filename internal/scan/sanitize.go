@@ -30,8 +30,14 @@ var secretPatterns = []struct {
 }{
 	{regexp.MustCompile(`(?i)(://[^/\s:@]+:)[^/\s@]+@`), "${1}<redacted>@"},
 	{regexp.MustCompile(`(?i)([?&]` + secretWord + `=)[^&\s]+`), "${1}<redacted>"},
-	{regexp.MustCompile(`(?i)(\bbearer\s+)\S+`), "${1}<redacted>"},
-	{regexp.MustCompile(`(?i)(^|[\s"'])(-{0,2}` + secretWord + `)(=|:\s*|\s+)([^\s"'-]\S*)`), "${1}${2}${3}<redacted>"},
+	// Authorization: <scheme> <credential>. The scheme stays, the credential goes;
+	// the rule for a secret-looking name below would mask the scheme and stop there.
+	{regexp.MustCompile(`(?i)(\bauthorization\s*[:=]\s*[\w-]+\s+)[^\s"']+`), "${1}<redacted>"},
+	{regexp.MustCompile(`(?i)(\bcookie\s*[:=]\s*)[^"'\n]+`), "${1}<redacted>"},
+	{regexp.MustCompile(`(^|\s)(-u\s+[^\s:"']+:)[^\s"']+`), "${1}${2}<redacted>"},
+	// A value ends at whitespace or at the quote that closes the argument.
+	{regexp.MustCompile(`(?i)(\bbearer\s+)[^\s"']+`), "${1}<redacted>"},
+	{regexp.MustCompile(`(?i)(^|[\s"'])(-{0,2}` + secretWord + `)(=|:\s*|\s+)([^\s"'-][^\s"']*)`), "${1}${2}${3}<redacted>"},
 }
 
 // RedactSecrets masks credentials in a command line, URL or hook command. It

@@ -369,3 +369,22 @@ func TestTheReadingNoticeIsPlainASCII(t *testing.T) {
 		}
 	}
 }
+
+// Two rows of one name share one lock. Unlocking both takes the lock off with
+// the first; the second finds it gone, which is what was asked for, not a failure.
+func TestUnlockingARowWhoseLockIsAlreadyGoneIsNoFailure(t *testing.T) {
+	home := deleteHome(t)
+	if code, out := reapRun("keep", "mine"); code != 0 {
+		t.Fatalf("keep: %d %s", code, out)
+	}
+	row := menuRow(t, reportRows(t), "skill", "mine")
+
+	out := (&menuApplier{dir: filepath.Join(home, ".claude")}).Apply([]menu.Pick{{Row: row, Verb: menu.Unlock}, {Row: row, Verb: menu.Unlock}})
+
+	if out[0].Err != nil || out[1].Err != nil {
+		t.Errorf("unlock twice: %v / %v", out[0].Err, out[1].Err)
+	}
+	if _, list := reapRun("keep", "--list"); strings.Contains(list, "skill:mine") {
+		t.Errorf("the lock is still there:\n%s", list)
+	}
+}

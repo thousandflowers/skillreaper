@@ -604,6 +604,26 @@ func requireClaudeDir(opts options, stderr io.Writer) bool {
 // Prose is one file however many tools read it, so its key leaves the platform
 // out: the first platform to list it holds its weight, and the same CLAUDE.md is
 // not added to the total once per tool.
+// uniqueWarnings keeps the first of each warning. The plugin registry is read
+// once for skills, once for agents and once for servers, and each reading says
+// what is wrong with it.
+func uniqueWarnings(warns []scan.Warning) []scan.Warning {
+	seen := map[scan.Warning]bool{}
+	var out []scan.Warning
+	for _, w := range warns {
+		if !seen[w] {
+			seen[w] = true
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// parseCutoff is where the parsers start counting: the start, in UTC, of the
+// day the window opens on. A parse is cached for the day, so it must not
+// depend on the minute it ran at.
+func parseCutoff(cutoff time.Time) time.Time { return cutoff.UTC().Truncate(24 * time.Hour) }
+
 func dedupeByPath(items []scan.Item) []scan.Item {
 	seen := make(map[string]bool, len(items))
 	out := items[:0]
@@ -646,6 +666,7 @@ func gather(opts options) (*report.Report, error) {
 			HasMCP:         true,
 			HasHooks:       true,
 			HasProse:       true,
+			HasTranscripts: true,
 			TranscriptType: "jsonl",
 			TranscriptDirs: []string{filepath.Join(opts.claudeDir, "projects")},
 		}
@@ -794,7 +815,7 @@ func gather(opts options) (*report.Report, error) {
 					digest.Add(scoped(id), scopedObservation(pid, observationFrom(one)))
 					digestDirty = true
 				}
-				if parsed, err := usage.ParseCodex(td, cutoff, opts.days, needs, observe); err == nil {
+				if parsed, err := usage.ParseCodex(td, parseCutoff(cutoff), opts.days, needs, observe); err == nil {
 					mergeParsed(parsed)
 				}
 			}
@@ -828,7 +849,7 @@ func gather(opts options) (*report.Report, error) {
 					digest.Add(id, scopedObservation(pid, observationFrom(one)))
 					digestDirty = true
 				}
-				parsed, err := usage.ParseObserving(td, cutoff, opts.days, needs, observe)
+				parsed, err := usage.ParseObserving(td, parseCutoff(cutoff), opts.days, needs, observe)
 				if err != nil {
 					// A directory that failed to parse means the cache would
 					// describe less than the corpus does. Do not store it.
@@ -847,7 +868,7 @@ func gather(opts options) (*report.Report, error) {
 			}
 		case "sqlite":
 			if p.TranscriptDB != "" {
-				parsed, err := usage.ParseSQLite(p.TranscriptDB, cutoff, opts.days)
+				parsed, err := usage.ParseSQLite(p.TranscriptDB, parseCutoff(cutoff), opts.days)
 				sqliteErr = err
 				if parsed != nil {
 					mergeParsed(parsed)
@@ -921,7 +942,7 @@ func gather(opts options) (*report.Report, error) {
 	}
 	muted, muteLost := mutedSet(opts.claudeDir, items)
 	price, priceBasis := pricing(opts, st)
-	return report.Build(items, st, warns, report.Opts{
+	return report.Build(items, st, uniqueWarnings(warns), report.Opts{
 		PlatformNames: names,
 		PriceBasis:    priceBasis,
 		PrunedCopies:  prunedCopies(opts.claudeDir),
@@ -929,6 +950,9 @@ func gather(opts options) (*report.Report, error) {
 		// retention sweep is not mistaken for one that never fired at all.
 		History: func(platformID, category, name string) (int, time.Time, bool) {
 			r, ok := digest.Lookup(category, scopedName(platformID, name))
+			if category != string(scan.CatMCP) { // a server's name is exact; a skill's or an agent's is not
+				r, ok = digest.LookupFold(category, scopedName(platformID, name))
+			}
 			if !ok || r.Uses == 0 {
 				return 0, time.Time{}, false
 			}

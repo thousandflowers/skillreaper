@@ -524,6 +524,8 @@ func (s *fdSource) next(wait time.Duration) (byte, readState) {
 	return b, gotByte
 }
 
+func (s *fdSource) unread(b byte) { s.buf = append([]byte{b}, s.buf...) }
+
 func (s *fdSource) fill(wait time.Duration) readState {
 	if s.gone {
 		return closed

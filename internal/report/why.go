@@ -224,7 +224,7 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 			// More sessions change nothing here: it is held for a use on record.
 			return "used before this window, so reap will not condemn it. if you are sure, run: reap prune " + scan.ShellArg(CanonicalName(row))
 		default:
-			need := in.MinSessions - sessions
+			need := minSessionsFor(row.InstalledAt, in.Now.AddDate(0, 0, -in.WindowDays), in.MinSessions, in.WindowDays) - sessions
 			if need < 1 {
 				need = 1
 			}

@@ -42,6 +42,8 @@ const (
 type byteSource interface {
 	// next waits up to wait for a byte. A negative wait is for ever.
 	next(wait time.Duration) (byte, readState)
+	// unread gives back a byte that was read one too far: next hands it out again.
+	unread(b byte)
 }
 
 // decoder turns bytes into whole keys, so that nothing depends on what terminfo
@@ -218,7 +220,14 @@ func (d *decoder) swallowUTF8(lead byte) Key {
 		rest = 1
 	}
 	for ; rest > 0; rest-- {
-		d.get()
+		b, ok := d.get()
+		if !ok {
+			break
+		}
+		if b < 0x80 || b > 0xbf { // not part of this character: a stray lead byte eats no key after it
+			d.src.unread(b)
+			break
+		}
 	}
 	return KeyNonLatin
 }

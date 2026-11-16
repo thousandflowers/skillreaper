@@ -535,3 +535,65 @@ func TestNarrowWindowCutsTextInsteadOfPaintingOverIt(t *testing.T) {
 	mustEqual(t, "no title cut in the middle of a word: "+strings.TrimSpace(narrowest), strings.Contains(narrowest, "suggesti "), false)
 	mustEqual(t, "the column still has its name", strings.Contains(narrowest, "NAME"), true)
 }
+
+// With nothing chosen there is no apply label, and the status has the row to
+// itself: it was still cut 28 columns short, which lost the reason of a failure.
+func TestStatusHasTheWholeRowWhenNothingIsChosen(t *testing.T) {
+	m, _, _ := newMenu(t, one(raw("x")))
+	mustEqual(t, "room with no label", m.leftOfApplyLabel(100, 0, 0), 94)
+
+	x := openSized(t, listRows, listCols, flowData()).press('u').run()
+
+	mustShow(t, x.final(), "nothing to undo here: u takes back a mute, a lock")
+}
+
+// A skill and an agent of one name, in one tool, from one place: the category is
+// the only thing that tells them apart, and the name says it.
+func TestSameNameToolAndSourceSaysTheCategory(t *testing.T) {
+	rows := []report.Row{raw("review"), raw("review", category(scan.CatAgent)), raw("solo")}
+	m, _, _ := newMenu(t, one(rows...))
+
+	names := map[string]int{}
+	for _, r := range m.rows {
+		names[m.displayName(r)]++
+	}
+
+	for _, want := range []string{"review (" + defaultTool + " · personal · skill)", "review (" + defaultTool + " · personal · agent)", "solo"} {
+		mustEqual(t, "rows named "+want, names[want], 1)
+	}
+}
+
+// On a narrow receipt a gap stays between a long name and its amount.
+func TestReceiptLineKeepsAGapBeforeTheAmount(t *testing.T) {
+	m, _, _ := newMenu(t, one(raw("a-very-long-skill-name-that-goes-on-and-on-forever", tokens(1480))))
+
+	line := m.receiptLine(Pick{Row: m.rows[0], Verb: vDelete}, 27)
+
+	at := strings.Index(line, "~")
+	if at < 1 {
+		t.Fatalf("no amount on the line: %q", line)
+	}
+	mustEqual(t, "the cell before the amount in "+line, line[at-1], byte(' '))
+	mustEqual(t, "the line keeps its width", runes(line), 27)
+}
+
+// Rows and groups of equal weight keep one order from launch to launch: the
+// sorts had no tie-break and inherited the order a map happened to give.
+func TestEqualWeightsHaveAFixedOrder(t *testing.T) {
+	rows := []report.Row{raw("b"), raw("a"), raw("y", source("plugin:zeta@m")), raw("x", source("plugin:alpha@m"))}
+	m, _, _ := newMenu(t, one(rows...))
+
+	var flat, groups []string
+	for _, r := range m.flatList()[0].rows {
+		flat = append(flat, r.Name)
+	}
+	for _, g := range m.bySource() {
+		groups = append(groups, g.name)
+		if g.name == "your own" {
+			mustEqual(t, "rows of one group", g.rows[0].Name+g.rows[1].Name, "ab")
+		}
+	}
+
+	mustEqual(t, "flat list", strings.Join(flat, " "), "a b x y")
+	mustEqual(t, "groups", strings.Join(groups, " | "), "your own | alpha | zeta")
+}

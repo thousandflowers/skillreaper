@@ -516,7 +516,7 @@ func (m *Menu) bySource() []group {
 			if isDead(rows[i]) != isDead(rows[j]) {
 				return isDead(rows[i])
 			}
-			return rows[i].Tokens > rows[j].Tokens
+			return heavierThenByName(rows[i], rows[j])
 		})
 		out = append(out, group{label, rows})
 	}
@@ -529,13 +529,27 @@ func (m *Menu) bySource() []group {
 		}
 		return n
 	}
-	sort.SliceStable(out, func(i, j int) bool { return dead(out[i]) > dead(out[j]) })
+	sort.SliceStable(out, func(i, j int) bool {
+		if dead(out[i]) != dead(out[j]) {
+			return dead(out[i]) > dead(out[j])
+		}
+		return out[i].name < out[j].name // equal weights: one order at every launch
+	})
 	return out
+}
+
+// heavierThenByName orders rows by weight, and rows of one weight by name: the
+// order must not depend on the order the stack happened to be read in.
+func heavierThenByName(a, b *Row) bool {
+	if a.Tokens != b.Tokens {
+		return a.Tokens > b.Tokens
+	}
+	return a.Name < b.Name
 }
 
 func (m *Menu) flatList() []group {
 	rows := append([]*Row(nil), m.rows...)
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Tokens > rows[j].Tokens })
+	sort.SliceStable(rows, func(i, j int) bool { return heavierThenByName(rows[i], rows[j]) })
 	return []group{{"everything", rows}}
 }
 

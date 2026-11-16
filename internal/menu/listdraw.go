@@ -335,7 +335,7 @@ func (l *list) footer(h, wd int) {
 			hidden++
 		}
 	}
-	m.put(h-3, 3, cut(status, min(wd-28, m.leftOfApplyLabel(wd, l.p.size(), hidden))), or(asBold(m.red()), strings.HasPrefix(status, "⚠"), m.tint(tintGreen)))
+	m.put(h-3, 3, cut(status, m.leftOfApplyLabel(wd, l.p.size(), hidden)), or(asBold(m.red()), strings.HasPrefix(status, "⚠"), m.tint(tintGreen)))
 	m.drawApplyLabel(h, wd, l.p.size(), hidden)
 	keys := append(append([]string(nil), listKeys...), "tab "+m.cur.Sym+"/tok", "g group by", "f platform", "shift+↑↓ many", "o plugin off", "hold s reap", "v mark")
 	m.legend(h, keys)

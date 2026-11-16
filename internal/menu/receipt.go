@@ -58,7 +58,7 @@ func (m *Menu) applyLabel(count, hidden int) string {
 func (m *Menu) leftOfApplyLabel(wd, count, hidden int) int {
 	label := m.applyLabel(count, hidden)
 	if label == "" {
-		return wd
+		return wd - 6
 	}
 	return wd - runes(label) - 8
 }
@@ -229,11 +229,12 @@ func (m *Menu) receiptLine(pk Pick, pw int) string {
 	}
 	amountW := max(cells(worth), min(20, pw/3))
 	nameW := pw - 9 - amountW
+	name := cutMid(m.displayName(pk.Row), nameW-1) // a gap stays before the amount
 	tag := pk.Verb
 	if t, ok := receiptTag[pk.Verb]; ok {
 		tag = t
 	}
-	return pad(tag, 9) + pad(cutMid(m.displayName(pk.Row), nameW), nameW) + padLeft(worth, amountW)
+	return pad(tag, 9) + pad(name, nameW) + padLeft(worth, amountW)
 }
 
 // doneSaid is what became of the picks, by what happened, in a fixed order.

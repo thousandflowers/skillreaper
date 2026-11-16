@@ -296,3 +296,12 @@ func parallelMap[T, R any](items []T, workers int, fn func(T) R) []R {
 	wg.Wait()
 	return out
 }
+
+// pinConfigDir hands CLAUDE_CONFIG_DIR on as an absolute path. Each step runs
+// in a folder of its own and inherits the environment: a relative folder would
+// send `reap mute` looking under that folder.
+func pinConfigDir() {
+	if os.Getenv("CLAUDE_CONFIG_DIR") != "" {
+		_ = os.Setenv("CLAUDE_CONFIG_DIR", claudeDir())
+	}
+}

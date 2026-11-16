@@ -539,8 +539,10 @@ func transcriptRoots(dir string) []transcriptRoot {
 		return roots
 	}
 	seen := map[string]bool{}
+	inside := ""
 	if real, err := filepath.EvalSymlinks(dir); err == nil {
 		seen[real] = true
+		inside = real + string(filepath.Separator)
 	}
 	for _, e := range entries {
 		if e.Type()&os.ModeSymlink == 0 {
@@ -549,6 +551,9 @@ func transcriptRoots(dir string) []transcriptRoot {
 		target, err := filepath.EvalSymlinks(filepath.Join(dir, e.Name()))
 		if err != nil || seen[target] {
 			continue
+		}
+		if inside != "" && strings.HasPrefix(target, inside) {
+			continue // a link to a folder the walk of dir already reaches: counted once
 		}
 		if info, err := os.Stat(target); err == nil && info.IsDir() {
 			seen[target] = true
@@ -869,7 +874,7 @@ func parseFile(path, project string, st *Stats) string {
 			}
 			st.ModelUse[msg.Model]++
 		}
-		if string(msg.Usage) != "null" && decodeLenient(msg.Usage, &u) {
+		if !st.beforeWindow(ts) && string(msg.Usage) != "null" && decodeLenient(msg.Usage, &u) {
 			st.Measured.Add(u)
 		}
 

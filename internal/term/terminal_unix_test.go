@@ -457,3 +457,14 @@ func TestHoldWithNoSignalReleasesQuietly(t *testing.T) {
 		t.Error("release left the hold on")
 	}
 }
+
+// A byte given back is the next one handed out, before what was already read.
+func TestASourceHandsBackWhatWasUnread(t *testing.T) {
+	s := &fdSource{buf: []byte("b")}
+	s.unread('a')
+	for _, want := range []byte("ab") {
+		if got, st := s.next(0); st != gotByte || got != want {
+			t.Errorf("next = %q (%v), want %q", got, st, want)
+		}
+	}
+}

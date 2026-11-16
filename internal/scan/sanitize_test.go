@@ -135,3 +135,22 @@ func TestShellArg(t *testing.T) {
 		}
 	}
 }
+
+// The credential is what is masked, not the word before it: after
+// "Authorization: Basic" the scheme was hidden and the credential printed, in
+// --json, --md and the report's hook rows.
+func TestRedactSecretsMasksTheCredentialItself(t *testing.T) {
+	for _, c := range []struct{ in, keep, gone string }{
+		{`curl -H "Authorization: Basic dXNlcjpwYXNzd29yZA==" http://x`, `" http://x`, "dXNlcjpwYXNzd29yZA=="},
+		{`curl -H 'Authorization: Token abcdef123456' http://x`, `' http://x`, "abcdef123456"},
+		{`curl -H "Authorization: Bearer abc123" http://x`, `<redacted>" http://x`, "abc123"},
+		{`curl -H "X-Auth-Token: tok123" http://x`, `<redacted>" http://x`, "tok123"},
+		{`curl -u admin:hunter2 http://x`, "http://x", "hunter2"},
+		{`curl -H "Cookie: session=abc123; theme=dark" http://x`, `" http://x`, "abc123"},
+	} {
+		got := RedactSecrets(c.in)
+		if strings.Contains(got, c.gone) || !strings.Contains(got, c.keep) {
+			t.Errorf("RedactSecrets(%s) = %s", c.in, got)
+		}
+	}
+}

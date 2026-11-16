@@ -126,3 +126,24 @@ func TestWritten_a_link_that_leads_nowhere_is_still_ours(t *testing.T) {
 		t.Error("a link written as a relative path is not read by where it leads")
 	}
 }
+
+// Each step runs in a folder of its own and inherits the environment. A
+// relative CLAUDE_CONFIG_DIR handed on as it was typed led the mute step
+// nowhere, so every swap was rolled back: it is handed on as an absolute path.
+func TestConfigDir_steps_inherit_an_absolute_folder(t *testing.T) {
+	home := tempHome(t)
+	if resolved, err := filepath.EvalSymlinks(home); err == nil {
+		home = resolved
+	}
+	t.Chdir(home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "cfg")
+	pinConfigDir()
+	if got, want := os.Getenv("CLAUDE_CONFIG_DIR"), filepath.Join(home, "cfg"); got != want {
+		t.Errorf("steps would inherit %q, want %q", got, want)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	pinConfigDir()
+	if got := os.Getenv("CLAUDE_CONFIG_DIR"); got != "" {
+		t.Errorf("an unset folder was set to %q", got)
+	}
+}

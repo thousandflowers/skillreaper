@@ -339,7 +339,7 @@ func (m *Menu) drawCard(r *Row, at, of int, chosen, effective string, options []
 		m.put(h-5, 3, cut(r.Path, wd-8), dim)
 	}
 	if notice != "" {
-		m.put(h-3, 3, cut(notice, min(wd-6, m.leftOfApplyLabel(wd, count, 0))), asBold(m.tint(tintAmber)))
+		m.put(h-3, 3, cut(notice, m.leftOfApplyLabel(wd, count, 0)), asBold(m.tint(tintAmber)))
 	}
 	keys := []string{"enter or esc back", "←→ choose", "↑↓ next skill", "a auto", "n clear", "u undo", "l lock", "m mute", "p prune", "d delete"}
 	if isPlugin(r) {

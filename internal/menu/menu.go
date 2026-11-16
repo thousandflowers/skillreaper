@@ -75,6 +75,7 @@ func New(s term.Screen, d Data, a Applier) *Menu {
 	for _, r := range m.rows {
 		m.names[r.Name]++
 		m.names[nameInTool(r)]++
+		m.names[nameInTool(r)+"\x00"+r.Source]++
 		if !seen[r.Platform] {
 			seen[r.Platform] = true
 			m.platforms = append(m.platforms, r.Platform)
@@ -129,6 +130,9 @@ func (m *Menu) displayName(r *Row) string {
 	where := firstOf(r.Platform, unknownTool)
 	if m.names[nameInTool(r)] > 1 { // twice in one tool: where each comes from tells them apart
 		where += " · " + strings.TrimPrefix(r.Source, sourcePlugin)
+	}
+	if m.names[nameInTool(r)+"\x00"+r.Source] > 1 { // and from one place: a skill and an agent of one name
+		where += " · " + r.cat()
 	}
 	return r.Name + " (" + where + ")"
 }

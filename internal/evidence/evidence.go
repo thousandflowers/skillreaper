@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/atomicfile"
+	"strings"
 )
 
 // Format is the on-disk schema version. A mismatch is treated as no digest at
@@ -225,4 +226,23 @@ func (d *Digest) Lookup(cat, name string) (Record, bool) {
 	}
 	r, ok := byName[name]
 	return r, ok
+}
+
+// LookupFold is Lookup for a name whose case is not fixed: a skill or an agent
+// is invoked as the person types it, and its folder may spell it another way.
+// Every record under the name in any case counts.
+func (d *Digest) LookupFold(cat, name string) (Record, bool) {
+	var sum Record
+	found := false
+	for recorded, r := range d.Items[cat] {
+		if !strings.EqualFold(recorded, name) {
+			continue
+		}
+		found = true
+		sum.Uses += r.Uses
+		if r.Last.After(sum.Last) {
+			sum.Last = r.Last
+		}
+	}
+	return sum, found
 }

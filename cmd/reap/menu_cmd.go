@@ -249,6 +249,11 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 	case menu.Lock:
 		return override.AddKeep(a.dir, key)
 	case menu.Unlock:
+		// Rows of one name share one lock: the first of them takes it off, and
+		// for the others it is gone already, which is what was asked for.
+		if kept, err := override.KeepSet(a.dir); err == nil && !kept[key] {
+			return nil
+		}
 		_, err := override.RemoveKeep(a.dir, key)
 		return err
 	case menu.Restore:

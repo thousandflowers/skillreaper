@@ -26,6 +26,8 @@ func (s *script) next(time.Duration) (byte, readState) {
 	return b, gotByte
 }
 
+func (s *script) unread(b byte) { s.data = append([]byte{b}, s.data...) }
+
 // keysFrom decodes everything in input, as ReadKey would key by key.
 func keysFrom(input string) ([]Key, *decoder) {
 	src := &script{data: []byte(input)}
@@ -73,6 +75,9 @@ func TestDecodeKeys(t *testing.T) {
 		{"an OSC reply is swallowed, ST ended", "\x1b]11;rgb:ffff/ffff/ffff\x1b\\y", []Key{'y'}},
 		{"a DCS reply is swallowed", "\x1bP1$r0m\x1b\\n", []Key{'n'}},
 		{"a two byte letter is one key", "é", []Key{KeyNonLatin}},
+		{"a stray lead byte eats no key after it", "\xe9gg", []Key{KeyNonLatin, 'g', 'g'}},
+		{"a stray lead byte leaves an escape sequence whole", "\xff\x1b[A", []Key{KeyNonLatin, KeyUp}},
+		{"a letter cut off is still one key", "\xc3", []Key{KeyNonLatin}},
 		{"a three byte letter is one key", "日y", []Key{KeyNonLatin, 'y'}},
 		{"a four byte letter is one key", "😀q", []Key{KeyNonLatin, 'q'}},
 		{"ctrl-l is left for the terminal to turn into a repaint", "\x0c", []Key{keyCtrlL}},

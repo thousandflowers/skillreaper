@@ -8,6 +8,10 @@ import (
 	"testing"
 
 	"github.com/thousandflowers/skillreaper/internal/mute"
+
+	"time"
+
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 // putSkill adds a personal skill to a test home, dated long ago.
@@ -332,5 +336,42 @@ func TestHintsUnderTheOtherNameNeverSayReap(t *testing.T) {
 		if got := string(rewrite([]byte(said))); got != want {
 			t.Errorf("%q became %q, want %q", said, got, want)
 		}
+	}
+}
+
+// One problem is said once. The plugin registry is read for skills, for agents
+// and for servers, and each reading repeated its warnings: "6 warnings" for two.
+func TestAWarningIsSaidOnce(t *testing.T) {
+	twice := []scan.Warning{{Path: "/a", Msg: "bad id"}, {Path: "/b", Msg: "bad id"}, {Path: "/a", Msg: "bad id"}, {Path: "/a", Msg: "other"}, {Path: "/a", Msg: "bad id"}}
+	once := uniqueWarnings(twice)
+	if len(once) != 3 || once[0] != twice[0] || once[1] != twice[1] || once[2] != twice[3] {
+		t.Errorf("uniqueWarnings = %+v", once)
+	}
+}
+
+// A folder named with --claude-dir is Claude Code's, and Claude Code keeps
+// transcripts: with none in the window the report says that, not that the tool
+// "exposes no session transcripts at all".
+func TestANamedFolderWithNoSessionsIsNotATranscriptlessTool(t *testing.T) {
+	home := deleteHome(t)
+	_, out := reapRun("--claude-dir", filepath.Join(home, ".claude"), "--no-banner")
+	if strings.Contains(out, "exposes no session transcripts at all") {
+		t.Errorf("the report says Claude Code has no transcripts:\n%s", out)
+	}
+}
+
+// The parsers count from the start of the day the window opens on, in UTC. The
+// parse is cached for the day: counted from the exact minute, a later run the
+// same day read the cache of an earlier minute and disagreed with a fresh parse.
+func TestTheParseWindowOpensAtTheStartOfADay(t *testing.T) {
+	morning := time.Date(2026, 10, 17, 2, 0, 0, 0, time.UTC)
+	if got, want := parseCutoff(morning), time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
+		t.Errorf("parseCutoff = %s, want %s", got, want)
+	}
+	if !parseCutoff(morning).Equal(parseCutoff(morning.Add(20 * time.Hour))) {
+		t.Error("two runs on one day count from different instants")
+	}
+	if parseCutoff(morning).Equal(parseCutoff(morning.Add(23 * time.Hour))) {
+		t.Error("the next day counts from the same instant")
 	}
 }

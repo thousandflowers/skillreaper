@@ -129,24 +129,8 @@ func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts
 	// 6. Proportional threshold
 	//    If item was installed mid-window, scale minSessions down
 	//    proportionally so newer items aren't unfairly REAP'd.
-	effectiveMinSessions := opts.MinSessions
-	if !installedAt.IsZero() {
-		windowStart := opts.Cutoff
-		daysSinceInstall := installedAt.Sub(windowStart).Hours() / 24
-		if daysSinceInstall > 0 && daysSinceInstall < float64(opts.WindowDays) {
-			ratio := daysSinceInstall / float64(opts.WindowDays)
-			scaled := int(float64(opts.MinSessions) * ratio)
-			if scaled < 1 {
-				scaled = 1
-			}
-			if scaled < effectiveMinSessions {
-				effectiveMinSessions = scaled
-			}
-		}
-	}
-
 	// 7. Not enough sessions for this item's age
-	if sessions < effectiveMinSessions {
+	if sessions < minSessionsFor(installedAt, opts.Cutoff, opts.MinSessions, opts.WindowDays) {
 		return VerdictReview, ReasonNeedsData
 	}
 
@@ -172,4 +156,19 @@ func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts
 
 	// 10. Unused with sufficient evidence → safe to reap
 	return VerdictReap, ReasonUnused
+}
+
+// minSessionsFor is the session count a verdict asks of an item: the minimum,
+// scaled down for one installed inside the window. The verdict and the hint of
+// `reap why` both read it, so the hint counts against what the verdict uses.
+func minSessionsFor(installedAt, windowStart time.Time, minSessions, windowDays int) int {
+	if installedAt.IsZero() {
+		return minSessions
+	}
+	daysSinceInstall := installedAt.Sub(windowStart).Hours() / 24
+	if daysSinceInstall <= 0 || daysSinceInstall >= float64(windowDays) {
+		return minSessions
+	}
+	scaled := max(1, int(float64(minSessions)*daysSinceInstall/float64(windowDays)))
+	return min(scaled, minSessions)
 }

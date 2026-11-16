@@ -226,6 +226,42 @@ really injected, with multi-line descriptions read in full.
   label and of the count, and the column title is not cut mid-word.
 - `docs/tapes/README.md` says which two tapes need changing before they
   record again, and `docs/decisions.md` is newest first again.
+- A credential after `Authorization: Basic` or `Token`, after `curl -u`, or in
+  a `Cookie:` header is masked in the report, `--json` and `--md`. Only the
+  scheme was masked before, and the credential was printed.
+- A skill used under another letter case than its folder's is found in the
+  record of past uses. It read as never used and could come out REAP.
+- `--claude-json` given without `--claude-dir` is the file read and edited.
+  It was dropped without a word, and `reap prune <server>` edited the usual
+  file.
+- A server defined for every project and again for one project, in one file,
+  is not guessed at by name: `reap prune` and `reap delete` took the first.
+- A project folder linked to another one in the same `projects` folder is
+  counted once, and the measured token totals count only the window.
+- A parse is counted from the start of the day the window opens on (UTC), so
+  a cached parse and a fresh one agree at the window's edge.
+- A warning about the plugin registry is printed once, not three times.
+- With `--claude-dir` and no session in the window, the report says none was
+  found, not that Claude Code keeps no transcripts.
+- `reap why` counts the sessions still needed against the minimum the verdict
+  uses for an item installed inside the window.
+- `reap restore 7` brings back the item named 7 when there is one, never an
+  entry already restored, and says what it restored (`restored 002 (name)`).
+- A printed command for a name that starts with a dash puts it after `--`;
+  the undo of `install-hook` and delete's restore hint repeat `--claude-dir`.
+- Run as `skillreaper`, every hint says `skillreaper`: the weekly nudge said
+  ``Run `reap` ``, a command an npm install does not have.
+- `install-hook` on a settings file whose `hooks.SessionStart` is not a list
+  says so and names the file.
+- In the menu: with nothing chosen the status has the whole row (a failure's
+  reason was cut off); unlocking two rows that share a lock is no failure; a
+  stray byte no longer eats the keys typed after it; a skill and an agent of
+  one name say which is which; a narrow receipt keeps a gap before the
+  amount; rows and groups of equal weight keep one order at every launch.
+- The README describes the gap view, snapshots and the nudge line as they
+  are; `docs/renders/summary.txt` matches its captures and `make
+  renders-check` now checks it; INSTALL.md names every place the npm binary
+  can be kept.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -324,6 +360,10 @@ the same cache files and the same checks. What to know before running it:
   with no rows, and that was read as "no skill installed".
 - A stop while a failed swap is being undone says so, and the summary says
   `no swap proposed for` the gaps left out, not `no fit found`.
+- The steps reinvest runs inherit `CLAUDE_CONFIG_DIR` as an absolute path: a
+  relative one still sent `reap mute` to the wrong folder.
+- `reap --claude-dir X reinvest` is answered with a command that keeps the
+  folder (`CLAUDE_CONFIG_DIR=X reap reinvest`).
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

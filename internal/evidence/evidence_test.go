@@ -148,3 +148,26 @@ func TestStateDirEnvRedirectsTheWrite(t *testing.T) {
 		t.Errorf("path %s is not under the overridden state dir %s", p, dir)
 	}
 }
+
+// A skill is invoked by its name in whatever case the person typed, and its
+// folder may spell it another way. The window folds case when it matches a use
+// to an item; the durable record did not, so a use it remembered was not found
+// and the item read as never used.
+func TestLookupFoldFindsAUseRecordedInAnotherCase(t *testing.T) {
+	last := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	d := &Digest{Items: map[string]map[string]Record{"skill": {
+		"case-skill": {Uses: 2, Last: last.AddDate(0, 0, -3)},
+		"CASE-SKILL": {Uses: 1, Last: last},
+		"other":      {Uses: 9},
+	}}}
+	r, ok := d.LookupFold("skill", "Case-Skill")
+	if !ok || r.Uses != 3 || !r.Last.Equal(last) {
+		t.Errorf("LookupFold = %+v, %v", r, ok)
+	}
+	if _, ok := d.LookupFold("skill", "missing"); ok {
+		t.Error("a name nobody used was found")
+	}
+	if _, ok := d.LookupFold("agent", "case-skill"); ok {
+		t.Error("another category's record was found")
+	}
+}

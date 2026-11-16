@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/scan"
+
+	"strconv"
 )
 
 func writeTranscript(t *testing.T, path string, lines ...string) {
@@ -646,5 +648,45 @@ func TestRefusedMCPCallsAreNotUses(t *testing.T) {
 	}
 	if _, scored := st.MCPPayload["mcp__refused__do"]; scored {
 		t.Error("a refused call's text was scored as its payload")
+	}
+}
+
+// A project folder linked to another folder of the same projects directory is
+// that folder again: walked as a root of its own, everything in it counted twice.
+func TestTranscriptRootsSkipALinkBackIntoTheSameFolder(t *testing.T) {
+	dir, elsewhere := t.TempDir(), t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "proj"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "proj"), filepath.Join(dir, "alias")); err != nil {
+		t.Skip(err)
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(dir, "moved")); err != nil {
+		t.Fatal(err)
+	}
+	roots := transcriptRoots(dir)
+	if len(roots) != 2 || roots[1].project != "moved" {
+		t.Errorf("roots = %+v, want the folder itself and the one moved elsewhere", roots)
+	}
+}
+
+// What the provider measured is summed over the window, like everything else:
+// a session resumed today still holds turns from months ago, and their tokens
+// were added to "measured over the window".
+func TestMeasuredCountsOnlyTheWindow(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	stamp := func(daysAgo int) string { return now.AddDate(0, 0, -daysAgo).Format(time.RFC3339) }
+	turn := func(at string, read int) string {
+		return `{"type":"assistant","timestamp":"` + at + `","message":{"content":[],"usage":{"input_tokens":1,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":` + strconv.Itoa(read) + `}}}`
+	}
+	writeTranscript(t, filepath.Join(dir, "proj", "resumed.jsonl"), turn(stamp(90), 5000), turn(stamp(1), 8000))
+
+	st, err := Parse(dir, now.AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Measured.Messages != 1 || st.Measured.CacheRead != 8000 {
+		t.Errorf("measured %+v, want the one turn inside the window", st.Measured)
 	}
 }

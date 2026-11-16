@@ -11,6 +11,7 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/menu"
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/report"
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 // menuRow finds one scanned row of the fake home by category and name.
@@ -386,5 +387,30 @@ func TestUnlockingARowWhoseLockIsAlreadyGoneIsNoFailure(t *testing.T) {
 	}
 	if _, list := reapRun("keep", "--list"); strings.Contains(list, "skill:mine") {
 		t.Errorf("the lock is still there:\n%s", list)
+	}
+}
+
+// The report shows a name with its control characters taken out, and reads the
+// keep list by the name on disk. A lock from the menu is written by that name:
+// by the shown one it said "locked" and protected nothing.
+func TestALockFromTheMenuProtectsANameThatCleaningChanges(t *testing.T) {
+	home := deleteHome(t)
+	putSkill(t, home, "ab\x1b[31mcd")
+	odd := func() report.Row {
+		for _, r := range reportRows(t) {
+			if r.Category == scan.CatSkill && strings.HasPrefix(r.Name, "ab") {
+				return r
+			}
+		}
+		t.Fatal("the skill is not in the report")
+		return report.Row{}
+	}
+
+	if err := applyOne(t, filepath.Join(home, ".claude"), menu.NewRow(odd()), menu.Lock); err != nil {
+		t.Fatal(err)
+	}
+
+	if !odd().Kept {
+		t.Error("the menu said locked, and the report does not see the lock")
 	}
 }

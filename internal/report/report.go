@@ -92,8 +92,11 @@ type Row struct {
 	// record declares them. Tokens stays 0 for these, and without this flag a
 	// reader takes that 0 for "free" instead of "never measured".
 	WeightUnknown bool
-	ErrorCount    int       // invocations that errored in the window
-	LastAttempt   time.Time // most recent attempt (success or error)
+	// ListedChars is how much of a skill's description the last session's
+	// listing carried, when that is what its weight was taken from.
+	ListedChars int       `json:",omitempty"`
+	ErrorCount  int       // invocations that errored in the window
+	LastAttempt time.Time // most recent attempt (success or error)
 	// EvidenceNote says why a platform has no usage evidence, for a no-transcript
 	// row. One text for every surface.
 	EvidenceNote string `json:",omitempty"`
@@ -246,7 +249,8 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		// next injection cannot exceed what the file holds now.
 		if it.Category == scan.CatSkill && it.Platform == string(platform.ClaudeCode) {
 			if w, ok := ev.raw.SkillWeight[it.Name]; ok {
-				row.Tokens = cost.TokensFor(opts.Model, min(w.Chars, it.DescChars))
+				row.ListedChars = min(w.Chars, it.DescChars)
+				row.Tokens = cost.TokensFor(opts.Model, row.ListedChars)
 			}
 		}
 		switch it.Category {
@@ -599,4 +603,14 @@ func MuteEligible(row Row) bool {
 		row.Removable &&
 		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
 		(row.Verdict == VerdictReap || row.Verdict == VerdictMute)
+}
+
+// SessionsOf is how many sessions an item of that platform is judged against:
+// its own platform's, as its verdict is, and every session when the platforms
+// were not counted apart.
+func (r *Report) SessionsOf(platformID string) int {
+	if len(r.PlatformSessions) == 0 || platformID == "" {
+		return r.Sessions
+	}
+	return r.PlatformSessions[platformID]
 }

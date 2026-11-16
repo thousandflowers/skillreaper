@@ -96,8 +96,8 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 		plan.TotalSkills++
 
 		rate := 0.0
-		if r.Sessions > 0 {
-			rate = float64(row.Uses) / float64(r.Sessions)
+		if sessions := r.SessionsOf(row.Platform); sessions > 0 {
+			rate = float64(row.Uses) / float64(sessions)
 		}
 		rs := RouteSkill{Name: row.Name, Uses: row.Uses, Tokens: row.Tokens, Rate: rate}
 

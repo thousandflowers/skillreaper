@@ -65,7 +65,7 @@ var riskGolden = []struct {
 	{"xattr\u001c-c", false, []string{"bypasses macOS quarantine", "hides control sequences from the reader"}},
 	{"xattr\u00a0-c", false, []string{"bypasses macOS quarantine"}},
 	{"xattr\u2003-c", false, []string{"bypasses macOS quarantine"}},
-	{"xattr\u200b-c", false, []string{}},
+	{"xattr\u200b-c", false, []string{"hides control sequences from the reader"}},
 	{"base64\u3000--decode", false, []string{"decodes hidden content"}},
 	{"\u017fk-ant-a1a1a1a1a1a1a1a1a1a1", false, []string{"holds what looks like a pasted secret"}},
 	{"SK-ANT-A1A1A1A1A1A1A1A1A1A1", false, []string{"holds what looks like a pasted secret"}},

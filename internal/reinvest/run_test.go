@@ -109,7 +109,7 @@ func TestRun_whole_pipeline_writes_a_skill_and_proposes_the_swap(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := termText(a)
-	for _, part := range []string{"✓ 4 sessions read", "✓ 1 kinds of work · 1 with no skill", "✓ 1 skills written", "✓ 1 fit",
+	for _, part := range []string{"✓ 4 sessions read", "✓ 1 kind of work · 1 with no skill", "✓ 1 skill written", "✓ 1 fit",
 		"reinvest · ~7,688 dead tok/session per reap", "mute      old-notes", "create    ship-release   ~", "✎ new · written from your sessions",
 		"for Software Releases (4 sessions)", "Cuts your releases.", "details: " + a.reportPath()} {
 		if !strings.Contains(out, part) {
@@ -221,7 +221,7 @@ func TestRun_online_searches_skills_sh_and_reads_whole_folders(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := termText(a)
-	for _, part := range []string{"✓ 1 candidates", "install   release-conductor   ~", "skill · o/r", "mute      old-notes"} {
+	for _, part := range []string{"✓ 1 candidate", "install   release-conductor   ~", "skill · o/r", "mute      old-notes"} {
 		if !strings.Contains(out, part) {
 			t.Errorf("the terminal does not show %q:\n%s", part, out)
 		}

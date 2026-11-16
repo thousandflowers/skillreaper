@@ -26,6 +26,18 @@ const stateLockWait = 15 * time.Second
 // exitInterrupted is the shell's code for a command stopped by Ctrl-C.
 const exitInterrupted = 130
 
+// stopSignal is the signal that asked the run in hand to stop, 0 for none.
+var stopSignal atomic.Int32
+
+// stopCode is the exit status of a run that was asked to stop: 128 plus the
+// signal, as a shell reports it, so SIGTERM (143) reads apart from Ctrl-C (130).
+func stopCode() int {
+	if sig := stopSignal.Load(); sig != 0 {
+		return 128 + int(sig)
+	}
+	return exitInterrupted
+}
+
 // lockState takes the lock every command that changes reaped/ shares. Prune,
 // mute, restore and unmute each read a state file, change it and write it back,
 // so any two running at once lose what one of them recorded.
@@ -69,12 +81,16 @@ func keepGoingWithoutReader() { signal.Ignore(syscall.SIGPIPE) }
 // did and releases the lock; a second one kills as usual.
 func applyGuard() (stopped func() bool, release func()) {
 	var hit atomic.Bool
+	stopSignal.Store(0)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	done := make(chan struct{})
 	go func() {
 		select {
-		case <-c:
+		case s := <-c:
+			if sig, ok := s.(syscall.Signal); ok {
+				stopSignal.Store(int32(sig))
+			}
 			hit.Store(true)
 			signal.Stop(c)
 		case <-done:

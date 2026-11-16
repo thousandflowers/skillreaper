@@ -31,10 +31,11 @@ var secretPatterns = []string{
 	`\baiza[\w-]{30,}`,
 	`\bhf_[a-z0-9]{30,}`,
 	`\b(?:akia|asia)[a-z0-9]{16}(?:\b|_)`, // an underscore after it is a boundary too
-	`\bxox[abprs]-[\w-]{10,}`,
+	`\bxox[abeprs]-[\w-]{10,}`,
+	`\bxapp-[\w-]{10,}`,
 	`\bbearer\s+[\w.~+/=-]{20,}`,
 	`\beyj[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}`,
-	`-----begin [a-z ]*private key-----(?:[\s\S]*?-----end [a-z ]*private key-----|[\s\S]*)`,
+	`-----begin [a-z ]*private key(?: block)?-----(?:[\s\S]*?-----end [a-z ]*private key(?: block)?-----|[\s\S]*)`,
 }
 
 type riskRule struct {
@@ -184,7 +185,7 @@ func risks(doc string, mcp bool) []string {
 			}
 		}
 	}
-	if controlChars.MatchString(doc) || hiddenChars.MatchString(doc) {
+	if controlChars.MatchString(doc) || hiddenChars.MatchString(doc) || hasInvisible(doc) {
 		found[whyControl] = true
 	}
 	if _, has := frontmatter(doc)["hooks"]; has {
@@ -200,3 +201,19 @@ func risks(doc string, mcp bool) []string {
 
 // redact takes pasted credentials out of session text, before anything is written from it.
 func redact(text string) string { return secretPattern.replaceAll(text, secretRemoved) }
+
+// hasInvisible says whether doc carries characters that draw nothing. The text
+// shown before `apply?` leaves them out and the file is written with them, so
+// what was approved would not be what is installed. The joiners and the emoji
+// selector stay: they are part of emoji and of several scripts. So does a byte
+// order mark that opens the file.
+func hasInvisible(doc string) bool {
+	for _, r := range strings.TrimPrefix(doc, "\ufeff") {
+		switch {
+		case r == 0x200c || r == 0x200d || r == 0xfe0f:
+		case isFormatChar(r), r == 0x034f, r >= 0x180b && r <= 0x180f, r >= 0xfe00 && r <= 0xfe0e, r >= 0xe0100 && r <= 0xe01ef:
+			return true
+		}
+	}
+	return false
+}

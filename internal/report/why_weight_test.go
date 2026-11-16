@@ -103,3 +103,16 @@ func TestWhyCountsSessionsAgainstTheScaledMinimum(t *testing.T) {
 		t.Errorf("installed before the window: %q", got)
 	}
 }
+
+// Claude Code's listing can keep part of a description. The weight is what it
+// kept, and the line says so: "~7 tok (description: 463 chars)" contradicts itself.
+func TestWhySaysAWeightTakenFromTheListing(t *testing.T) {
+	row := Row{Item: scan.Item{Category: scan.CatSkill, Name: "shared", DescChars: 463}, Tokens: 7, ListedChars: 26}
+	var b bytes.Buffer
+
+	RenderWhy(&b, BuildExplanation(row, 10, ExplainInput{}), false)
+
+	if want := "~7 tok  (26 of the description's 463 chars, as the last session listed it)"; !strings.Contains(b.String(), want) {
+		t.Errorf("why lacks %q:\n%s", want, b.String())
+	}
+}

@@ -240,7 +240,7 @@ func Mute(claudeDir, rootDir, name, skillPath string) error {
 		_ = os.Remove(backup)
 		return fmt.Errorf("save mute state: %w", err)
 	}
-	if err := atomicfile.Write(resolvedSkillPath, stripped, perm); err != nil {
+	if err := atomicfile.WriteDated(resolvedSkillPath, stripped, perm, info.ModTime()); err != nil {
 		delete(s.Muted, resolvedSkillPath)
 		if saveErr := saveState(claudeDir, s); saveErr != nil {
 			return fmt.Errorf("%w (and its record could not be removed: %v)", err, saveErr)
@@ -248,17 +248,7 @@ func Mute(claudeDir, rootDir, name, skillPath string) error {
 		_ = os.Remove(backup)
 		return err
 	}
-	keepDate(resolvedSkillPath, info)
 	return nil
-}
-
-// keepDate gives a rewritten file the date it had. A personal skill is dated by
-// its file, so a mute or an unmute that left today's date on it would make a
-// skill installed months ago read as new, and hold it in the grace period.
-// The file is already as it should be, so a date that cannot be set is no
-// reason to report the mute as failed.
-func keepDate(path string, before os.FileInfo) {
-	_ = os.Chtimes(path, before.ModTime(), before.ModTime())
 }
 
 // freeBackupPath does not reuse a backup left by an entry dropped earlier: it
@@ -469,7 +459,7 @@ func restoreWithin(claudeDir string, e Entry) error {
 	}
 	if _, err := os.Lstat(e.Path); os.IsNotExist(err) {
 		if id, _ := quarantineID(claudeDir, e.Path); id != "" {
-			return fmt.Errorf("it is in quarantine: run reap restore %s, then reap unmute %s", id, scan.ShellArg(e.Name))
+			return &prune.Rerun{Why: "it is in quarantine: run ", Commands: []string{"reap restore " + id, "reap unmute " + scan.ShellArg(e.Name)}}
 		}
 	}
 	path, err := resolveMutableExisting(root, e.Path)
@@ -497,10 +487,9 @@ func restoreWithin(claudeDir string, e Entry) error {
 	if err != nil {
 		return err
 	}
-	if err := atomicfile.Write(path, restored, info.Mode().Perm()); err != nil {
+	if err := atomicfile.WriteDated(path, restored, info.Mode().Perm(), info.ModTime()); err != nil {
 		return err
 	}
-	keepDate(path, info)
 	return os.Remove(backup)
 }
 

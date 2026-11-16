@@ -242,6 +242,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
+		// A flag only reinvest reads stops here, before reinvest is seen.
+		if slices.Contains(args, reinvestCommand) {
+			fmt.Fprintf(stderr, "error: %s\n", reinvestFirst(opts.claudeDir, args))
+		}
 		return 2
 	}
 	if showVersion {
@@ -331,14 +335,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "reap", version())
 		return 0
 	case reinvestCommand: // reached only with a flag in front of it
-		typed := []string{"reap", reinvestCommand} // its own flags as typed, wherever they stood
-		if opts.claudeDirExplicit {                // reinvest has no --claude-dir: it reads the folder from the environment
-			typed = append([]string{"CLAUDE_CONFIG_DIR=" + scan.ShellArg(opts.claudeDir)}, typed...)
+		said := ""
+		if opts.claudeDirExplicit {
+			said = opts.claudeDir
 		}
-		for _, arg := range reinvest.OwnArgs(args) {
-			typed = append(typed, scan.ShellArg(arg))
-		}
-		fmt.Fprintf(stderr, "error: reinvest reads its own flags, so it comes first: %s\n", strings.Join(typed, " "))
+		fmt.Fprintf(stderr, "error: %s\n", reinvestFirst(said, args))
 		return 2
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
@@ -501,6 +502,20 @@ func trimFloat(f float64) string {
 	return strconv.FormatFloat(f, 'g', -1, 64)
 }
 
+// reinvestFirst says how to type a reinvest that was not the first word: its
+// own flags as typed, wherever they stood, and the folder in the environment,
+// where reinvest reads it (it has no --claude-dir).
+func reinvestFirst(claudeDir string, args []string) string {
+	typed := []string{"reap", reinvestCommand}
+	if claudeDir != "" {
+		typed = append([]string{"CLAUDE_CONFIG_DIR=" + scan.ShellArg(claudeDir)}, typed...)
+	}
+	for _, arg := range reinvest.OwnArgs(args) {
+		typed = append(typed, scan.ShellArg(arg))
+	}
+	return "reinvest reads its own flags, so it comes first: " + strings.Join(typed, " ")
+}
+
 func fillDefaults(opts *options, stderr io.Writer) error {
 	// The state files record full paths: one recorded relative names nothing
 	// from another folder, and safepath cannot place it either.
@@ -513,6 +528,15 @@ func fillDefaults(opts *options, stderr io.Writer) error {
 			return err
 		}
 		*p = abs
+	}
+	// A mistyped path is said: read as an empty stack it hides every server.
+	if opts.claudeJSON != "" {
+		if info, err := os.Stat(opts.claudeJSON); err != nil || !info.Mode().IsRegular() {
+			return fmt.Errorf("no config file at %s", opts.claudeJSON)
+		}
+	}
+	if info, err := os.Stat(opts.claudeDir); opts.claudeDir != "" && err == nil && !info.IsDir() {
+		return fmt.Errorf("%s is a file, and --claude-dir takes a folder", opts.claudeDir)
 	}
 	opts.claudeDirExplicit = opts.claudeDir != ""
 	opts.claudeJSONGiven = opts.claudeJSON != ""
@@ -574,7 +598,13 @@ func fillDefaults(opts *options, stderr io.Writer) error {
 // under CLAUDE_CONFIG_DIR, or next to it, as ~/.claude.json is to ~/.claude.
 // "" when neither is there.
 func configBeside(dir string) string {
-	for _, p := range []string{filepath.Join(dir, ".claude.json"), filepath.Join(filepath.Dir(dir), ".claude.json")} {
+	places := []string{filepath.Join(dir, ".claude.json")}
+	// The file next to the folder is ~/.claude's. Next to ~/.claude-work it is
+	// still ~/.claude's, another profile's, and not this folder's to edit.
+	if filepath.Base(dir) == ".claude" {
+		places = append(places, filepath.Join(filepath.Dir(dir), ".claude.json"))
+	}
+	for _, p := range places {
 		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() {
 			return p
 		}
@@ -949,9 +979,10 @@ func gather(opts options) (*report.Report, error) {
 		// The durable record, consulted so an item that fired before the
 		// retention sweep is not mistaken for one that never fired at all.
 		History: func(platformID, category, name string) (int, time.Time, bool) {
-			r, ok := digest.Lookup(category, scopedName(platformID, name))
-			if category != string(scan.CatMCP) { // a server's name is exact; a skill's or an agent's is not
-				r, ok = digest.LookupFold(category, scopedName(platformID, name))
+			// a server's name is exact; a skill's or an agent's is not
+			r, ok := digest.LookupFold(category, scopedName(platformID, name))
+			if category == string(scan.CatMCP) {
+				r, ok = digest.LookupServer(category, scopedName(platformID, name))
 			}
 			if !ok || r.Uses == 0 {
 				return 0, time.Time{}, false
@@ -1172,6 +1203,13 @@ func observationFrom(one *usage.Stats) evidence.Observation {
 	for cat, byName := range one.Uses {
 		for name, n := range byName {
 			addUse(string(cat), name, n, one.Last[cat][name])
+		}
+	}
+	// A call whose server the name alone cannot settle (a server can be named
+	// a__b) is kept under its whole name as well: LookupServer reads it there.
+	if one.ToolSep == "" {
+		for tool, n := range one.ToolCalls {
+			addUse(string(scan.CatMCP), tool, n, one.ToolLast[tool])
 		}
 	}
 	// Uses before the window are not use in the window, and are history all the
@@ -1421,21 +1459,10 @@ func findPreferring(r *report.Report, name string, eligible func(report.Row) boo
 // as an error listing how to name each.
 func findRow(r *report.Report, typed string, eligible func(report.Row) bool) ([]report.Row, error) {
 	plat, cat, name := splitSelector(typed)
-	var exact, leaf []report.Row
-	for _, row := range r.Rows {
-		if !eligible(row) || (plat != "" && row.Platform != plat) || (cat != "" && string(row.Category) != cat) {
-			continue
-		}
-		switch i := strings.LastIndexByte(row.Name, ':'); {
-		case row.Path == typed, row.Name == name:
-			exact = append(exact, row)
-		case i >= 0 && row.Name[i+1:] == name:
-			leaf = append(leaf, row)
-		}
-	}
-	matches := exact
-	if len(matches) == 0 {
-		matches = leaf
+	matches := rowsNamed(r, typed, plat, cat, name, eligible)
+	if len(matches) == 0 && name != typed {
+		// "codex:foo" can be a name in its own right, and not foo in Codex
+		matches = rowsNamed(r, typed, "", "", typed, eligible)
 	}
 	if len(matches) < 2 {
 		return matches, nil
@@ -1461,6 +1488,27 @@ func findRow(r *report.Report, typed string, eligible func(report.Row) bool) ([]
 		lines[i] = fmt.Sprintf("  %s:%s:%s  %s", m.Platform, m.Category, m.Name, shown(m.Path))
 	}
 	return nil, fmt.Errorf("%s matches %d items; name one of them, by this form or by its path:\n%s", typed, len(matches), strings.Join(lines, "\n"))
+}
+
+// rowsNamed is the rows of that platform and category whose name is name, or,
+// when none is, whose name ends in it after a namespace.
+func rowsNamed(r *report.Report, typed, plat, cat, name string, eligible func(report.Row) bool) []report.Row {
+	var exact, leaf []report.Row
+	for _, row := range r.Rows {
+		if !eligible(row) || (plat != "" && row.Platform != plat) || (cat != "" && string(row.Category) != cat) {
+			continue
+		}
+		switch i := strings.LastIndexByte(row.Name, ':'); {
+		case row.Path == typed, row.Name == name:
+			exact = append(exact, row)
+		case i >= 0 && row.Name[i+1:] == name:
+			leaf = append(leaf, row)
+		}
+	}
+	if len(exact) > 0 {
+		return exact
+	}
+	return leaf
 }
 
 // splitSelector takes a known platform and a known category off the front of a
@@ -1776,7 +1824,7 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 	claudeLines := scan.LoadClaudeMD(cwd, home, opts.claudeDir)
 	explain := func(row report.Row) report.Explanation {
 		muted, _ := mutedSet(opts.claudeDir, []scan.Item{row.Item})
-		return report.BuildExplanation(row, r.Sessions, report.ExplainInput{
+		return report.BuildExplanation(row, r.SessionsOf(row.Platform), report.ExplainInput{
 			MinSessions:   opts.minSessions,
 			GraceDays:     opts.graceDays,
 			MuteThreshold: opts.muteThreshold,
@@ -1834,7 +1882,7 @@ func cmdShare(opts options, stdout, stderr io.Writer) int {
 	cut := 0
 	if entries, err := prune.LoadManifest(opts.claudeDir); err == nil {
 		for _, e := range entries {
-			if !e.Restored {
+			if !e.Restored && !prune.NeverMoved(e) { // put back by hand saves nothing
 				cut += e.Tokens
 			}
 		}
@@ -1858,6 +1906,9 @@ func cmdShare(opts options, stdout, stderr io.Writer) int {
 // snapshot can never disagree with the run that produced it.
 func cmdSnapshot(opts options, stdout, stderr io.Writer) int {
 	if opts.listKeep {
+		if !requireClaudeDir(opts, stderr) {
+			return 1
+		}
 		saved, err := snapshot.List(opts.claudeDir)
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)

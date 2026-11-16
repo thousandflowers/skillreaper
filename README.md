@@ -680,7 +680,7 @@ installed.</sub></p>
 | Platform | Full support |
 |---|---|
 | **Claude Code** | ✅ |
-| **Codex CLI** | ✅ |
+| **Codex CLI** | ✅ for what was used (its history shows what fired, not everything that was used, so an item with no use there surfaces as REVIEW, never REAP or MUTE) |
 | **Hermes** | Inventory only (session history is in `state.db`, which skillreaper does not parse yet, so its items surface as REVIEW, never REAP) |
 | **OpenCode** | ✅ (usage evidence needs the `sqlite3` CLI; inventory-only without it) |
 | **Cursor** | Inventory only (no local transcripts) |
@@ -795,7 +795,7 @@ Tracked as issues, grouped by the problem they solve.
 
 Not planned: a CI job running `reap` (a runner has no session transcripts, so it
 would measure nothing - the periodic loop is `reap install-hook`), an
-extrapolated annual dollar figure (see [docs/decisions.md](docs/decisions.md)),
+extrapolated annual dollar figure,
 and git commit ranges (transcripts carry timestamps, so a window of days,
 `--days` today and `--since` / `--until` once #53 lands, covers it).
 

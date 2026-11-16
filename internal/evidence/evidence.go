@@ -232,10 +232,34 @@ func (d *Digest) Lookup(cat, name string) (Record, bool) {
 // is invoked as the person types it, and its folder may spell it another way.
 // Every record under the name in any case counts.
 func (d *Digest) LookupFold(cat, name string) (Record, bool) {
+	return d.sumWhere(cat, func(recorded string) bool { return strings.EqualFold(recorded, name) })
+}
+
+// serverSep is what joins a server's name and a tool's in a recorded call.
+const serverSep = "__"
+
+// LookupServer is Lookup for an MCP server. A call is recorded as server__tool,
+// and the parser can only credit what stands before the first "__". A server
+// whose own name holds "__" finds its calls under their whole names; in a
+// record written before those were kept there is only that first part, and it
+// is taken: more uses than its own is the safe mistake, none would condemn it.
+func (d *Digest) LookupServer(cat, name string) (Record, bool) {
+	if !strings.Contains(name, serverSep) {
+		return d.Lookup(cat, name)
+	}
+	if r, ok := d.sumWhere(cat, func(recorded string) bool { return strings.HasPrefix(recorded, name+serverSep) }); ok {
+		return r, true
+	}
+	first, _, _ := strings.Cut(name, serverSep)
+	return d.Lookup(cat, first)
+}
+
+// sumWhere adds up every record of cat whose name matches.
+func (d *Digest) sumWhere(cat string, matches func(recorded string) bool) (Record, bool) {
 	var sum Record
 	found := false
 	for recorded, r := range d.Items[cat] {
-		if !strings.EqualFold(recorded, name) {
+		if !matches(recorded) {
 			continue
 		}
 		found = true

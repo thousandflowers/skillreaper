@@ -71,6 +71,7 @@ type Row struct {
 	report.Row
 	raw     report.Row
 	PruneID string // the manifest id of a row that is in quarantine
+	From    string // for such a row: where it was, and that id
 }
 
 // Raw is the row as it was scanned, for whoever carries a choice out.
@@ -147,6 +148,10 @@ func prunedRow(e prune.Entry) *Row {
 	raw.Reason = reasonPruned
 	r := cleanRow(raw)
 	r.PruneID = e.ID
+	r.From = "id " + e.ID
+	if was := term.Visible(strings.TrimPrefix(e.Source, sourcePlugin)); was != "" {
+		r.From = was + ", " + r.From
+	}
 	return r
 }
 

@@ -288,8 +288,7 @@ func (m *Menu) drawCard(r *Row, at, of int, chosen, effective string, options []
 	if fit != short {
 		name = r.Name
 	}
-	source, _, _ := strings.Cut(r.Source, "@")
-	m.put(4, 3, cut(name+" · "+r.cat()+" · "+source+" · "+firstOf(r.Platform, unknownTool), wd-6), dim)
+	m.put(4, 3, cut(name+" · "+r.cat()+" · "+m.cardSource(r)+" · "+firstOf(r.Platform, unknownTool), wd-6), dim)
 	m.drawOptions(options, focus, effective)
 	switch {
 	case !options[focus].allowed:
@@ -383,4 +382,14 @@ func (m *Menu) drawOptions(options []option, focus int, effective string) {
 	if effective == vDisable {
 		m.put(5, x, "  plugin off  ", m.hl())
 	}
+}
+
+// cardSource is where the card says a row comes from: the plugin, and its
+// marketplace only when another row of this name in this tool needs telling apart.
+func (m *Menu) cardSource(r *Row) string {
+	if m.names[nameInTool(r)] > 1 {
+		return r.Source
+	}
+	source, _, _ := strings.Cut(r.Source, "@")
+	return source
 }

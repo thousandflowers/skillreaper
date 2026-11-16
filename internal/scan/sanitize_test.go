@@ -154,3 +154,35 @@ func TestRedactSecretsMasksTheCredentialItself(t *testing.T) {
 		}
 	}
 }
+
+// A secret has no shape that shows it: in quotes, glued to its flag, as the user
+// part of a URL, or with a space in it.
+func TestRedactSecretsMasksEveryShapeOfSecret(t *testing.T) {
+	for _, c := range []struct{ in, keep, gone string }{
+		{`run --token "abc123"`, "run --token", "abc123"},
+		{`TOKEN="abc123" run.sh`, "run.sh", "abc123"},
+		{`{"api_key":"abc123","model":"m1"}`, `"model":"m1"`, "abc123"},
+		{`sh -c "echo {\"api_key\":\"abc123\"}"`, "sh -c", "abc123"},
+		{`git clone https://ghp_SECRETPAT123@github.com/o/r`, "github.com/o/r", "ghp_SECRETPAT123"},
+		{`curl --header "X-Token: abc def" https://x`, "https://x", "def"},
+		{`curl -H "Authorization: Digest username=\"bob\", response=\"abc123\"" https://x`, "https://x", "bob"},
+		{`curl -H "Authorization: Digest username=\"bob\", response=\"abc123\"" https://x`, "https://x", "abc123"},
+		{`curl -H 'Authorization: Digest username="bob", response="abc123"' https://x`, "https://x", "abc123"},
+		{`Proxy-Authorization: Basic dXNlcg==`, "Proxy-Authorization", "dXNlcg=="},
+		{`Authorization: Digest username="bob", response="abc123"`, "Authorization", "abc123"},
+		{`srv --token=-abc123`, "srv --token=", "abc123"},
+		{`PASSWORD=-abc123 run.sh`, "run.sh", "abc123"},
+		{`https://user:p@ss@host/x`, "host/x", "ss@"},
+		{`curl --user bob:hunter2 https://x`, "https://x", "hunter2"},
+		{`curl --user=bob:hunter2 https://x`, "https://x", "hunter2"},
+		{`mysql -ubob:hunter2 db`, " db", "hunter2"},
+		{`curl -u "bob:my pass" https://x`, "https://x", "pass"},
+		{`curl -u 'bob:my pass' https://x`, "https://x", "pass"},
+		{`npx -y @scope/pkg --port 8080 https://host:8080/path`, `npx -y @scope/pkg --port 8080 https://host:8080/path`, "\x00"},
+	} {
+		got := RedactSecrets(c.in)
+		if strings.Contains(got, c.gone) || !strings.Contains(got, c.keep) {
+			t.Errorf("RedactSecrets(%s) = %s", c.in, got)
+		}
+	}
+}

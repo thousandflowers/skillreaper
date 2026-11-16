@@ -506,7 +506,7 @@ func readConfigWithout(claudeDir, configPath, scope, name string) (raw, without,
 	if !json.Valid(raw) {
 		return nil, nil, nil, fmt.Errorf("%s is not plain JSON (comments, perhaps), so reap will not edit it; remove %s from it by hand", configPath, name)
 	}
-	without, payload, err = jsonedit.Delete(raw, serverPath(scope, name)...)
+	without, payload, err = deleteEvery(raw, serverPath(scope, name)...)
 	if errors.Is(err, jsonedit.ErrNotFound) {
 		return nil, nil, nil, fmt.Errorf("%w: mcp server %s in %s", ErrAlreadyGone, name, configPath)
 	}
@@ -679,7 +679,7 @@ func restoreEntry(claudeDir string, e *Entry) error {
 	// A rename would silently replace a file here. What is there now is
 	// the user's, so it is theirs to move.
 	if lexists(e.From) {
-		return fmt.Errorf("%s exists again; move it away, then run reap restore %s", e.From, e.ID)
+		return restoreAgain(e, e.From+" exists again; move it away, then run ")
 	}
 	// A run killed between the two moves can leave the folder where it was.
 	if e.FilesTo != "" && lexists(e.FilesTo) {
@@ -690,7 +690,7 @@ func restoreEntry(claudeDir string, e *Entry) error {
 			return err
 		}
 		if lexists(e.FilesFrom) {
-			return fmt.Errorf("%s exists again; move it away, then run reap restore %s", e.FilesFrom, e.ID)
+			return restoreAgain(e, e.FilesFrom+" exists again; move it away, then run ")
 		}
 		if err := rename(e.FilesTo, e.FilesFrom); err != nil {
 			return err
@@ -754,7 +754,7 @@ func serverRestored(claudeDir string, e *Entry, b []byte, path []string) ([]byte
 		if sameJSON(cur, e.Payload) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("a different %s is defined in %s now; reap will not replace it. Remove it, then run reap restore %s", e.Name, e.ConfigPath, e.ID)
+		return nil, restoreAgain(e, fmt.Sprintf("a different %s is defined in %s now; reap will not replace it. Remove it, then run ", e.Name, e.ConfigPath))
 	}
 	if !errors.Is(err, jsonedit.ErrNotFound) {
 		return nil, err
@@ -765,4 +765,42 @@ func serverRestored(claudeDir string, e *Entry, b []byte, path []string) ([]byte
 func sameJSON(a, b []byte) bool {
 	var x, y bytes.Buffer
 	return json.Compact(&x, a) == nil && json.Compact(&y, b) == nil && bytes.Equal(x.Bytes(), y.Bytes())
+}
+
+// deleteEvery takes a key out wherever the file spells it: written twice, the
+// earlier spelling would become the live definition once the later one is
+// gone. The payload is the last one, the one that was in force.
+func deleteEvery(raw []byte, path ...string) (without, payload []byte, err error) {
+	without, payload, err = jsonedit.Delete(raw, path...)
+	for err == nil {
+		more, _, again := jsonedit.Delete(without, path...)
+		if again != nil {
+			break
+		}
+		without = more
+	}
+	return without, payload, err
+}
+
+// Rerun is an error that ends in the commands that put things right. Whoever
+// prints it knows which folder the run was pointed at, and In adds it: ids
+// start at 001 in every folder, so a command without it acts on another one.
+type Rerun struct {
+	Why      string
+	Commands []string
+}
+
+func (e *Rerun) Error() string { return e.In("") }
+
+// In is the error with tail after each command.
+func (e *Rerun) In(tail string) string {
+	with := make([]string, len(e.Commands))
+	for i, c := range e.Commands {
+		with[i] = c + tail
+	}
+	return e.Why + strings.Join(with, ", then ")
+}
+
+func restoreAgain(e *Entry, why string) error {
+	return &Rerun{Why: why, Commands: []string{"reap restore " + e.ID}}
 }

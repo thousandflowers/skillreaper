@@ -597,3 +597,82 @@ func TestEqualWeightsHaveAFixedOrder(t *testing.T) {
 	mustEqual(t, "flat list", strings.Join(flat, " "), "a b x y")
 	mustEqual(t, "groups", strings.Join(groups, " | "), "your own | alpha | zeta")
 }
+
+// The keep list goes by category and name. A lock on one copy is a lock on
+// every copy, in any marketplace or tool: the list shows it at once, and the
+// receipt says it before the y.
+func TestALockIsEveryCopysLock(t *testing.T) {
+	rows := []report.Row{
+		raw("common", source("plugin:foo@mktA")), raw("common", source("plugin:foo@mktB")),
+		raw("common", category(scan.CatAgent)), raw("other"),
+	}
+	m, _, _ := newMenu(t, one(rows...))
+	by := map[string]*Row{}
+	for _, r := range m.rows {
+		by[r.cat()+" "+r.Source] = r
+	}
+	a, b, agent := by["skill plugin:foo@mktA"], by["skill plugin:foo@mktB"], by["agent personal"]
+
+	said := newReceiptView(m, []Pick{{a, vLock}}, "tok").warnings
+	mustEqual(t, "warnings", strings.Join(said, " | "), "⚠ a lock goes by name: every copy of common is locked")
+	mustEqual(t, "warnings with both chosen", len(newReceiptView(m, []Pick{{a, vLock}, {b, vLock}}, "tok").warnings), 0)
+
+	m.settle([]Outcome{{Pick: Pick{a, vLock}}})
+
+	mustEqual(t, "the other copy is locked", b.Kept, true)
+	mustEqual(t, "an agent of that name is locked", agent.Kept, false)
+
+	m.settle([]Outcome{{Pick: Pick{a, vUnlock}}})
+
+	mustEqual(t, "the other copy is unlocked with it", m.applied[b], vUnlock)
+	_, touched := m.applied[agent]
+	mustEqual(t, "the agent is touched", touched, false)
+}
+
+// Two rows in quarantine under one name say where each was and its id: the
+// receipt of an undo can then be checked against what comes back.
+func TestTwoPrunedRowsOfOneNameSayWhichIsWhich(t *testing.T) {
+	d := one(raw("other"))
+	d.Pruned = []prune.Entry{
+		{ID: "001", Name: "foo:common", Category: "skill", Platform: defaultTool, Source: "plugin:foo@mktA"},
+		{ID: "002", Name: "foo:common", Category: "skill", Platform: defaultTool},
+	}
+	m, _, _ := newMenu(t, d)
+
+	var names []string
+	for _, r := range m.rows {
+		if isPruned(r) {
+			names = append(names, m.displayName(r))
+		}
+	}
+
+	mustEqual(t, "names", strings.Join(names, " | "),
+		"foo:common ("+defaultTool+" · quarantine · foo@mktA, id 001) | foo:common ("+defaultTool+" · quarantine · id 002)")
+}
+
+// The name comes first on a receipt line: an amount too wide for the window
+// loses its money, then its end, before the name loses its place.
+func TestReceiptLineKeepsTheNameBesideAHugeAmount(t *testing.T) {
+	m, _, _ := newMenu(t, one(raw("alpha", tokens(4_000_000))))
+
+	for _, pw := range []int{34, 22} {
+		line := m.receiptLine(Pick{Row: m.rows[0], Verb: vPrune}, pw)
+
+		mustContain(t, line, "alpha ")
+		mustEqual(t, "width at "+itoa(pw), runes(line), pw)
+	}
+}
+
+// Two plugins of one name from two marketplaces: the card says which.
+func TestCardSourceNamesTheMarketplaceWhenItTellsApart(t *testing.T) {
+	rows := []report.Row{raw("common", source("plugin:foo@mktA")), raw("common", source("plugin:foo@mktB")), raw("solo", source("plugin:bar@mktA"))}
+	m, _, _ := newMenu(t, one(rows...))
+
+	var got []string
+	for _, r := range m.rows {
+		got = append(got, m.cardSource(r))
+	}
+	slices.Sort(got)
+
+	mustEqual(t, "sources", strings.Join(got, " | "), "plugin:bar | plugin:foo@mktA | plugin:foo@mktB")
+}

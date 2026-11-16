@@ -27,7 +27,15 @@ func (c mcpServerConfig) display() string {
 	default:
 		return RedactSecrets(c.URL)
 	}
-	return RedactSecrets(strings.TrimSpace(strings.Join(append(argv, c.Args...), " ")))
+	words := append(argv, c.Args...)
+	for i := 1; i < len(words); i++ {
+		// One argument is one word of the line, or a secret with a space in it
+		// would be masked up to that space only.
+		if strings.ContainsAny(words[i], " \t\n'\"") {
+			words[i] = ShellArg(words[i])
+		}
+	}
+	return RedactSecrets(strings.TrimSpace(strings.Join(words, " ")))
 }
 
 // ScanMCP inventories MCP servers from the platform config file (user

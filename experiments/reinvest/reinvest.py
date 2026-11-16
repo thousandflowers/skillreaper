@@ -494,6 +494,11 @@ def choose_and_apply(swap_list: list[dict], dry_run: bool):
         print("  dry run · nothing installed or muted")
 
 
+def counted(n: int, noun: str) -> str:
+    """n and its noun, in the plural unless there is one."""
+    return f"{n} {noun}{'' if n == 1 else 's'}"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--days", type=int, default=120, help="sessions to read (longer than reap's window: "
@@ -513,7 +518,7 @@ def main():
     step("reading sessions")
     state = reap_state()
     sessions = remember_sessions(read_sessions(args.days, {canon(s["name"]) for s in state["installed"]}))
-    step(f"{len(sessions)} sessions read", done=True)
+    step(f"{counted(len(sessions), 'session')} read", done=True)
 
     refused = []  # what the rules turned down before any verifier saw it
     step("grouping your work")
@@ -521,7 +526,7 @@ def main():
     open_gaps = find_gaps(kinds, state["installed"])
     gaps = open_gaps[:MAX_GAPS]
     taken = f" · the first {len(gaps)} taken up" if len(gaps) < len(open_gaps) else ""
-    step(f"{len(kinds)} kinds of work · {len(open_gaps)} with no skill{taken}", done=True)
+    step(f"{counted(len(kinds), 'kind')} of work · {len(open_gaps)} with no skill{taken}", done=True)
 
     if args.online:
         step("searching skills and MCP servers")
@@ -529,13 +534,13 @@ def main():
         found = sources.search_skills(queries, {canon(s["name"]) for s in state["installed"]})
         with ThreadPoolExecutor(max(1, len(gaps))) as ex:
             cands = [c for cs in ex.map(lambda g: candidates_for(g, found, args.no_mcp or not args.mcp, refused), gaps) for c in cs]
-        step(f"{len(cands)} candidates", done=True)
+        step(counted(len(cands), "candidate"), done=True)
     else:
-        step(f"writing a skill for {len(gaps)} gaps from your sessions")
+        step(f"writing a skill for {counted(len(gaps), 'gap')} from your sessions")
         cands = created_for(gaps, sessions, state["installed"], refused)
-        step(f"{len(cands)} skills written", done=True)
+        step(f"{counted(len(cands), 'skill')} written", done=True)
 
-    step(f"verifying {len(cands)} candidates")
+    step(f"verifying {counted(len(cands), 'candidate')}")
     passing, rejected = verify_all(cands, state)
     rejected = rejected + rejection_lines({i: (n, [r]) for i, n, r in refused})
     step(f"{len(passing)} fit", done=True)

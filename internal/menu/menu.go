@@ -2,6 +2,7 @@ package menu
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -130,8 +131,11 @@ func (m *Menu) displayName(r *Row) string {
 	where := firstOf(r.Platform, unknownTool)
 	if m.names[nameInTool(r)] > 1 { // twice in one tool: where each comes from tells them apart
 		where += " · " + strings.TrimPrefix(r.Source, sourcePlugin)
+		if r.From != "" { // twice in quarantine: where each was, and the id that brings it back
+			where += " · " + r.From
+		}
 	}
-	if m.names[nameInTool(r)+"\x00"+r.Source] > 1 { // and from one place: a skill and an agent of one name
+	if m.names[nameInTool(r)+"\x00"+r.Source] > 1 && r.From == "" { // and from one place: a skill and an agent of one name
 		where += " · " + r.cat()
 	}
 	return r.Name + " (" + where + ")"
@@ -166,10 +170,44 @@ func (m *Menu) settle(outcomes []Outcome) {
 			continue
 		}
 		if o.Pick.Verb == vLock {
-			o.Pick.Row.Kept = true
+			for _, r := range m.all {
+				if sharesLock(r, o.Pick.Row) {
+					r.Kept = true
+				}
+			}
 			continue
 		}
 		m.applied[o.Pick.Row] = o.Pick.Verb
+		if o.Pick.Verb == vUnlock {
+			for _, r := range m.all {
+				if sharesLock(r, o.Pick.Row) {
+					m.applied[r] = vUnlock
+				}
+			}
+		}
 	}
 	m.settled++
+}
+
+// sharesLock says whether a lock on one row is a lock on the other. The keep
+// list goes by category and name, whatever tool or marketplace a copy is in.
+func sharesLock(a, b *Row) bool {
+	return a.Category == b.Category && strings.EqualFold(a.raw.DiskName(), b.raw.DiskName())
+}
+
+// lockedAlong names the locks that take rows nobody chose: the other copies.
+func (m *Menu) lockedAlong(picks []Pick) []string {
+	chosen := map[*Row]bool{}
+	for _, pk := range picks {
+		chosen[pk.Row] = pk.Verb == vLock
+	}
+	var names []string
+	for _, pk := range picks {
+		for _, r := range m.all {
+			if chosen[pk.Row] && !chosen[r] && sharesLock(r, pk.Row) && !slices.Contains(names, pk.Row.Name) {
+				names = append(names, pk.Row.Name)
+			}
+		}
+	}
+	return names
 }

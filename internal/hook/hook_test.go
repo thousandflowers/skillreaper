@@ -391,3 +391,20 @@ func TestOddSessionStartIsNamedWithItsFile(t *testing.T) {
 		t.Errorf("uninstall: %v", err)
 	}
 }
+
+// "SessionStart": null is an empty list, as "hooks": null is an empty object.
+func TestInstallWhenSessionStartIsNull(t *testing.T) {
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(settings, []byte(`{"hooks":{"SessionStart":null,"Stop":[]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Install(settings, Command("/usr/local/bin/reap"), false); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(settings)
+	for _, want := range []string{Marker, `"Stop"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("settings missing %q: %s", want, b)
+		}
+	}
+}

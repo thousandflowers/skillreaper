@@ -34,7 +34,7 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(stderr, pruneNameMiss(r, args[0], false))
+		fmt.Fprintln(stderr, pruneNameMiss(opts, r, args[0], false))
 		return 1
 	}
 	row := rows[0]

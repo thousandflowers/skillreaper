@@ -253,7 +253,8 @@ underneath. Most skills fire in exactly one project, so that spent three lines
 saying what one line says — and it made the only comparison worth making,
 which skills fire most and where, impossible, because the counts sat at a
 different depth from the names and never lined up in a column. One flat table,
-a row per skill-and-project pair, is 40 lines down to 24 and sorts by eye.
+a row per skill-and-project pair, is 16 lines down to 11 on the fixture and
+sorts by eye.
 
 `⚑ repo-local` was a yellow flag. It is the entire point of the view — a skill
 that looks cold globally only because it is hot in one repo — so it is a word

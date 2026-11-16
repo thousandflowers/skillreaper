@@ -56,7 +56,11 @@ func refuseKept(opts options, row report.Row, stderr io.Writer) bool {
 	if !row.Kept {
 		return false
 	}
-	fmt.Fprintf(stderr, "error: %s is kept: run reap keep --remove %s%s first\n", row.Name, scan.ShellArg(row.Name), sameFolder(opts))
+	said := row.Name
+	if strings.HasPrefix(said, "-") { // read as a flag where a name goes: its key is not
+		said = override.ItemKey(string(row.Category), row.Name)
+	}
+	fmt.Fprintf(stderr, "error: %s is kept: run reap keep --remove %s%s first\n", row.Name, scan.ShellArg(said), sameFolder(opts))
 	return true
 }
 
@@ -151,7 +155,7 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 			return 1
 		}
 		if len(rows) == 0 {
-			fmt.Fprintln(stderr, pruneNameMiss(r, args[0], false))
+			fmt.Fprintln(stderr, pruneNameMiss(opts, r, args[0], false))
 			return 1
 		}
 		if refuseKept(opts, rows[0], stderr) {
@@ -398,7 +402,7 @@ type pruneOutcome struct {
 func (o pruneOutcome) exitCode() int {
 	switch {
 	case o.interrupted > 0:
-		return exitInterrupted
+		return stopCode()
 	case len(o.failed) > 0:
 		return 1
 	}
@@ -507,13 +511,13 @@ func (o pruneOutcome) writeJSON(w, stderr io.Writer, applied bool) int {
 
 // pruneNameMiss says why a name cannot be pruned or muted. Only an item with a
 // plugin source is said to be inside a plugin.
-func pruneNameMiss(r *report.Report, name string, muting bool) string {
+func pruneNameMiss(opts options, r *report.Report, name string, muting bool) string {
 	for _, row := range r.Rows {
 		if row.Name != name && !strings.HasSuffix(row.Name, ":"+name) {
 			continue
 		}
 		if muting && row.Category == scan.CatMCP {
-			return fmt.Sprintf("error: %s is an MCP server, and mute works on skills and agents: reap prune%s takes it out, reversibly", row.Name, pasteTail(options{}, row.Name))
+			return fmt.Sprintf("error: %s is an MCP server, and mute works on skills and agents: reap prune%s takes it out, reversibly", row.Name, pasteTail(opts, row.Name))
 		}
 		if report.IsPluginSource(row.Source) {
 			return fmt.Sprintf("error: %s is inside a plugin and can only be disabled via /plugin in Claude Code", row.Name)
@@ -539,7 +543,7 @@ func cmdRestore(opts options, args []string, stdin io.Reader, stdout, stderr io.
 		}
 		if err != nil {
 			// The error names the path, and a folder's name is not trusted.
-			fmt.Fprintf(stderr, "error: %s\n", shown(err.Error()))
+			fmt.Fprintf(stderr, "error: %s\n", shown(inFolder(opts, err)))
 			return 1
 		}
 		said := id // what was brought back, not what was typed: a number can be a name
@@ -579,7 +583,7 @@ func cmdRestore(opts options, args []string, stdin io.Reader, stdout, stderr io.
 	if errors.As(err, &partial) {
 		fmt.Fprintf(stdout, "restored %d %s, %d left:\n", n, report.Plural(n, "item"), len(partial.Failed))
 		for _, f := range partial.Failed {
-			fmt.Fprintf(stderr, "  %s %s (%s): %s\n", f.Entry.Category, shown(f.Entry.Name), f.Entry.ID, shown(f.Err.Error()))
+			fmt.Fprintf(stderr, "  %s %s (%s): %s\n", f.Entry.Category, shown(f.Entry.Name), f.Entry.ID, shown(inFolder(opts, f.Err)))
 		}
 		return 1
 	}
@@ -602,10 +606,12 @@ func restoreID(claudeDir, arg string) (string, error) {
 		return "", err
 	}
 	var matches []prune.Entry
+	restoredID := false
 	for _, e := range entries {
-		if e.ID == arg {
+		if e.ID == arg && !e.Restored {
 			return arg, nil
 		}
+		restoredID = restoredID || e.ID == arg
 		if !e.Restored && !prune.NeverMoved(e) && (e.Name == arg || strings.HasSuffix(e.Name, ":"+arg)) {
 			matches = append(matches, e)
 		}
@@ -621,6 +627,9 @@ func restoreID(claudeDir, arg string) (string, error) {
 	}
 	switch len(matches) {
 	case 0:
+		if restoredID {
+			return arg, nil // restore says it is already back
+		}
 		return "", fmt.Errorf("nothing in quarantine with id or name %s; reap restore lists what there is", arg)
 	case 1:
 		return matches[0].ID, nil
@@ -630,4 +639,16 @@ func restoreID(claudeDir, arg string) (string, error) {
 		ids[i] = e.ID + " (" + shown(e.From+e.ConfigPath) + ")"
 	}
 	return "", fmt.Errorf("%s is in quarantine %d times; use an id: %s", arg, len(matches), strings.Join(ids, ", "))
+}
+
+// inFolder is an error's text with the folder added to the commands it tells
+// the person to run: the package that wrote them knows the command, and not
+// which folder this run was pointed at.
+func inFolder(opts options, err error) string {
+	text := err.Error()
+	var again *prune.Rerun
+	if errors.As(err, &again) {
+		text = strings.Replace(text, again.Error(), again.In(sameFolder(opts)), 1)
+	}
+	return text
 }

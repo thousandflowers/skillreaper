@@ -64,7 +64,7 @@ FILE_MARK = "===== FILE {} ====="  # how each bundled file appears after SKILL.m
 SKILL_FILE = "SKILL.md"
 FETCH = r"(?:curl|wget|iwr|invoke-webrequest)\b"
 SH = r"(?:ba|z|k|da|fi)?sh"
-SECRETS = [r"sk-ant-[\w-]{20,}", r"\bsk-[a-z0-9_-]{32,}", r"\b[sr]k_(?:live|test)_[a-z0-9]{20,}", r"\bgh[pousr]_[a-z0-9]{30,}", r"\bgithub_pat_\w{20,}", r"\bglpat-[\w-]{20,}", r"\bnpm_[a-z0-9]{30,}", r"\baiza[\w-]{30,}", r"\bhf_[a-z0-9]{30,}", r"\b(?:akia|asia)[a-z0-9]{16}(?:\b|(?=_))", r"\bxox[abprs]-[\w-]{10,}", r"\bbearer\s+[\w.~+/=-]{20,}", r"\beyj[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}", r"-----begin [a-z ]*private key-----(?:[\s\S]*?-----end [a-z ]*private key-----|[\s\S]*)"]
+SECRETS = [r"sk-ant-[\w-]{20,}", r"\bsk-[a-z0-9_-]{32,}", r"\b[sr]k_(?:live|test)_[a-z0-9]{20,}", r"\bgh[pousr]_[a-z0-9]{30,}", r"\bgithub_pat_\w{20,}", r"\bglpat-[\w-]{20,}", r"\bnpm_[a-z0-9]{30,}", r"\baiza[\w-]{30,}", r"\bhf_[a-z0-9]{30,}", r"\b(?:akia|asia)[a-z0-9]{16}(?:\b|(?=_))", r"\bxox[abeprs]-[\w-]{10,}", r"\bxapp-[\w-]{10,}", r"\bbearer\s+[\w.~+/=-]{20,}", r"\beyj[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}", r"-----begin [a-z ]*private key(?: block)?-----(?:[\s\S]*?-----end [a-z ]*private key(?: block)?-----|[\s\S]*)"]
 RISKY = [
     (rf"{FETCH}[^\n]{{0,200}}\|[^\n]{{0,80}}(?<![\w.-]){SH}\b", "downloads and runs code"),
     (rf"{FETCH}[^\n]{{0,200}}\|\s*(?:sudo\s+)?(?:python3?|perl|ruby|node)\s*(?:-\s*)?$", "downloads and runs code"),
@@ -195,7 +195,7 @@ def risks(doc: str, mcp: bool = False) -> list[str]:
     if mcp:
         tools = _tool_form(text)
         found |= {why for pattern, why in MCP_RISKY if re.search(pattern, tools) or re.search(pattern, low)}
-    if CONTROL_RE.search(doc) or HIDDEN_RE.search(doc):
+    if CONTROL_RE.search(doc) or HIDDEN_RE.search(doc) or has_invisible(doc):
         found.add("hides control sequences from the reader")
     if "hooks" in frontmatter(doc):
         found.add("installs hooks that run on their own")
@@ -423,3 +423,16 @@ def search_mcp(words: list[str]) -> list[dict]:
     return [{"id": s["name"], "kind": "mcp", "name": one_line(str(s.get("title") or s["name"].split("/")[-1])),
              "desc": one_line(str(s.get("description", ""))), "server": s, "installs": 0, "doc": doc}
             for s, doc in zip(servers, docs) if doc][:MCP_PER_TASK]
+
+
+def has_invisible(doc: str) -> bool:
+    """Characters that draw nothing: shown without them, installed with them. Joiners, the emoji selector and a
+    leading byte order mark stay, as part of emoji and of several scripts."""
+    for c in doc.removeprefix("\ufeff"):
+        n = ord(c)
+        if n in (0x200C, 0x200D, 0xFE0F):
+            continue
+        if (unicodedata.category(c) == "Cf" or n == 0x034F or 0x180B <= n <= 0x180F or 0xFE00 <= n <= 0xFE0E
+                or 0xE0100 <= n <= 0xE01EF):
+            return True
+    return False

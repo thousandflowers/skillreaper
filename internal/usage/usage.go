@@ -1152,7 +1152,12 @@ func recordMCPCall(st *Stats, name string, ts time.Time) {
 	// A server can itself be named a__b: only the configured
 	// names can settle where the server ends, at join time.
 	if strings.Contains(rest[i+2:], "__") {
-		st.recordTool(scan.SafeText(rest), ts)
+		whole := scan.SafeText(rest)
+		if st.beforeWindow(ts) {
+			st.older.add(scan.CatMCP, whole, ts) // history, for the record of past uses
+			return
+		}
+		st.recordTool(whole, ts)
 	}
 }
 

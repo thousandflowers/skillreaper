@@ -63,7 +63,7 @@ func BuildManifest(r *Report, skillName, claudeDir, claudeVersion string) (Manif
 		Hooks:             hookEvents(r.Rows),
 		UsageWindow: ManifestUsage{
 			Days:          r.WindowDays,
-			Sessions:      r.Sessions,
+			Sessions:      r.SessionsOf(row.Platform),
 			Uses:          row.Uses,
 			Errors:        row.ErrorCount,
 			Projects:      manifestProjects(r, row.Item),

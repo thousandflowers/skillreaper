@@ -213,6 +213,9 @@ func (m *Menu) receiptPicks(p *Plan) []Pick {
 	return picks
 }
 
+// receiptNameMin is the room a receipt line keeps for the name, whatever the amount.
+const receiptNameMin = 8
+
 var receiptTag = map[string]string{vDelete: "⚠ delete", vUnmute: "undo", vUnlock: "undo", vRestore: "undo"}
 
 func (m *Menu) receiptLine(pk Pick, pw int) string {
@@ -228,6 +231,12 @@ func (m *Menu) receiptLine(pk Pick, pw int) string {
 		worth = m.tokMoney(kept, float64(kept)*m.reach(pk.Row))
 	}
 	amountW := max(cells(worth), min(20, pw/3))
+	if pw-9-amountW < receiptNameMin {
+		// The name comes first: the amount loses its money, then its end.
+		worth = "~" + m.tokens(kept) + " tok"
+		amountW = min(max(cells(worth), min(20, pw/3)), max(pw-9-receiptNameMin, 0))
+		worth = cut(worth, amountW)
+	}
 	nameW := pw - 9 - amountW
 	name := cutMid(m.displayName(pk.Row), nameW-1) // a gap stays before the amount
 	tag := pk.Verb
@@ -356,6 +365,9 @@ func newReceiptView(m *Menu, picks []Pick, unit string) *receiptView {
 	}
 	if linked := sharedFolders(picks); len(linked) > 0 {
 		v.warnings = append(v.warnings, "⚠ also muted for other tools using "+strings.Join(linked, ", "))
+	}
+	if names := m.lockedAlong(picks); len(names) > 0 {
+		v.warnings = append(v.warnings, "⚠ a lock goes by name: every copy of "+strings.Join(names, ", ")+" is locked")
 	}
 	if taken := removedForOthers(picks); len(taken) > 0 {
 		v.warnings = append(v.warnings, "⚠ also gone for other tools using "+strings.Join(taken, ", "))

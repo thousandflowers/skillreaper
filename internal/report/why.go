@@ -21,6 +21,7 @@ type Explanation struct {
 
 	TokenWeight int `json:"token_weight"`
 	DescChars   int `json:"desc_chars"`
+	ListedChars int `json:"listed_chars,omitempty"`
 	Sessions    int `json:"sessions"`
 	Uses        int `json:"uses"`
 	Errors      int `json:"errors"`
@@ -112,6 +113,7 @@ func BuildExplanation(row Row, sessions int, in ExplainInput) Explanation {
 		Summary:      summaryFor(row),
 		TokenWeight:  row.Tokens,
 		DescChars:    row.DescChars,
+		ListedChars:  row.ListedChars,
 		Sessions:     sessions,
 		Uses:         row.Uses,
 		Errors:       row.ErrorCount,
@@ -297,6 +299,8 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 		weight = fmt.Sprintf("~%d tok  (tool names + instructions, last session that loaded it)", e.TokenWeight)
 	case e.Category == string(scan.CatMCP):
 		weight = "? (never seen loading in a session, so never measured)"
+	case e.ListedChars > 0 && e.ListedChars < e.DescChars:
+		weight = fmt.Sprintf("~%d tok  (%d of the description's %d chars, as the last session listed it)", e.TokenWeight, e.ListedChars, e.DescChars)
 	case e.DescChars > 0 || e.TokenWeight > 0:
 		weight = fmt.Sprintf("~%d tok  (description: %d chars)", e.TokenWeight, e.DescChars)
 	}

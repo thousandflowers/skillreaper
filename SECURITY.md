@@ -16,10 +16,14 @@ start by hand:
 
 ## Reporting a Vulnerability
 
-If you discover a security issue, please open a
+If the issue could affect other users, report it in private: on the
+repository's **Security** tab choose
+[Report a vulnerability](https://github.com/thousandflowers/skillreaper/security/advisories/new).
+Nothing sent there is public until a fix is out.
+
+For anything else security-related, open a
 [GitHub Issue](https://github.com/thousandflowers/skillreaper/issues)
-with the label `security`. Do not open a public issue if the vulnerability
-could affect other users.
+with the label `security`. An issue is public from the moment it is opened.
 
 Given the tool's local-only design, most security concerns involve
 transcript parsing. We aim to triage all reports within 7 days.

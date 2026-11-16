@@ -690,3 +690,24 @@ func TestMeasuredCountsOnlyTheWindow(t *testing.T) {
 		t.Errorf("measured %+v, want the one turn inside the window", st.Measured)
 	}
 }
+
+// A server can be named a__b, and only the configured names settle where a
+// server's name ends. A call from before the window is history under the whole
+// tool name too: under "a" alone the record of past uses never finds a__b.
+func TestACallBeforeTheWindowKeepsItsWholeToolName(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	old := now.AddDate(0, 0, -90).Format(time.RFC3339)
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		`{"type":"assistant","sessionId":"s","timestamp":"`+old+`","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__a__b__tool","input":{}}]}}`)
+
+	st, err := Parse(dir, now.AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	older, _ := st.OlderUses()
+	if older[scan.CatMCP]["a__b__tool"] != 1 || older[scan.CatMCP]["a"] != 1 {
+		t.Errorf("uses before the window = %v", older[scan.CatMCP])
+	}
+}

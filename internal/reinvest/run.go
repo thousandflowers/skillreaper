@@ -193,7 +193,7 @@ func (a *app) pipeline(opts options) (outcome, error) {
 	if err != nil {
 		return outcome{}, err
 	}
-	a.step(fmt.Sprintf("%d sessions read", len(sessions)), true)
+	a.step(counted(len(sessions), "session")+" read", true)
 
 	a.step("grouping your work", false)
 	groups, err := a.loadGroups(sessions, opts.regroup)
@@ -211,7 +211,7 @@ func (a *app) pipeline(opts options) (outcome, error) {
 	if err != nil {
 		return outcome{}, err
 	}
-	a.step(fmt.Sprintf("verifying %d candidates", len(cands)), false)
+	a.step("verifying "+counted(len(cands), "candidate"), false)
 	passing, rejected, err := a.verifyAll(cands, state.Used, state.Installed)
 	if err != nil {
 		return outcome{}, err
@@ -243,12 +243,12 @@ type gapCandidates struct {
 // sessions, or with --online what skills.sh and the MCP registry offer.
 func (a *app) candidates(opts options, gaps []kind, sessions []session, state reapState) ([]candidate, []refusal, error) {
 	if !opts.online {
-		a.step(fmt.Sprintf("writing a skill for %d gaps from your sessions", len(gaps)), false)
+		a.step("writing a skill for "+counted(len(gaps), "gap")+" from your sessions", false)
 		cands, refused, err := a.createdFor(gaps, sessions, state.Installed)
 		if err != nil {
 			return nil, nil, err
 		}
-		a.step(fmt.Sprintf("%d skills written", len(cands)), true)
+		a.step(counted(len(cands), "skill")+" written", true)
 		return cands, refused, nil
 	}
 	a.step("searching skills and MCP servers", false)
@@ -278,7 +278,7 @@ func (a *app) candidates(opts options, gaps []kind, sessions []session, state re
 		cands = append(cands, got.cands...)
 		refused = append(refused, got.refused...)
 	}
-	a.step(fmt.Sprintf("%d candidates", len(cands)), true)
+	a.step(counted(len(cands), "candidate"), true)
 	return cands, refused, nil
 }
 
@@ -367,10 +367,18 @@ func (a *app) chooseAndApply(swaps []swap, dryRun bool) error {
 	return failed
 }
 
+// counted is n and its noun, in the plural unless there is one.
+func counted(n int, noun string) string {
+	if n != 1 {
+		noun += "s"
+	}
+	return fmt.Sprintf("%d %s", n, noun)
+}
+
 // gapsLine is the step's line: how many kinds of work have no skill, and how
 // many of those this run takes up when it is not all of them.
 func gapsLine(kinds, open, taken int) string {
-	line := fmt.Sprintf("%d kinds of work · %d with no skill", kinds, open)
+	line := fmt.Sprintf("%s of work · %d with no skill", counted(kinds, "kind"), open)
 	if taken < open {
 		line += fmt.Sprintf(" · the first %d taken up", taken)
 	}

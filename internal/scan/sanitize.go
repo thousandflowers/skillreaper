@@ -23,21 +23,45 @@ func SafeText(s string) string {
 
 const secretWord = `[\w-]*(?:key|token|secret|passw(?:or)?d|auth|credential|bearer)[\w-]*`
 
+const (
+	// inDouble is one character inside double quotes, an escaped one included.
+	inDouble = `(?:[^"\\\n]|\\.)`
+	// beforeName is what can stand right before a name: the start, a space, the
+	// quote that opens it, or the punctuation of a JSON object.
+	beforeName = `(^|[\s"'{,\[(])`
+)
+
 // secretPatterns mask the value and keep the name, so a command stays readable.
+// Each runs over what the ones before it left, so a value already masked is
+// masked again and stays as it is.
 var secretPatterns = []struct {
 	re   *regexp.Regexp
 	with string
 }{
-	{regexp.MustCompile(`(?i)(://[^/\s:@]+:)[^/\s@]+@`), "${1}<redacted>@"},
+	// A URL's user part: the password, up to the last "@" before the host, and a
+	// lone token standing where the user would.
+	{regexp.MustCompile(`(?i)(://[^/\s:@]+:)[^/\s]+@`), "${1}<redacted>@"},
+	{regexp.MustCompile(`(://)[^/\s:@]+@`), "${1}<redacted>@"},
 	{regexp.MustCompile(`(?i)([?&]` + secretWord + `=)[^&\s]+`), "${1}<redacted>"},
-	// Authorization: <scheme> <credential>. The scheme stays, the credential goes;
-	// the rule for a secret-looking name below would mask the scheme and stop there.
-	{regexp.MustCompile(`(?i)(\bauthorization\s*[:=]\s*[\w-]+\s+)[^\s"']+`), "${1}<redacted>"},
 	{regexp.MustCompile(`(?i)(\bcookie\s*[:=]\s*)[^"'\n]+`), "${1}<redacted>"},
-	{regexp.MustCompile(`(^|\s)(-u\s+[^\s:"']+:)[^\s"']+`), "${1}${2}<redacted>"},
-	// A value ends at whitespace or at the quote that closes the argument.
+	// user:password after -u or --user, in quotes or not, glued to the flag or not.
+	{regexp.MustCompile(`(^|\s)((?:-u|--user)(?:\s+|=)?)"[^":\n]+:` + inDouble + `*"`), "${1}${2}<redacted>"},
+	{regexp.MustCompile(`(^|\s)((?:-u|--user)(?:\s+|=)?)'[^':\n]+:[^'\n]*'`), "${1}${2}<redacted>"},
+	{regexp.MustCompile(`(^|\s)((?:-u|--user)(?:\s+|=)?[^\s:"']+:)[^\s"']+`), "${1}${2}<redacted>"},
 	{regexp.MustCompile(`(?i)(\bbearer\s+)[^\s"']+`), "${1}<redacted>"},
-	{regexp.MustCompile(`(?i)(^|[\s"'])(-{0,2}` + secretWord + `)(=|:\s*|\s+)([^\s"'-][^\s"']*)`), "${1}${2}${3}<redacted>"},
+	// A quoted argument that opens with the name, as a header does: all of it up
+	// to the quote that closes it, spaces and escaped quotes included.
+	{regexp.MustCompile(`(?i)("\s*-{0,2}` + secretWord + `\s*[=:]\s*)` + inDouble + `+`), "${1}<redacted>"},
+	{regexp.MustCompile(`(?i)('\s*-{0,2}` + secretWord + `\s*[=:]\s*)[^'\n]+`), "${1}<redacted>"},
+	// Authorization with no quote before it: scheme and credential are several
+	// words, and nothing says where they end, so the rest of the line goes.
+	{regexp.MustCompile(`(?i)((?:^|[^"'\w-])[\w-]*authorization\s*[:=]\s*)[^\n]+`), "${1}<redacted>"},
+	// name, separator, value in quotes: the quotes and what they hold.
+	{regexp.MustCompile(`(?i)` + beforeName + `(-{0,2}` + secretWord + `)(\\?["']?(?:\s*[=:]\s*|\s+))(?:"` + inDouble + `*"|'[^'\n]*'|\\"[^\n]*?\\")`), "${1}${2}${3}<redacted>"},
+	// name=value and name: value. After "=" a value may begin with a dash.
+	{regexp.MustCompile(`(?i)` + beforeName + `(-{0,2}` + secretWord + `)(\\?["']?\s*[=:]\s*)[^\s"'\\]+`), "${1}${2}${3}<redacted>"},
+	// name value. A word that begins with a dash is the next flag, not a value.
+	{regexp.MustCompile(`(?i)(^|[\s"'])(-{0,2}` + secretWord + `)(\s+)([^\s"'-][^\s"']*)`), "${1}${2}${3}<redacted>"},
 }
 
 // RedactSecrets masks credentials in a command line, URL or hook command. It

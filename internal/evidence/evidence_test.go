@@ -171,3 +171,32 @@ func TestLookupFoldFindsAUseRecordedInAnotherCase(t *testing.T) {
 		t.Error("another category's record was found")
 	}
 }
+
+// The parser credits a tool call to what stands before the first "__". A server
+// named a__b finds its calls under their whole names, and in a record written
+// before those were kept, under that first part.
+func TestLookupServerFindsCallsOfANameWithTheSeparator(t *testing.T) {
+	last := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	d := &Digest{Items: map[string]map[string]Record{"mcp": {
+		"a":           {Uses: 5},
+		"a__b__tool":  {Uses: 2, Last: last},
+		"a__b__other": {Uses: 1},
+		"plain":       {Uses: 4},
+	}}}
+	if r, ok := d.LookupServer("mcp", "a__b"); !ok || r.Uses != 3 || !r.Last.Equal(last) {
+		t.Errorf("a__b = %+v, %v", r, ok)
+	}
+	if r, ok := d.LookupServer("mcp", "plain"); !ok || r.Uses != 4 {
+		t.Errorf("plain = %+v, %v", r, ok)
+	}
+	if r, ok := d.LookupServer("mcp", "a"); !ok || r.Uses != 5 {
+		t.Errorf("a = %+v, %v", r, ok)
+	}
+	older := &Digest{Items: map[string]map[string]Record{"mcp": {"a": {Uses: 5}}}}
+	if r, ok := older.LookupServer("mcp", "a__b"); !ok || r.Uses != 5 {
+		t.Errorf("a__b in an older record = %+v, %v", r, ok)
+	}
+	if _, ok := d.LookupServer("mcp", "none__x"); ok {
+		t.Error("a server nobody called was found")
+	}
+}

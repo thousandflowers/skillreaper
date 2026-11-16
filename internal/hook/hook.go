@@ -270,6 +270,10 @@ func appendGroup(doc, entry []byte) ([]byte, error) {
 	if err == nil {
 		return out, nil
 	}
+	// "SessionStart": null is an empty list, as "hooks": null is an empty object.
+	if list, listErr := jsonedit.Get(doc, sessionStartPath...); listErr == nil && string(bytes.TrimSpace(list)) == "null" {
+		return jsonedit.Set(doc, []byte("["+string(entry)+"]"), sessionStartPath...)
+	}
 	hooks, getErr := jsonedit.Get(doc, sessionStartPath[0])
 	switch v := string(bytes.TrimSpace(hooks)); {
 	case getErr != nil:

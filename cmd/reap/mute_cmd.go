@@ -38,7 +38,7 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 			return 1
 		}
 		if len(rows) == 0 {
-			fmt.Fprintln(stderr, pruneNameMiss(r, args[0], true))
+			fmt.Fprintln(stderr, pruneNameMiss(opts, r, args[0], true))
 			return 1
 		}
 		if refuseKept(opts, rows[0], stderr) {
@@ -176,7 +176,7 @@ type muteOutcome struct {
 func (o muteOutcome) exitCode() int {
 	switch {
 	case o.interrupted > 0:
-		return exitInterrupted
+		return stopCode()
 	case len(o.failed) > 0:
 		return 1
 	}
@@ -310,7 +310,7 @@ func cmdUnmute(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		fmt.Fprintf(stdout, "unmuted %s (%d copies)\n", res.Restored[0].Name, len(res.Restored))
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
+		fmt.Fprintf(stderr, "error: %s\n", inFolder(opts, err))
 		return 1
 	}
 	return 0

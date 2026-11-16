@@ -62,7 +62,9 @@ func (s *screen) takeOver() error {
 	raw.Lflag &^= syscall.ICANON | syscall.ECHO
 	raw.Cc[syscall.VMIN] = 0
 	raw.Cc[syscall.VTIME] = readTenths
-	if err := termios(s.in, ioctlSetTermios, &raw); err != nil {
+	// Set after dropping what was typed so far: keys pressed while the run was
+	// working are not answers to a screen that was not there yet.
+	if err := termios(s.in, ioctlSetTermiosFlush, &raw); err != nil {
 		return err
 	}
 	_, err := s.out.WriteString(enterScreen)

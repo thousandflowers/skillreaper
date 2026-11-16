@@ -21,8 +21,9 @@ choose, in tokens or in money. Rows are grouped by what reap suggests (prune,
 mute, not sure, lock, already muted, already pruned), by plugin, or flat.
 
 - `space` takes reap's suggestion for a row, a group or a selection; `p`, `m`,
-  `l` and `d` choose prune, mute, lock or delete yourself; `a` fills in every
-  suggestion and, pressed again, puts back what was there.
+  `l` and `d` choose prune, mute, lock or delete yourself; `a` fills in reap's
+  suggestions for the row, group or selection and, pressed again, puts back
+  what was there.
 - Any action can be chosen on any row or group. A verdict is a suggestion and
   never limits the choice; only what is physically impossible is refused, and
   the row says why.
@@ -262,6 +263,44 @@ really injected, with multi-line descriptions read in full.
   are; `docs/renders/summary.txt` matches its captures and `make
   renders-check` now checks it; INSTALL.md names every place the npm binary
   can be kept.
+- A secret in a hook or server command is masked in every shape: in quotes
+  (`--token "…"`, `TOKEN="…"`, `{"api_key":"…"}`), after `=` when it
+  begins with a dash, as the user part of a URL, after `--user` or glued to
+  `-u`, with a space in it, and in a Digest `Authorization` header. A server's
+  argument with a space in it stays one word, so all of it is masked.
+- An MCP server whose name holds `__` is found in the record of past uses.
+  Its calls were filed under the part before the first `__`, so once its
+  transcripts aged out it came out REAP and a bulk prune took it.
+- `--claude-dir` on a folder with no `.claude.json` of its own takes no other
+  profile's: the file next to the folder is read only for a folder named
+  `.claude`. `reap prune --claude-dir ~/.claude-work` edited `~/.claude.json`.
+- A lock from the menu is written by the item's name on disk. For a name with
+  a control character in it the menu said locked and nothing was protected.
+- In the menu, a lock is every copy's lock (the keep list goes by category
+  and name): the other copies show locked at once and the receipt says so.
+  Two rows in quarantine under one name say where each was and its id; the
+  card names the marketplace when two plugins share a name; a receipt line
+  keeps the name beside an amount too wide for the window.
+- A command inside an error (`reap restore 001`, `reap unmute <name>`,
+  `reap prune <server>`) repeats `--claude-dir` when the run named a folder.
+- A name that begins like a selector (`codex:foo`, `agent:bar`) is found by
+  prune, mute and delete; the way out of a kept item whose name begins with
+  a dash is printed by its key (`reap keep --remove skill:-name`).
+- `reap share` counts nothing for an item put back by hand, and `reap restore
+  001` means the item named 001 when the entry 001 is already back.
+- A mistyped `--claude-json`, `--claude-dir` on a file and `snapshot --list`
+  on a missing folder are errors, not an empty stack.
+- `reap why`, `reap manifest` and `reap route` count an item against the
+  sessions of its own tool, as its verdict does. `reap why` says when a
+  skill's weight is what the last session's listing kept of its description.
+- A mute or unmute keeps the file's date with no gap: a run killed right
+  after the write left today's date, and the skill read as newly installed.
+- Pruning a server whose key is written twice in the config takes every
+  spelling; the earlier one used to become the live definition.
+- `install-hook` reads `"SessionStart": null` as an empty list, and a run
+  stopped by SIGTERM exits 143, not Ctrl-C's 130.
+- SECURITY.md names a private channel for a vulnerability; the README says
+  that a Codex item with no use stays REVIEW.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -364,6 +403,16 @@ the same cache files and the same checks. What to know before running it:
   relative one still sent `reap mute` to the wrong folder.
 - `reap --claude-dir X reinvest` is answered with a command that keeps the
   folder (`CLAUDE_CONFIG_DIR=X reap reinvest`).
+- A skill with characters that draw nothing (zero-width space, word joiner,
+  soft hyphen, variation selectors) is refused: the text shown before
+  `apply?` left them out and the file was written with them. Joiners and the
+  emoji selector stay.
+- Slack app and rotating tokens and a PGP private key block are removed from
+  what is sent, with the other keys.
+- Keys typed while the run works are dropped when the picker opens: an
+  impatient Enter accepted the first swap.
+- `reap --days 5 reinvest --max 2` is answered with the command to type, and
+  the step lines agree in number (`1 kind of work`, `1 skill written`).
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

@@ -204,7 +204,9 @@ func (a *menuApplier) guardKept(verb, key string) error {
 
 func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled map[string]error) error {
 	row := pk.Row.Raw()
-	key := override.ItemKey(string(row.Category), row.Name)
+	// By the name on disk, which is what the report reads the keep list by: the
+	// name shown has its control characters taken out.
+	key := override.ItemKey(string(row.Category), row.DiskName())
 	if err := a.guardKept(pk.Verb, key); err != nil {
 		return err
 	}

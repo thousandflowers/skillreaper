@@ -393,3 +393,28 @@ func TestApply_a_stop_halfway_through_a_swap_says_what_was_done(t *testing.T) {
 		t.Errorf("a stop during the install says:\n%s", got)
 	}
 }
+
+// Stopped while it undoes a swap whose mute failed, reinvest says that: the
+// mute it names was not "cut short", it had failed, and what it lists as muted
+// may or may not have been unmuted yet.
+func TestApply_a_stop_during_the_roll_back_says_so(t *testing.T) {
+	tempHome(t)
+	a := fakeApp(t)
+	stepsRecorded(a, func(cmd []string) error {
+		switch {
+		case sameWords(cmd, []string{reapName, "--yes", "mute", "second"}):
+			return errors.New("refused")
+		case sameWords(cmd, []string{reapName, "unmute", "first"}):
+			runStopHook()
+		}
+		return nil
+	})
+	a.applyOne(writtenSwap("first", "second"))
+	said := termText(a)
+	if !strings.Contains(said, "↺  it was undoing the swap after a mute failed: what is listed here may or may not be undone yet") {
+		t.Errorf("the stop does not say it was rolling back:\n%s", said)
+	}
+	if strings.Contains(said, "cut short") {
+		t.Errorf("a mute that failed is said to have been cut short:\n%s", said)
+	}
+}

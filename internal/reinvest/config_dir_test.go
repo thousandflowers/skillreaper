@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/thousandflowers/skillreaper/internal/report"
+
+	"os"
 )
 
 // Claude Code keeps everything under CLAUDE_CONFIG_DIR when it is set, and reap
@@ -61,5 +63,66 @@ func TestConfigDir_each_folder_keeps_its_own_memory_and_cache(t *testing.T) {
 	}
 	if want := plain.cachePath(swapsFile); report.ReinvestPath(filepath.Join(home, ".claude")) != want || report.ReinvestPath("") != want {
 		t.Errorf("for the usual folder reap looks in %s, reinvest writes %s", report.ReinvestPath(""), want)
+	}
+}
+
+// A relative CLAUDE_CONFIG_DIR is a folder like any other. Used as typed it
+// broke every swap: the link to a written skill pointed nowhere, and the mute
+// step, run from another folder, found no Claude folder at all.
+func TestConfigDir_a_relative_folder_is_read_as_an_absolute_one(t *testing.T) {
+	home := tempHome(t)
+	if resolved, err := filepath.EvalSymlinks(home); err == nil {
+		home = resolved
+	}
+	t.Chdir(home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "cfg")
+	if got, want := claudeDir(), filepath.Join(home, "cfg"); got != want {
+		t.Fatalf("claudeDir() = %s, want %s", got, want)
+	}
+	c := candidate{Kind: kindSkill, Name: "w", Slug: "w", Created: true, Doc: writtenDoc}
+	if err := create(c); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, "cfg", "skills", "w")
+	t.Chdir(t.TempDir()) // a step runs from a folder of its own
+	if _, err := os.Stat(filepath.Join(link, skillFile)); err != nil {
+		t.Errorf("the link written for the skill leads nowhere: %v", err)
+	}
+	t.Chdir(home) // reinvest itself stays where it was started
+	if err := removeWritten(c); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(link); err == nil {
+		t.Error("the link is still there after the skill was taken out")
+	}
+}
+
+// A link whose folder is gone is still the one create wrote, by what it says:
+// it is taken out, not left to block the name for ever.
+func TestWritten_a_link_that_leads_nowhere_is_still_ours(t *testing.T) {
+	dir := t.TempDir()
+	link, target := filepath.Join(dir, "link"), filepath.Join(dir, "gone")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip(err)
+	}
+	if !pointsAt(link, target) {
+		t.Error("a link that names the folder is not read as pointing at it")
+	}
+	if pointsAt(link, filepath.Join(dir, "another")) {
+		t.Error("a link that names another folder is read as pointing here")
+	}
+	// Written another way, a link is ours when it leads to the same folder.
+	real, other := filepath.Join(dir, "real"), filepath.Join(dir, "other")
+	for _, folder := range []string{real, other} {
+		if err := os.Mkdir(folder, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	relative := filepath.Join(dir, "relative")
+	if err := os.Symlink("real", relative); err != nil {
+		t.Fatal(err)
+	}
+	if !pointsAt(relative, real) || pointsAt(relative, other) {
+		t.Error("a link written as a relative path is not read by where it leads")
 	}
 }

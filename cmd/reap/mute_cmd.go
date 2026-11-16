@@ -39,10 +39,10 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 			return 1
 		}
 		if len(rows) == 0 {
-			fmt.Fprintln(stderr, pruneNameMiss(r, args[0]))
+			fmt.Fprintln(stderr, pruneNameMiss(r, args[0], true))
 			return 1
 		}
-		if refuseKept(rows[0], stderr) {
+		if refuseKept(opts, rows[0], stderr) {
 			return 1
 		}
 		candidates = rows
@@ -200,7 +200,7 @@ func (o muteOutcome) printSummary(opts options, stdout, stderr io.Writer, r *rep
 	if named {
 		row := o.muted[0]
 		fmt.Fprintf(stdout, "muted %s — description stripped (~%d tok/session saved)\n", row.Name, report.MuteSaving(row))
-		fmt.Fprintf(stdout, "Undo: reap unmute %s\n", scan.ShellArg(row.Name))
+		fmt.Fprintf(stdout, "Undo: reap unmute %s%s\n", scan.ShellArg(row.Name), sameFolder(opts))
 		if report.IsPluginSource(row.Source) {
 			fmt.Fprintln(stdout, "A plugin update can bring the description back.")
 		}

@@ -86,9 +86,8 @@ func (a *app) loadReapState() (reapState, error) {
 	case res.err != nil:
 		return reapState{}, fmt.Errorf("reinvest could not run reap (set %s to its path): %w", reapVariable, res.err)
 	}
-	state, err := parseReapState(res.stdout)
-	if err != nil && res.code != 0 {
+	if res.code != 0 { // a failed scan still prints JSON, with no rows: that is not an empty stack
 		return reapState{}, fmt.Errorf("`%s --json` exited %d: %s", reap[0], res.code, lastRunes(pyStrip(res.stderr), reapTailSize))
 	}
-	return state, err
+	return parseReapState(res.stdout)
 }

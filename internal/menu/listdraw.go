@@ -87,6 +87,9 @@ func (l *list) draw() bool {
 	if l.plat > 0 {
 		title += "  (" + l.platformLabel() + ")"
 	}
+	if runes(title) > n-18 { // no room for the whole of it: the column's name, not half a word
+		title = "NAME"
+	}
 	m.put(6, 3, pad(title, n-18), dim)
 	label := "TOKENS"
 	if l.unit == unitMoney {
@@ -205,7 +208,7 @@ func (l *list) drawGroup(y int, f line, n, amountW int, lit bool) {
 	if st.deletes > 0 {
 		text += " · ⚠ " + itoa(st.deletes) + " delete"
 	}
-	field := pad(text, n-18)
+	field := pad(cut(text, n-19), n-18) // cut short of the count, with a gap: "· 1 muted" ran into it as "· 12 of 3"
 	boxLook := bold
 	switch {
 	case st.box == "[d]":
@@ -306,7 +309,7 @@ func (l *list) footer(h, wd int) {
 	var hint string
 	switch {
 	case l.anchor >= 0:
-		items := l.chosen(rowItems)
+		items := l.chosen(groupAll) // what space takes, a row reap would lock included
 		how := "shift+↑↓"
 		if l.marking {
 			how = "arrows"
@@ -326,13 +329,13 @@ func (l *list) footer(h, wd int) {
 	if status == "" || isEcho(status) {
 		status = planSummary(l.p)
 	}
-	m.put(h-3, 3, cut(status, wd-28), or(asBold(m.red()), strings.HasPrefix(status, "⚠"), m.tint(tintGreen)))
 	hidden := 0
 	for r := range l.p.verbs {
 		if !l.visible(r) {
 			hidden++
 		}
 	}
+	m.put(h-3, 3, cut(status, min(wd-28, m.leftOfApplyLabel(wd, l.p.size(), hidden))), or(asBold(m.red()), strings.HasPrefix(status, "⚠"), m.tint(tintGreen)))
 	m.drawApplyLabel(h, wd, l.p.size(), hidden)
 	keys := append(append([]string(nil), listKeys...), "tab "+m.cur.Sym+"/tok", "g group by", "f platform", "shift+↑↓ many", "o plugin off", "hold s reap", "v mark")
 	m.legend(h, keys)

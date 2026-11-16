@@ -31,7 +31,7 @@ func showPruned(claudeDir string, stdout io.Writer) (int, error) {
 	}
 	sort.SliceStable(pruned, func(i, j int) bool { return pruned[i].Timestamp.After(pruned[j].Timestamp) })
 	for _, e := range pruned {
-		fmt.Fprintf(stdout, "  %s  %s  %-5s  %s\n", e.ID, e.Timestamp.Local().Format("2006-01-02 15:04"), e.Category, e.Name)
+		fmt.Fprintf(stdout, "  %s  %s  %-5s  %s\n", e.ID, e.Timestamp.Local().Format("2006-01-02 15:04"), e.Category, shown(e.Name))
 	}
 	return len(pruned), nil
 }

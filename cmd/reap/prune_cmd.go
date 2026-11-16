@@ -10,6 +10,8 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/report"
 	"github.com/thousandflowers/skillreaper/internal/scan"
+
+	"strconv"
 )
 
 // itemProblem is one item a run left alone, and why.
@@ -50,12 +52,27 @@ func itOrThem(n int) string {
 
 // refuseKept stops a named action on a kept item, --yes included: the keep list
 // says never, and undoing that is a separate, deliberate step.
-func refuseKept(row report.Row, stderr io.Writer) bool {
+func refuseKept(opts options, row report.Row, stderr io.Writer) bool {
 	if !row.Kept {
 		return false
 	}
-	fmt.Fprintf(stderr, "error: %s is kept: run reap keep --remove %s first\n", row.Name, scan.ShellArg(row.Name))
+	fmt.Fprintf(stderr, "error: %s is kept: run reap keep --remove %s%s first\n", row.Name, scan.ShellArg(row.Name), sameFolder(opts))
 	return true
+}
+
+// sameFolder is what a command printed to be pasted needs in order to act on
+// the folder this run acted on: nothing in the usual one, the folder when
+// --claude-dir named it. Ids start at 001 in every folder, so without it a
+// pasted `reap restore 001` brings back another folder's item.
+func sameFolder(opts options) string {
+	if !opts.claudeDirExplicit {
+		return ""
+	}
+	said := " --claude-dir " + scan.ShellArg(opts.claudeDir)
+	if opts.claudeJSON != configBeside(opts.claudeDir) {
+		said += " --claude-json " + scan.ShellArg(opts.claudeJSON)
+	}
+	return said
 }
 
 // serverScope is the project an MCP row's server belongs to, "" for top level.
@@ -124,10 +141,10 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 			return 1
 		}
 		if len(rows) == 0 {
-			fmt.Fprintln(stderr, pruneNameMiss(r, args[0]))
+			fmt.Fprintln(stderr, pruneNameMiss(r, args[0], false))
 			return 1
 		}
-		if refuseKept(rows[0], stderr) {
+		if refuseKept(opts, rows[0], stderr) {
 			return 1
 		}
 		candidates = rows
@@ -394,9 +411,9 @@ func (o pruneOutcome) printSummary(opts options, stdout, stderr io.Writer, r *re
 		fmt.Fprintln(stdout, "\nNothing was pruned.")
 		return o.exitCode()
 	case named && len(o.done) == 1:
-		fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore %s\n", o.done[0].ID)
+		fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore %s%s\n", o.done[0].ID, sameFolder(opts))
 	default:
-		fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore --all (or a single id)\n")
+		fmt.Fprintf(stdout, "\nDone. Undo anytime: reap restore --all%s (or a single id)\n", sameFolder(opts))
 	}
 	col := colorEnabled(opts, stdout)
 	// What moved, not what was planned: the saving claimed has to be the saving
@@ -480,10 +497,13 @@ func (o pruneOutcome) writeJSON(w, stderr io.Writer, applied bool) int {
 
 // pruneNameMiss says why a name cannot be pruned or muted. Only an item with a
 // plugin source is said to be inside a plugin.
-func pruneNameMiss(r *report.Report, name string) string {
+func pruneNameMiss(r *report.Report, name string, muting bool) string {
 	for _, row := range r.Rows {
 		if row.Name != name && !strings.HasSuffix(row.Name, ":"+name) {
 			continue
+		}
+		if muting && row.Category == scan.CatMCP {
+			return fmt.Sprintf("error: %s is an MCP server, and mute works on skills and agents: reap prune %s takes it out, reversibly", row.Name, scan.ShellArg(row.Name))
 		}
 		if report.IsPluginSource(row.Source) {
 			return fmt.Sprintf("error: %s is inside a plugin and can only be disabled via /plugin in Claude Code", row.Name)
@@ -541,7 +561,7 @@ func cmdRestore(opts options, args []string, stdin io.Reader, stdout, stderr io.
 	if errors.As(err, &partial) {
 		fmt.Fprintf(stdout, "restored %d %s, %d left:\n", n, report.Plural(n, "item"), len(partial.Failed))
 		for _, f := range partial.Failed {
-			fmt.Fprintf(stderr, "  %s %s (%s): %s\n", f.Entry.Category, f.Entry.Name, f.Entry.ID, shown(f.Err.Error()))
+			fmt.Fprintf(stderr, "  %s %s (%s): %s\n", f.Entry.Category, shown(f.Entry.Name), f.Entry.ID, shown(f.Err.Error()))
 		}
 		return 1
 	}
@@ -563,10 +583,14 @@ func restoreID(claudeDir, arg string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	id := arg
+	if n, err := strconv.Atoi(arg); err == nil && n >= 0 {
+		id = fmt.Sprintf("%03d", n) // an id typed without its zeros is that id
+	}
 	var matches []prune.Entry
 	for _, e := range entries {
-		if e.ID == arg {
-			return arg, nil
+		if e.ID == arg || e.ID == id {
+			return e.ID, nil
 		}
 		if !e.Restored && !prune.NeverMoved(e) && (e.Name == arg || strings.HasSuffix(e.Name, ":"+arg)) {
 			matches = append(matches, e)

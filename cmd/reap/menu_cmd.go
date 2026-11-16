@@ -149,9 +149,12 @@ func (a *menuApplier) Apply(picks []menu.Pick) []menu.Outcome {
 	// then must stop the apply, not be lost and let all of it through.
 	stopped, release := applyGuard()
 	defer release()
-	lock, err := prune.AcquireLockWait(a.dir, stateLockWait)
+	lock, err := lockUnlessStopped(a.dir, stateLockWait, stopped)
 	if err != nil {
-		if errors.Is(err, prune.ErrLocked) {
+		switch {
+		case stopped():
+			err = errors.New("interrupted before it was done")
+		case errors.Is(err, prune.ErrLocked):
 			err = errors.New("another reap is changing this directory; wait for it to finish")
 		}
 		for i := range out {
@@ -164,6 +167,12 @@ func (a *menuApplier) Apply(picks []menu.Pick) []menu.Outcome {
 	notes := map[string]prune.Note{}
 	disabled := map[string]error{}
 	for i, pk := range picks {
+		// A plugin is switched off once for all its rows: the rest of them are
+		// off already, whatever stopped the run after that.
+		if result, done := disabled[pk.Row.Raw().Source]; done && pk.Verb == menu.Disable {
+			out[i].Err = result
+			continue
+		}
 		if stopped() {
 			out[i].Err = errors.New("interrupted before it was done")
 			continue

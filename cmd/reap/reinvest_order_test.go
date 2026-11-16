@@ -12,4 +12,9 @@ func TestReinvestAfterAFlagSaysToPutItFirst(t *testing.T) {
 	if code != 2 || strings.Contains(out, "unknown command") || !strings.Contains(out, "reap reinvest --dry-run") {
 		t.Errorf("%d %s", code, out)
 	}
+	// The command it gives carries the flags that were typed, wherever they stood.
+	code, out = reapRun("--days", "60", "--dry-run", "reinvest")
+	if code != 2 || !strings.Contains(out, "reap reinvest --days 60 --dry-run\n") {
+		t.Errorf("%d %s", code, out)
+	}
 }

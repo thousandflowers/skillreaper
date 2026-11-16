@@ -303,6 +303,9 @@ func UnmutePath(claudeDir, path string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs // typed from inside the folder, it is relative; the record is not
+	}
 	// A mute records the file with its links resolved.
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {

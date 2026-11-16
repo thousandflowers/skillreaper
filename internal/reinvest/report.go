@@ -51,7 +51,8 @@ func (a *app) summary(swaps []swap, gaps []kind, dead int) string {
 		}
 	}
 	if len(missing) > 0 {
-		lines = append(lines, "  no fit found for: "+strings.Join(missing, ", "), "")
+		// Not "no fit": a gap past --max has a verified candidate and no swap in this run.
+		lines = append(lines, "  no swap proposed for: "+strings.Join(missing, ", "), "")
 	}
 	return strings.Join(append(lines, "  details: "+a.reportPath()), "\n")
 }

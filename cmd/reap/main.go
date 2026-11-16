@@ -328,7 +328,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "reap", version())
 		return 0
 	case reinvestCommand: // reached only with a flag in front of it
-		fmt.Fprintf(stderr, "error: reinvest reads its own flags, so it comes first: reap reinvest %s\n", strings.Join(args[slices.Index(args, reinvestCommand)+1:], " "))
+		typed := []string{"reap", reinvestCommand} // its own flags as typed, wherever they stood
+		for _, arg := range reinvest.OwnArgs(args) {
+			typed = append(typed, scan.ShellArg(arg))
+		}
+		fmt.Fprintf(stderr, "error: reinvest reads its own flags, so it comes first: %s\n", strings.Join(typed, " "))
 		return 2
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
@@ -1341,7 +1345,7 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "  covers %s: %s\n", row.Platform, shown(row.Path))
 		}
 	}
-	fmt.Fprintf(stdout, "This item will be excluded from prune. Undo: reap keep --remove %s\n", scan.ShellArg(itemKey))
+	fmt.Fprintf(stdout, "This item will be excluded from prune. Undo: reap keep --remove %s%s\n", scan.ShellArg(itemKey), sameFolder(opts))
 	return 0
 }
 

@@ -206,6 +206,26 @@ really injected, with multi-line descriptions read in full.
   sets `SOURCE_DATE_EPOCH`; CONTRIBUTING and `docs/decisions.md` say the
   plugin's version is set to the tag before a release; the plugin's skills
   pass a flag together with its value.
+- `CLAUDE_CONFIG_DIR` written with a trailing slash or as a relative path is
+  the same folder: it used to open a second, empty record of past uses.
+- A command printed to be pasted (`reap restore 001`, `reap unmute`, `reap
+  keep --remove`) repeats `--claude-dir` when the run was given one. Ids
+  start at 001 in every folder, so the pasted undo acted on another folder.
+- `reap restore` takes an id typed without its zeros (`reap restore 1`), and
+  its listing prints a server's name with no control characters.
+- `reap unmute <path>` takes a relative path.
+- `reap mute <server>` says mute is for skills and agents and points to
+  `reap prune`, instead of saying to edit the config by hand.
+- `reap <flags> reinvest` gives a command that keeps the reinvest flags that
+  were typed; it used to drop them, so the pasted line was not a dry run.
+- In the menu: Ctrl-C while another run holds the lock ends the wait at
+  once; the other rows of a plugin already switched off are not reported as
+  interrupted; a selection's footer counts what space will choose; two rows
+  of one name from two marketplaces say which plugin each is; in the
+  narrowest window the status and a group's name are cut short of the apply
+  label and of the count, and the column title is not cut mid-word.
+- `docs/tapes/README.md` says which two tapes need changing before they
+  record again, and `docs/decisions.md` is newest first again.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -296,6 +316,14 @@ the same cache files and the same checks. What to know before running it:
   one (under 9 rows or 24 columns).
 - `N with no skill` counts them all, and says when only the first few are
   taken up.
+- A relative `CLAUDE_CONFIG_DIR` works: it broke every swap, left a link
+  pointing nowhere and said `rolled back: nothing changed`.
+- Each swap is printed, and leaves `reap`'s hint, as it lands; a Ctrl-C
+  during the second one used to hide that the first was in place.
+- `reap --json` exiting with an error is an error. A failed scan prints JSON
+  with no rows, and that was read as "no skill installed".
+- A stop while a failed swap is being undone says so, and the summary says
+  `no swap proposed for` the gaps left out, not `no fit found`.
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

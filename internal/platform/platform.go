@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"strings"
 )
 
 // ID uniquely identifies an AI coding platform.
@@ -70,6 +72,14 @@ func All() []Info {
 	// CLAUDE_CONFIG_DIR when that is set.
 	claudeDir, claudeFile := "~/.claude", "~/.claude.json"
 	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+		// One spelling per folder: what reap keeps about it elsewhere is filed
+		// under this path, and a trailing slash must not open a second record.
+		d = filepath.Clean(d)
+		if !strings.HasPrefix(d, "~") {
+			if abs, err := filepath.Abs(d); err == nil {
+				d = abs
+			}
+		}
 		claudeDir, claudeFile = d, filepath.Join(d, ".claude.json")
 	}
 	return []Info{

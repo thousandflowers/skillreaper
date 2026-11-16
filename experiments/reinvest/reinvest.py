@@ -139,7 +139,10 @@ def reap_state() -> dict:
     """Installed skills, which ones fired, the REAP pool and MCP weights, straight from `reap --json`."""
     if not shutil.which("reap"):
         sys.exit("reinvest needs `reap` on PATH (brew install thousandflowers/tap/skillreaper).")
-    data = json.loads(subprocess.run(["reap", "--json", "--no-nudge"], capture_output=True, text=True).stdout)
+    ran = subprocess.run(["reap", "--json", "--no-nudge"], capture_output=True, text=True)
+    if ran.returncode:  # a failed scan still prints JSON, with no rows: that is not an empty stack
+        sys.exit(f"`reap --json` exited {ran.returncode}: {ran.stderr.strip()[-200:]}")
+    data = json.loads(ran.stdout)
     skills = [{"name": r["Name"], "desc": r.get("Description", ""), "tokens": r.get("Tokens", 0),
                "uses": r.get("Uses", 0), "verdict": r.get("Verdict", "")}
               for r in data.get("Rows", []) if r.get("Category") == "skill"]
@@ -444,7 +447,7 @@ def summary(swap_list: list[dict], gaps: list[dict], dead: int) -> str:
     solved = {s["cands"][s["idx"]]["gap"] for s in swap_list}
     missing = [g["name"] for g in gaps if f"{g['name']} ({g['sessions']} sessions)" not in solved]
     if missing:
-        lines += ["  no fit found for: " + ", ".join(missing), ""]
+        lines += ["  no swap proposed for: " + ", ".join(missing), ""]
     return "\n".join(lines + [f"  details: {REPORT}"])
 
 

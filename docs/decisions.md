@@ -5,6 +5,16 @@ contributor does not have to re-litigate them. Newest first. Each entry says
 what was decided and why; if the reasoning stops holding, change the code and
 add a new entry rather than editing an old one.
 
+## 2026-11-16 - Two entries below no longer hold
+
+**The plugin's version follows the tag.** `plugin.json` is no longer bumped only
+"when the skills actually change": `.github/workflows/release.yml` refuses a tag
+whose version differs from `plugin.json`, before anything is published, so the
+file is set to the version being tagged.
+
+**The skills call `reap --agent`, not `reap --json`.** `--agent` is plain text
+built to be pasted as it is, so the `SKILL.md` files carry no render spec.
+
 ## 2026-08-17 - `plugin.json` stays at 0.1.0 while the binary is at 0.5.0
 
 The plugin's `version` is not bumped to match the release it ships alongside.
@@ -179,13 +189,3 @@ ran `install-hook` would be nudged twice, and `reap uninstall-hook` can only
 remove the `settings.json` copy, never the plugin's. If hooks are ever wanted
 here, the plugin must *detect* that marker and supersede the manual hook rather
 than coexist with it.
-
-## 2026-11-16 - Two entries above no longer hold
-
-**The plugin's version follows the tag.** `plugin.json` is no longer bumped only
-"when the skills actually change": `.github/workflows/release.yml` refuses a tag
-whose version differs from `plugin.json`, before anything is published, so the
-file is set to the version being tagged.
-
-**The skills call `reap --agent`, not `reap --json`.** `--agent` is plain text
-built to be pasted as it is, so the `SKILL.md` files carry no render spec.

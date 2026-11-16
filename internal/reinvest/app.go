@@ -132,6 +132,11 @@ func claudeDir() string {
 	case d == "~" || strings.HasPrefix(d, "~/"):
 		return filepath.Join(homeDir(), d[1:])
 	}
+	// Absolute: a link is written to a folder under it, and each step runs
+	// from a folder of its own, where a relative path leads nowhere.
+	if abs, err := filepath.Abs(d); err == nil {
+		d = abs
+	}
 	return d
 }
 

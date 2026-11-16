@@ -513,3 +513,64 @@ func TestRun_says_it_calls_Claude_before_the_first_call(t *testing.T) {
 		t.Errorf("a missing claude still printed:\n%s", out)
 	}
 }
+
+// reap that fails its scan still prints JSON, with no rows. Read as an answer,
+// that is "nothing is installed": every kind of work then has no skill, and a
+// skill is written for work an installed one already does.
+func TestRun_a_failed_reap_scan_is_not_an_empty_stack(t *testing.T) {
+	a := fakeApp(t)
+	a.reapCommand = func() ([]string, error) { return []string{"reap"}, nil }
+	a.runProcess = func(procSpec) procResult {
+		return procResult{code: 1, stdout: `{"Rows": null}`, stderr: "error: nothing could be inventoried\n"}
+	}
+	_, err := a.loadReapState()
+	if err == nil || !strings.Contains(err.Error(), "exited 1") || !strings.Contains(err.Error(), "nothing could be inventoried") {
+		t.Errorf("a failed scan was read as a stack: %v", err)
+	}
+}
+
+// Each swap is said, and leaves the offer, as it lands. They were all printed
+// at the end: a Ctrl-C during the second hid that the first was in place, and
+// left it on offer as if it were not.
+func TestRun_each_swap_is_said_and_leaves_the_offer_as_it_lands(t *testing.T) {
+	tempHome(t)
+	first, second := writtenSwap("old-a"), writtenSwap("old-b")
+	second.Cands = []candidate{{Kind: kindSkill, Name: "second-skill", Slug: "second-skill", Created: true, Doc: writtenDoc}}
+	a := fakeApp(t)
+	a.stdin = strings.NewReader("y\n")
+	a.pick = func([]swap) ([]swap, error) { return []swap{first, second}, nil }
+	var said string
+	onOffer := -1
+	stepsRecorded(a, func(cmd []string) error {
+		if sameWords(cmd, []string{reapName, "--yes", "mute", "old-b"}) { // where a Ctrl-C would end the run
+			said = termText(a)
+			if data, ok := readJSONFile(a.cachePath(swapsFile)).(*obj); ok {
+				onOffer = len(data.list("swaps"))
+			}
+		}
+		return nil
+	})
+	if err := a.saveProposals([]swap{first, second}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.chooseAndApply([]swap{first, second}, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(said, "✓  created ship-release") || !strings.Contains(said, "✓  muted old-a") {
+		t.Errorf("during the second swap the first is not yet said:\n%s", said)
+	}
+	if onOffer != 1 {
+		t.Errorf("during the second swap %d swaps are on offer, want 1", onOffer)
+	}
+}
+
+// Typed in front of reinvest, its own flags are the ones to repeat after it:
+// a flag only reap reads would be refused there.
+func TestRun_OwnArgs_keeps_reinvests_flags_and_their_values(t *testing.T) {
+	got := OwnArgs([]string{"--no-color", "--days", "60", "--dry-run", "--max=2", "stray", "-regroup", "--claude-dir", "/x"})
+	equalStrings(t, got, []string{"--days", "60", "--dry-run", "--max=2", "-regroup"})
+	equalStrings(t, OwnArgs([]string{"--days"}), []string{"--days"})
+	if len(OwnArgs(nil)) != 0 {
+		t.Error("no arguments gave some")
+	}
+}

@@ -349,13 +349,21 @@ func (a *app) chooseAndApply(swaps []swap, dryRun bool) error {
 			return nil
 		}
 	}
-	log, applied := a.apply(chosen, dryRun)
-	fmt.Fprintln(a.term, strings.Join(log, "\n"))
 	if dryRun {
+		log, _ := a.apply(chosen, true)
+		fmt.Fprintln(a.term, strings.Join(log, "\n"))
 		fmt.Fprintln(a.term, "  dry run · nothing installed or muted")
 		return nil
 	}
-	return a.dropProposals(applied) // a swap that failed is still on offer
+	// One at a time: each swap is said and leaves the offer as it lands, so a
+	// stop during the next one hides nothing and leaves nothing applied on offer.
+	var failed error
+	for _, s := range chosen {
+		log, applied := a.apply([]swap{s}, false)
+		fmt.Fprintln(a.term, strings.Join(log, "\n"))
+		failed = errors.Join(failed, a.dropProposals(applied)) // a swap that failed is still on offer
+	}
+	return failed
 }
 
 // gapsLine is the step's line: how many kinds of work have no skill, and how
@@ -366,4 +374,26 @@ func gapsLine(kinds, open, taken int) string {
 		line += fmt.Sprintf(" · the first %d taken up", taken)
 	}
 	return line
+}
+
+// OwnArgs picks, from a command line, the flags reinvest reads and their
+// values: what to repeat after `reap reinvest` when they were typed in front of
+// it, where reap's own flags would only be refused.
+func OwnArgs(args []string) []string {
+	fs := newFlagSet(&options{})
+	var own []string
+	for i := 0; i < len(args); i++ {
+		name, _, hasValue := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		f := fs.Lookup(name)
+		if !strings.HasPrefix(args[i], "-") || f == nil {
+			continue
+		}
+		own = append(own, args[i])
+		_, isBool := f.Value.(interface{ IsBoolFlag() bool })
+		if !isBool && !hasValue && i+1 < len(args) {
+			i++
+			own = append(own, args[i])
+		}
+	}
+	return own
 }

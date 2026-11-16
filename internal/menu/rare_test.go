@@ -475,3 +475,63 @@ func TestSavedOnAFlatPlanReadsAsASentence(t *testing.T) {
 	mustShow(t, x.final(), "you saved US$12.00 a month, at API prices")
 	mustNotShow(t, x.final(), "saved worth")
 }
+
+// One name, one tool, two marketplaces: the two rows are two plugins' and say
+// which. They read the same in the list and on the receipt, so nobody could
+// tell which one they were choosing or undoing.
+func TestSameNameInOneToolFromTwoPluginsIsToldApart(t *testing.T) {
+	rows := []report.Row{raw("alpha:a-one", source("plugin:alpha@mk1")), raw("alpha:a-one", source("plugin:alpha@mk2")),
+		raw("twice"), raw("twice", platform("codex")), raw("solo")}
+	m, _, _ := newMenu(t, one(rows...))
+
+	names := map[string]int{}
+	for _, r := range m.rows {
+		names[m.displayName(r)]++
+	}
+
+	for _, want := range []string{"alpha:a-one (" + defaultTool + " · alpha@mk1)", "alpha:a-one (" + defaultTool + " · alpha@mk2)",
+		"twice (" + defaultTool + ")", "twice (codex)", "solo"} {
+		mustEqual(t, "rows named "+want, names[want], 1)
+	}
+}
+
+// The footer of a selection counts what space is about to choose, a row reap
+// would lock included: it said 22 items and space chose 26.
+func TestSelectionFooterCountsWhatSpaceChooses(t *testing.T) {
+	d := one(raw("a"), raw("b"), raw("kept", verdict(report.VerdictKeep), uses(5)))
+	said, took := regexp.MustCompile(`· (\d+) items? ·`), regexp.MustCompile(`(\d+) of \d+ chosen`)
+
+	marked := open(t, d).press('g', 'v').run()
+	chosen := open(t, d).press('g', 'v', space).run()
+
+	footer, row := said.FindStringSubmatch(strings.Join(marked.final(), "\n")), took.FindStringSubmatch(strings.Join(chosen.final(), "\n"))
+	if footer == nil || row == nil {
+		t.Fatalf("no count on screen:\n%s\n%s", strings.Join(marked.final(), "\n"), strings.Join(chosen.final(), "\n"))
+	}
+	mustEqual(t, "items the footer counts, against items space chose", footer[1], row[1])
+}
+
+// In the narrowest window what stands left of the apply label is cut to the
+// room there is: the label was painted over the end of it
+// ("whole plu shift+enter apply"), and a group's "· 1 muted" ran into its count
+// to read "· 12 of 3 unused".
+func TestNarrowWindowCutsTextInsteadOfPaintingOverIt(t *testing.T) {
+	x := openSized(t, 20, listCols, flowData()).press('g', down, 'o').run()
+	lines := x.final()
+
+	status := lines[20-3]
+	at := strings.Index(status, " apply ")
+	if at < 0 {
+		t.Fatalf("no apply label on the status row: %q", status)
+	}
+	key := strings.LastIndex(status[:at], " ") // the space the label opens with, before the key's name
+	mustEqual(t, "a gap stands between the status and the label: "+status, status[key-1], byte(' '))
+	for _, line := range lines {
+		mustEqual(t, "a count runs into the text before it: "+strings.TrimSpace(line),
+			regexp.MustCompile(`\d\d+ of \d+ unused`).MatchString(line) && strings.Contains(line, "· 1"), false)
+	}
+
+	narrowest := openSized(t, listRows, listCols, flowData()).run().final()[6]
+	mustEqual(t, "no title cut in the middle of a word: "+strings.TrimSpace(narrowest), strings.Contains(narrowest, "suggesti "), false)
+	mustEqual(t, "the column still has its name", strings.Contains(narrowest, "NAME"), true)
+}

@@ -32,8 +32,15 @@ const (
 // drawApplyLabel shows how many changes wait. hidden is the chosen rows the
 // platform filter does not show, which apply all the same.
 func (m *Menu) drawApplyLabel(h, wd, count, hidden int) {
+	if label := m.applyLabel(count, hidden); label != "" {
+		m.put(h-3, wd-runes(label)-4, label, m.hl())
+	}
+}
+
+// applyLabel is the key that applies and what it applies, "" with nothing chosen.
+func (m *Menu) applyLabel(count, hidden int) string {
 	if count == 0 {
-		return
+		return ""
 	}
 	label := " " + term.ApplyKeyName(m.s) + " apply " + itoa(count) + " change"
 	if count != 1 {
@@ -42,8 +49,18 @@ func (m *Menu) drawApplyLabel(h, wd, count, hidden int) {
 	if hidden > 0 {
 		label += " · " + itoa(hidden) + " not shown"
 	}
-	label += " "
-	m.put(h-3, wd-runes(label)-4, label, m.hl())
+	return label + " "
+}
+
+// leftOfApplyLabel is the room for text on the label's row, from column 3 to a
+// gap before the label: what is longer is cut there, not painted over.
+// With no label the row is all its own.
+func (m *Menu) leftOfApplyLabel(wd, count, hidden int) int {
+	label := m.applyLabel(count, hidden)
+	if label == "" {
+		return wd
+	}
+	return wd - runes(label) - 8
 }
 
 // sectionEnd stands between two lists: what you just did, what comes next. Full

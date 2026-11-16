@@ -34,11 +34,11 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(stderr, pruneNameMiss(r, args[0]))
+		fmt.Fprintln(stderr, pruneNameMiss(r, args[0], false))
 		return 1
 	}
 	row := rows[0]
-	if refuseKept(row, stderr) {
+	if refuseKept(opts, row, stderr) {
 		return 1
 	}
 

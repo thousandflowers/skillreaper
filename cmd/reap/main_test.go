@@ -2081,7 +2081,7 @@ func TestKeepProtectsAgainstNamedActions(t *testing.T) {
 	for _, cmd := range []string{"prune", "mute"} {
 		errOut.Reset()
 		code := run(append([]string{cmd, "deadskill", "--yes"}, base...), strings.NewReader(""), &out, &errOut)
-		if code == 0 || !strings.Contains(errOut.String(), "deadskill is kept: run reap keep --remove deadskill first") {
+		if code == 0 || !strings.Contains(errOut.String(), "deadskill is kept: run reap keep --remove deadskill --claude-dir ") || !strings.HasSuffix(errOut.String(), " first\n") {
 			t.Errorf("%s: exit %d, %q", cmd, code, errOut.String())
 		}
 		if b, err := os.ReadFile(md); err != nil || !bytes.Equal(b, before) {

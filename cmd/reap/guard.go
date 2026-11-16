@@ -42,6 +42,23 @@ func lockState(claudeDir string, wait time.Duration, stderr io.Writer) (*prune.L
 	return nil, false
 }
 
+// lockPoll is how often a wait for the lock looks again.
+const lockPoll = 100 * time.Millisecond
+
+// lockUnlessStopped waits for the shared lock as lockState does, and gives up
+// the moment the run is asked to stop: a Ctrl-C must not sit behind another
+// run for a quarter of a minute.
+func lockUnlessStopped(claudeDir string, wait time.Duration, stopped func() bool) (*prune.Lock, error) {
+	deadline := time.Now().Add(wait)
+	for {
+		l, err := prune.AcquireLock(claudeDir)
+		if !errors.Is(err, prune.ErrLocked) || time.Now().After(deadline) || stopped() {
+			return l, err
+		}
+		time.Sleep(lockPoll)
+	}
+}
+
 // keepGoingWithoutReader makes a command that changes things outlive whoever reads
 // its output: `reap prune --yes | head -1` must not stop halfway or before it
 // starts. Writes then fail, and the exit status says so.

@@ -101,3 +101,57 @@ func TestMenuApplyStoppedWhileWaitingForTheLockChangesNothing(t *testing.T) {
 		t.Error("the skill was pruned although the apply was stopped")
 	}
 }
+
+// A plugin is switched off once, for all its rows. Stopped after that, its
+// other rows are off too: they were reported "interrupted before it was done"
+// and stayed in the list as if they were not.
+func TestRowsOfAPluginAlreadyOffAreNotReportedAsInterrupted(t *testing.T) {
+	home := deleteHome(t)
+	rows := reportRows(t)
+	bin := t.TempDir()
+	// The fake claude does what Ctrl-C during the command does: it signals reap.
+	script := "#!/bin/sh\nkill -INT $PPID\n/bin/sleep 0.3\n"
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	row := menuRow(t, rows, "skill", "p:pl")
+	other := menuRow(t, rows, "skill", "mine")
+
+	out := (&menuApplier{dir: filepath.Join(home, ".claude")}).Apply([]menu.Pick{
+		{Row: row, Verb: menu.Disable}, {Row: row, Verb: menu.Disable}, {Row: other, Verb: menu.Prune}})
+
+	if out[0].Err != nil || out[1].Err != nil {
+		t.Errorf("the plugin is off, yet its rows read: %v / %v", out[0].Err, out[1].Err)
+	}
+	if out[2].Err == nil || !strings.Contains(out[2].Err.Error(), "interrupted before it was done") {
+		t.Errorf("what came after the stop: %v", out[2].Err)
+	}
+}
+
+// Ctrl-C while another run holds the lock ends the wait at once. It was caught
+// and then sat out the whole quarter of a minute.
+func TestMenuApplyStopsWaitingForTheLockWhenAskedTo(t *testing.T) {
+	home := deleteHome(t)
+	dir := filepath.Join(home, ".claude")
+	row := menuRow(t, reportRows(t), "skill", "copied")
+	held, err := prune.AcquireLock(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Release() // held to the end: only the stop can end the wait early
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		_ = syscall.Kill(os.Getpid(), syscall.SIGINT)
+	}()
+	started := time.Now()
+
+	err = applyOne(t, dir, row, menu.Prune)
+
+	if waited := time.Since(started); waited > 5*time.Second {
+		t.Errorf("the stop was held for %s", waited.Round(time.Second))
+	}
+	if err == nil || !strings.Contains(err.Error(), "interrupted before it was done") {
+		t.Errorf("a stopped wait gave %v", err)
+	}
+}

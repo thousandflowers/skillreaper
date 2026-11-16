@@ -37,6 +37,13 @@ mute and lock groups. `menu.tape` drives the menu through it and writes
     go build -o /tmp/reap-menu ./cmd/reap
     cd docs/tapes && REAP=/tmp/reap-menu vhs menu.tape
 
-It records with `LC_MONETARY=en_US.UTF-8`, so the numbers read the same whatever
+Two tapes need a hand before they record again. `hero.tape` was written for
+0.5.0: it stops unless `reap version` says 0.5.0, and it does not set
+`SOURCE_DATE_EPOCH`, without which the hero fixture shows no session (the README
+hero is the text block above, which `make readme-numbers` regenerates, not this
+tape). `reap-prune.tape` names the fixture script by the path of the checkout it
+was recorded from. Change both to your build and your checkout first.
+
+`menu.tape` records with `LC_MONETARY=en_US.UTF-8`, so the numbers read the same whatever
 the region of the Mac it is run on. Keep your hands off Shift while it runs: on
 macOS the menu asks the system whether Shift is down.

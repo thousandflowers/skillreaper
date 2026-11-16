@@ -590,14 +590,21 @@ func TestLogicCov_loadReapState_explains_every_failure(t *testing.T) {
 	}
 }
 
-func TestLogicCov_loadReapState_a_failing_exit_with_a_report_is_read(t *testing.T) {
+// reap exits non-zero only for a scan that failed or a report it could not
+// write: what it printed then is no report, however well it parses.
+func TestLogicCov_loadReapState_reads_a_report_only_from_a_run_that_worked(t *testing.T) {
 	a := fakeApp(t)
 	a.reapCommand = func() ([]string, error) { return []string{"/bin/reap"}, nil }
+	code := 1
 	a.runProcess = func(procSpec) procResult {
-		return procResult{code: 1, stdout: `{"DeadTokensPerSession": 42, "Rows": [5, {"Category": "skill"},
+		return procResult{code: code, stdout: `{"DeadTokensPerSession": 42, "Rows": [5, {"Category": "skill"},
 			{"Name": "s", "Category": "skill", "Tokens": 10, "Uses": 0, "Verdict": "REAP"},
 			{"Name": "m", "Category": "mcp", "WeightUnknown": true}, {"Name": "w", "Category": "mcp", "Tokens": "7"}]}`}
 	}
+	if _, err := a.loadReapState(); err == nil || !strings.Contains(err.Error(), "exited 1") {
+		t.Fatalf("a run that failed was read as a report: %v", err)
+	}
+	code = 0
 	state, err := a.loadReapState()
 	if err != nil {
 		t.Fatal(err)

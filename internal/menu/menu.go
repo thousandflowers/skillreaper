@@ -74,6 +74,7 @@ func New(s term.Screen, d Data, a Applier) *Menu {
 	seen := map[string]bool{}
 	for _, r := range m.rows {
 		m.names[r.Name]++
+		m.names[nameInTool(r)]++
 		if !seen[r.Platform] {
 			seen[r.Platform] = true
 			m.platforms = append(m.platforms, r.Platform)
@@ -115,13 +116,21 @@ func cleanWarnings(rep *report.Report) []string {
 	return append(wrong, advisory...)
 }
 
+// nameInTool keys a name within one tool. No name holds the separator: names
+// are cleaned of control characters when the rows are read.
+func nameInTool(r *Row) string { return r.Name + "\x00" + r.Platform }
+
 // displayName is a name, with its platform when two rows would otherwise read
-// the same.
+// the same, and with its source too when the platform is the same as well.
 func (m *Menu) displayName(r *Row) string {
-	if m.names[r.Name] > 1 {
-		return r.Name + " (" + firstOf(r.Platform, unknownTool) + ")"
+	if m.names[r.Name] <= 1 {
+		return r.Name
 	}
-	return r.Name
+	where := firstOf(r.Platform, unknownTool)
+	if m.names[nameInTool(r)] > 1 { // twice in one tool: where each comes from tells them apart
+		where += " · " + strings.TrimPrefix(r.Source, sourcePlugin)
+	}
+	return r.Name + " (" + where + ")"
 }
 
 // wasted is the rows behind the headline: the report's own definition, so the

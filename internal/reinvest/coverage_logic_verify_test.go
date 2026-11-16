@@ -392,7 +392,7 @@ func TestLogicCov_summary_names_the_gaps_with_no_fit(t *testing.T) {
 	out := a.summary([]swap{s}, []kind{solved, {Name: "Docs", Sessions: 3}, {Name: "Lint", Sessions: 5}}, 12345)
 	for _, part := range []string{"~12,345 dead tok/session", "mute      old   ~30 tok/session · never used",
 		"install   ship   ~30 tok/session · skill · o/r", "for Releases (4 sessions)", "it ships",
-		"no fit found for: Docs, Lint", "details: " + a.reportPath()} {
+		"no swap proposed for: Docs, Lint", "details: " + a.reportPath()} {
 		if !strings.Contains(out, part) {
 			t.Errorf("the summary does not say %q:\n%s", part, out)
 		}

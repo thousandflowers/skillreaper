@@ -138,6 +138,9 @@ func pointsAt(link, target string) bool {
 	if err != nil || info.Mode()&os.ModeSymlink == 0 {
 		return false
 	}
+	if text, err := os.Readlink(link); err == nil && text == target {
+		return true // as create wrote it, even when the folder it names is gone
+	}
 	resolved, err := filepath.EvalSymlinks(link)
 	if err != nil {
 		return false
@@ -406,11 +409,15 @@ func (a *app) applyOne(s swap) []string {
 func (a *app) carryOut(s swap) (log []string, applied bool) {
 	c := s.cand()
 	var muted []skill
-	installing, inHand := true, ""
+	installing, inHand, undoing := true, "", false
 	// Ctrl-C ends reinvest inside the step it interrupts. The swap is then half
 	// done, and says so before going: what is in place, and what is not.
 	defer setStopHook(func() {
-		for _, line := range stoppedHalfway(c, installing, log, muted, inHand, s.Mute) {
+		lines := stoppedHalfway(c, installing, log, muted, inHand, s.Mute)
+		if undoing {
+			lines = append(lines, "  ↺  it was undoing the swap after a mute failed: what is listed here may or may not be undone yet")
+		}
+		for _, line := range lines {
 			fmt.Fprintln(a.term, line)
 		}
 	})()
@@ -429,6 +436,7 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 			continue
 		}
 		outcome := "  ↺  rolled back: nothing changed"
+		inHand, undoing = "", true // this mute failed, it was not cut short; from here a stop lands in the undoing
 		if left := a.rollBack(c, muted); len(left) > 0 {
 			outcome = "  ↺  rolled back, but still changed: " + strings.Join(left, ", ")
 		}

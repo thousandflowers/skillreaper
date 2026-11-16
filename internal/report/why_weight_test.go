@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
@@ -51,5 +52,38 @@ func TestWhyHintQuotesANameWithASpace(t *testing.T) {
 	row := Row{Item: scan.Item{Name: "my skill", Category: scan.CatSkill}, Verdict: VerdictMute}
 	if got := recommendationFor(row, 12, ExplainInput{}); got != "run: reap mute 'skill:my skill'" {
 		t.Errorf("hint = %q", got)
+	}
+}
+
+// Every label of `reap why` stands clear of its value: "uses per session" was
+// wider than the column and ran into the figure ("uses per session2%").
+func TestWhyLabelsStandClearOfTheirValues(t *testing.T) {
+	var b bytes.Buffer
+	RenderWhy(&b, Explanation{Name: "skill:alpha", Category: "skill", Verdict: VerdictMute, Installed: "unknown",
+		FiringRate: 0.02, MuteThreshold: 0.2}, false)
+	if !strings.Contains(b.String(), "\nuses/session 2% (below 20% threshold)\n") {
+		t.Errorf("the rate line reads:\n%s", b.String())
+	}
+}
+
+// The days left in the grace period are counted to the day the verdict itself
+// uses: a file dated in the future stays in grace until that date plus the
+// period, not for the period from today.
+func TestWhyCountsGraceFromTheInstallDate(t *testing.T) {
+	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	in := ExplainInput{GraceDays: 14, Now: now}
+	for _, c := range []struct {
+		installed time.Time
+		want      string
+	}{
+		{now.AddDate(0, 0, 5), "wait — 19 day(s) left in the 14-day grace period"},
+		{now.AddDate(0, 0, -3), "wait — 11 day(s) left in the 14-day grace period"},
+		{now.AddDate(0, 0, -30), "wait — 0 day(s) left in the 14-day grace period"},
+		{time.Time{}, "wait — 14 day(s) left in the 14-day grace period"},
+	} {
+		row := Row{Item: scan.Item{Name: "x", Category: scan.CatSkill, InstalledAt: c.installed}, Verdict: VerdictReview, Reason: ReasonGrace}
+		if got := recommendationFor(row, 12, in); got != c.want {
+			t.Errorf("installed %s: %q, want %q", c.installed.Format("2006-01-02"), got, c.want)
+		}
 	}
 }

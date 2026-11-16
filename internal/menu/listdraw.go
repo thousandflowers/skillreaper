@@ -15,7 +15,7 @@ func (m *Menu) usesField(n int) string {
 	if n != 1 {
 		words += "s"
 	}
-	if runes(words) > usesWidth {
+	if runes(words) >= usesWidth { // a gap stays before the tag that follows
 		words = m.shortCount(n)
 	}
 	return pad(words, usesWidth)
@@ -145,7 +145,7 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 		m.put(1, end+2, words, bold)
 		m.put(2, end+2, "~"+m.tokens(int(left))+" tokens re-sent every session", dim)
 		if l.shown > 0 {
-			m.put(3, end+2, "you saved "+m.worth(m.money(savedPriced))+" a month", green)
+			m.put(3, end+2, m.savedSaid(m.money(savedPriced)), green)
 		}
 	default:
 		words := "tokens wasted every session"
@@ -198,7 +198,7 @@ func (l *list) drawGroup(y int, f line, n, amountW int, lit bool) {
 	if l.opened[f.name] {
 		arrow = "▾"
 	}
-	text := st.box + " " + arrow + " " + cutMid(f.name, n-24)
+	text := st.box + " " + arrow + " " + cutMid(f.name, n-25) // a gap stays before the count
 	if st.muted > 0 && st.muted != len(f.rows) {
 		text += " · " + itoa(st.muted) + " muted"
 	}
@@ -313,7 +313,7 @@ func (l *list) footer(h, wd int) {
 		}
 		tok, priced := m.weigh(items, rowTokens)
 		hint = "SELECTING " + plural(l.hi-l.lo+1, "row") + " · " + plural(len(items), "item") + " · " + l.unitFmt(tok, priced) +
-			" · " + how + " to extend · space prunes them · esc cancels"
+			" · " + how + " to extend · space chooses · esc cancels"
 	case l.peek:
 		hint = "reap suggests, while you hold s"
 	case cur.isGroup:

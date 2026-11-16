@@ -223,7 +223,7 @@ def find_gaps(kinds: list[dict], installed: list[dict]) -> list[dict]:
         return []
     gaps = [k for k, name in zip(open_, covering) if not name]
     score = lambda k: k["sessions"] * (1 + k["friction"] / k["sessions"]) * (1 + k["median_tokens"] / 200_000)
-    return sorted(gaps, key=score, reverse=True)[:MAX_GAPS]
+    return sorted(gaps, key=score, reverse=True)  # all of them: the caller takes up the first MAX_GAPS
 
 
 # ---------------------------------------------------------------------------
@@ -515,8 +515,10 @@ def main():
     refused = []  # what the rules turned down before any verifier saw it
     step("grouping your work")
     kinds = kinds_of_work(load_groups(sessions, args.regroup), sessions)
-    gaps = find_gaps(kinds, state["installed"])
-    step(f"{len(kinds)} kinds of work · {len(gaps)} with no skill", done=True)
+    open_gaps = find_gaps(kinds, state["installed"])
+    gaps = open_gaps[:MAX_GAPS]
+    taken = f" · the first {len(gaps)} taken up" if len(gaps) < len(open_gaps) else ""
+    step(f"{len(kinds)} kinds of work · {len(open_gaps)} with no skill{taken}", done=True)
 
     if args.online:
         step("searching skills and MCP servers")

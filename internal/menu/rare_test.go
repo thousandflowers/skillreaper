@@ -7,6 +7,7 @@ package menu
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -432,4 +433,45 @@ func TestSpaceOnARowReapCannotChooseForSaysWhy(t *testing.T) {
 	l.toggle([]*Row{row("acme:bare", source(acmePlugin), notRemovable, noDescription)})
 
 	mustEqual(t, "message", l.msg, "nothing to select here: it has no description to strip: p, l and d still choose")
+}
+
+// The receipt names the folder a linked skill really lives in. That path comes
+// from a link's target, which a plugin can ship: it is cleaned like every other
+// text from disk before it is drawn on the screen the person answers y to.
+func TestSharedFolderIsCleanedBeforeItIsShown(t *testing.T) {
+	linked := row("lnk", func(r *report.Row) { r.LinkTarget = "/home/u/.claude/plugins/ev\u202e\u009bil/skills/lnk" })
+
+	got := sharedDir(linked)
+
+	mustEqual(t, "no direction override or C1 control", strings.ContainsAny(got, "\u202e\u009b"), false)
+	mustEqual(t, "the rest of the path", got, "/home/u/.claude/plugins/ev\ufffd\ufffdil/skills")
+}
+
+// A count stands clear of what is before it: in the narrowest window a group's
+// name ran into its count ("prune22 of 22"), and a row's uses into its tag.
+func TestCountsStandClearOfTheTextBeforeThem(t *testing.T) {
+	x := openSized(t, listRows, listCols, flowData()).run()
+	touching := regexp.MustCompile(`[^ \d]\d+ of \d+`)
+	for _, line := range x.final() {
+		mustEqual(t, "a count touches the name in "+strings.TrimSpace(line), touching.MatchString(line), false)
+	}
+
+	m, _, _ := newMenu(t, one(raw("x")))
+	for _, uses := range []int{1, 99, 133, 999, 12345} {
+		field := m.usesField(uses)
+		mustEqual(t, fmt.Sprintf("the field for %d uses ends in a gap", uses), strings.HasSuffix(field, " "), true)
+		mustEqual(t, fmt.Sprintf("the field for %d uses keeps its width", uses), runes(field), usesWidth)
+	}
+}
+
+// On a flat plan what was chosen is worth money at API prices: said so, once.
+// It read "you saved worth $1.07 at API prices a month".
+func TestSavedOnAFlatPlanReadsAsASentence(t *testing.T) {
+	d := pricedData()
+	d.Billing = "stripe_subscription"
+
+	x := open(t, d).press(tab).press(space).wait().run()
+
+	mustShow(t, x.final(), "you saved US$12.00 a month, at API prices")
+	mustNotShow(t, x.final(), "saved worth")
 }

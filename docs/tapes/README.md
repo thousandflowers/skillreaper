@@ -20,12 +20,14 @@ never a real machine's skill names or paths.
 reaches - 298 skills, 68 subagents, 12 MCP servers, 34 sessions, 7 items firing.
 It feeds the text block at the top of the README, regenerated with:
 
-    docs/gif-helpers/hero-fixture.sh /tmp/hero-claude
+    export SOURCE_DATE_EPOCH="$(docs/gif-helpers/hero-fixture.sh /tmp/hero-claude)"
     reap -claude-dir /tmp/hero-claude -claude-json /tmp/hero-claude/.claude.json \
          -no-nudge --agent
 
-Both fixtures stamp their files relative to today, so the report reproduces
-as long as the window does.
+(`make readme-numbers` does exactly this.) The demo fixture stamps its files
+relative to today. The hero and menu fixtures are dated from a fixed day and
+print it: reap measures its window from the clock, so without
+`SOURCE_DATE_EPOCH` set to that day it finds no session in the window.
 
 `../gif-helpers/menu-fixture.sh` is the stack the menu is recorded on: 20 skills
 and 3 subagents over 40 sessions, with invented names, landing in the prune,

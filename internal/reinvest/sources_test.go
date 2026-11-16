@@ -235,7 +235,7 @@ func TestCallsThatFail_failed_coverage_proposes_nothing(t *testing.T) {
 	a := fakeApp(t)
 	alwaysAnswering(a, nil)
 	open := kind{Name: "Rel", Task: "release", Delegable: true, Sessions: 9, MedianTokens: 1}
-	gaps, err := a.findGaps([]kind{open}, []skill{{Name: "release-tool", Desc: "release"}})
+	gaps, _, err := a.findGaps([]kind{open}, []skill{{Name: "release-tool", Desc: "release"}})
 	if err != nil || len(gaps) != 0 {
 		t.Errorf("got %v, %v", gaps, err)
 	}

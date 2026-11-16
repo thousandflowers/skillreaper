@@ -15,8 +15,10 @@ Small, focused project. PRs welcome for:
 
 ## Releases
 
-Tagged automatically via GoReleaser on `v*` push. No manual release
-steps needed.
+Tagged automatically via GoReleaser on `v*` push. One step is by hand, before
+the tag: `plugins/skillreaper/.claude-plugin/plugin.json` must carry the
+version being tagged. The release workflow compares the two and stops
+before publishing anything when they differ.
 
 ## Questions
 

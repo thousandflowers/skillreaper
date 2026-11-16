@@ -53,9 +53,8 @@ func markdownUnder(root string) []string {
 	return paths
 }
 
-// LoadClaudeMD reads every memory file a session loads and returns the
-// non-comment lines (those that do not start with "#" after trimming). Missing
-// files are skipped. The result feeds ClaudeMDReferences, which protects a
+// LoadClaudeMD reads every memory file a session loads and returns its lines,
+// headings included. Missing files are skipped. The result feeds ClaudeMDReferences, which protects a
 // referenced skill from REAP/MUTE.
 func LoadClaudeMD(cwd, home, claudeDir string) []string {
 	var lines []string
@@ -80,10 +79,7 @@ func readMemoryFile(path, home string, seen map[string]bool, depth int) []string
 	var lines []string
 	sc := newLineScanner(b)
 	for sc.Scan() {
-		line := sc.Text()
-		if strings.HasPrefix(strings.TrimSpace(line), "#") {
-			continue
-		}
+		line := sc.Text() // headings too: "#" opens one in Markdown, and the session loads it
 		lines = append(lines, line)
 		for _, m := range importRe.FindAllStringSubmatch(line, -1) {
 			lines = append(lines, readMemoryFile(resolveImport(m[1], filepath.Dir(path), home), home, seen, depth+1)...)

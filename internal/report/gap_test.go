@@ -139,3 +139,25 @@ func TestComputeGapCountsMeasuredMCPWeight(t *testing.T) {
 		t.Errorf("mcp = %+v, want LoadedTok 40 and UnknownWeight 1", mcp)
 	}
 }
+
+// In a narrow window the gap table keeps what tells its rows apart. It used to
+// keep every figure and cut each category to "…", four rows nobody could tell
+// from one another.
+func TestRenderGapKeepsItsCategoriesInANarrowWindow(t *testing.T) {
+	for _, width := range []string{"40", "44", "50", "60"} {
+		t.Setenv("COLUMNS", width)
+		var buf bytes.Buffer
+		RenderGap(&buf, fixtureReport(), false)
+		out := buf.String()
+		for _, want := range []string{"\n  skills ", "\n  mcp ", "\n  total "} {
+			if !strings.Contains(out, want) {
+				t.Errorf("at %s columns the row %q is not whole:\n%s", width, strings.TrimSpace(want), out)
+			}
+		}
+		for _, line := range strings.Split(out, "\n") {
+			if n := len([]rune(line)); n > 60 {
+				t.Errorf("at %s columns a line is %d wide: %q", width, n, line)
+			}
+		}
+	}
+}

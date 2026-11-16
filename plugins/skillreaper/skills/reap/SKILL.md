@@ -12,8 +12,8 @@ including its closing attribution line.
 
 ## Arguments
 
-Append any `$ARGUMENTS` tokens that begin with `-`; ignore anything else and say
-so. `--days N` sets the evidence window (default 30), `--model <id>` prices it.
+Append any `$ARGUMENTS` tokens that begin with `-`, each with the value that
+follows it (`--days 7`, `--model <id>`); ignore anything else and say so. `--days N` sets the evidence window (default 30), `--model <id>` prices it.
 For the full inventory rather than the top rows, use `reap --json`.
 
 ## If reap is not installed

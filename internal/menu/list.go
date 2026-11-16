@@ -352,7 +352,7 @@ func (l *list) pluginOff(rows []*Row) string {
 	}
 	if len(used) > 0 {
 		names := strings.Join(used[:min(3, len(used))], ", ")
-		question := "Disable " + plug + "? [y/N] all " + plural(len(members), "row") + " go, " + itoa(len(used)) +
+		question := "Disable " + plug + "? [y/n] all " + plural(len(members), "row") + " go, " + itoa(len(used)) +
 			" you use, keep, muted or reap is unsure about: " + names
 		if !l.ask(question) {
 			l.msg = "cancelled"

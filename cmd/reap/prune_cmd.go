@@ -54,7 +54,7 @@ func refuseKept(row report.Row, stderr io.Writer) bool {
 	if !row.Kept {
 		return false
 	}
-	fmt.Fprintf(stderr, "error: %s is kept: run reap keep --remove %s first\n", row.Name, row.Name)
+	fmt.Fprintf(stderr, "error: %s is kept: run reap keep --remove %s first\n", row.Name, scan.ShellArg(row.Name))
 	return true
 }
 
@@ -508,7 +508,8 @@ func cmdRestore(opts options, args []string, stdin io.Reader, stdout, stderr io.
 			err = prune.Restore(opts.claudeDir, id)
 		}
 		if err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
+			// The error names the path, and a folder's name is not trusted.
+			fmt.Fprintf(stderr, "error: %s\n", shown(err.Error()))
 			return 1
 		}
 		fmt.Fprintf(stdout, "restored %s\n", args[0])
@@ -540,7 +541,7 @@ func cmdRestore(opts options, args []string, stdin io.Reader, stdout, stderr io.
 	if errors.As(err, &partial) {
 		fmt.Fprintf(stdout, "restored %d %s, %d left:\n", n, report.Plural(n, "item"), len(partial.Failed))
 		for _, f := range partial.Failed {
-			fmt.Fprintf(stderr, "  %s %s (%s): %v\n", f.Entry.Category, f.Entry.Name, f.Entry.ID, f.Err)
+			fmt.Fprintf(stderr, "  %s %s (%s): %s\n", f.Entry.Category, f.Entry.Name, f.Entry.ID, shown(f.Err.Error()))
 		}
 		return 1
 	}
@@ -579,7 +580,7 @@ func restoreID(claudeDir, arg string) (string, error) {
 	}
 	ids := make([]string, len(matches))
 	for i, e := range matches {
-		ids[i] = e.ID + " (" + e.From + e.ConfigPath + ")"
+		ids[i] = e.ID + " (" + shown(e.From+e.ConfigPath) + ")"
 	}
 	return "", fmt.Errorf("%s is in quarantine %d times; use an id: %s", arg, len(matches), strings.Join(ids, ", "))
 }

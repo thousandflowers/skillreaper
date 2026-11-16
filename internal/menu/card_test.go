@@ -552,3 +552,16 @@ func TestCardOfARowThatWentTakesNothingMore(t *testing.T) {
 		mustEqual(t, "bells", x.s.Beeps, 0)
 	})
 }
+
+// At the smallest window the card is allowed, the path gives way to the line
+// that says what the chosen action does: "gone for good" was painted over.
+func TestCardAtItsSmallestKeepsWhatTheChoiceMeans(t *testing.T) {
+	full := open(t, flowData())
+	full.press(on(srvCard, term.KeyResize, 'd')...).run()
+	small := open(t, flowData())
+	small.s.resizeAt = map[int][2]int{4: {cardRows, testCols}}
+	small.press(on(srvCard, term.KeyResize, 'd')...).run()
+
+	mustEqual(t, "the explaining line, small as at full size",
+		strings.TrimSpace(small.final()[6]), strings.TrimSpace(full.final()[6]))
+}

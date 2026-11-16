@@ -85,6 +85,14 @@ func (m *Menu) worth(text string) string {
 	return "at least " + text
 }
 
+// savedSaid is what the choices save, as money a month.
+func (m *Menu) savedSaid(text string) string {
+	if m.subscriber {
+		return "you saved " + text + " a month, at API prices"
+	}
+	return "you saved at least " + text + " a month"
+}
+
 // bigMoneyWords is the same wording around a figure in the big font: above it,
 // beside it.
 func (m *Menu) bigMoneyWords(words string) (string, string) {

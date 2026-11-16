@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,6 +34,8 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/snapshot"
 	"github.com/thousandflowers/skillreaper/internal/tty"
 	"github.com/thousandflowers/skillreaper/internal/usage"
+
+	"github.com/thousandflowers/skillreaper/internal/flagcheck"
 )
 
 // Version is set via -ldflags at release time.
@@ -379,6 +382,13 @@ func bannerOptions(o options) banner.Options {
 // left. Returns the positional arguments in order.
 func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	var positionals []string
+	if err := flagcheck.Decimal(fs, args); err != nil {
+		fmt.Fprintln(fs.Output(), err) // said as the flag package says its own, then the usage
+		if fs.Usage != nil {
+			fs.Usage()
+		}
+		return nil, err
+	}
 	for {
 		if err := fs.Parse(args); err != nil {
 			return nil, err
@@ -1191,7 +1201,11 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 		col := colorEnabled(opts, stdout)
 		report.RenderText(stdout, r, col)
 		tryShowStarCta(opts, stdout, r, col)
-		report.RenderReinvestHint(stdout, report.ReinvestPath(), col)
+		reinvestDir := "" // reinvest works on Claude Code's folder: another tool's is not it
+		if opts.hasClaudeCode {
+			reinvestDir = opts.claudeDir
+		}
+		report.RenderReinvestHint(stdout, report.ReinvestPath(reinvestDir), col)
 		// Permanent signature, deliberately outside every nudge gate above.
 		// Living in this branch is what excludes it from --json/--md/--quiet.
 		report.RenderFooter(stdout, col)
@@ -1256,6 +1270,11 @@ func cmdKeepRemove(opts options, name string, stdout, stderr io.Writer) int {
 	if !requireClaudeDir(opts, stderr) {
 		return 1
 	}
+	lock, ok := lockState(opts.claudeDir, stateLockWait, stderr)
+	if !ok {
+		return 1
+	}
+	defer lock.Release()
 	removed, err := override.RemoveKeep(opts.claudeDir, name)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -1304,6 +1323,13 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
+	// Taken after the scan, which can last seconds: the list is read, changed
+	// and written back, and two keeps at once used to lose one of the two.
+	lock, ok := lockState(opts.claudeDir, stateLockWait, stderr)
+	if !ok {
+		return 1
+	}
+	defer lock.Release()
 	if err := override.AddKeep(opts.claudeDir, itemKey); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
@@ -1558,11 +1584,15 @@ func cmdNudge(opts options, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprintln(stderr, nudgeText(r.DeadCount, r.MuteCount))
 	st.LastNudgeAt = now
 	st.LastReapCount = r.DeadCount
 	st.LastMuteCount = r.MuteCount
-	_ = hook.SaveNudgeState(opts.claudeDir, st)
+	if err := hook.SaveNudgeState(opts.claudeDir, st); err != nil {
+		// It is weekly because it writes down when it spoke. Where that cannot
+		// be written it would speak at the start of every session: quiet instead.
+		return 0
+	}
+	fmt.Fprintln(stderr, nudgeText(r.DeadCount, r.MuteCount))
 	return 0
 }
 
@@ -1779,8 +1809,19 @@ func cmdSnapshot(opts options, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: %v\n", err)
 			return 1
 		}
-		for _, p := range saved {
-			fmt.Fprintln(stdout, snapshot.Name(p))
+		names := make([]string, len(saved))
+		for i, p := range saved {
+			names[i] = snapshot.Name(p)
+		}
+		if opts.asJSON {
+			if err := json.NewEncoder(stdout).Encode(names); err != nil {
+				fmt.Fprintf(stderr, "error: %v\n", err)
+				return 1
+			}
+			return 0
+		}
+		for _, name := range names {
+			fmt.Fprintln(stdout, name)
 		}
 		return 0
 	}

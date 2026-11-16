@@ -34,19 +34,22 @@ func TestClaudeMDReferences(t *testing.T) {
 	}
 }
 
-func TestLoadClaudeMDSkipsComments(t *testing.T) {
+// A line that starts with "#" is a Markdown heading, not a comment: a session
+// loads it like every other line. A skill named only there is one the person
+// relies on, and it used to be left open to REAP.
+func TestLoadClaudeMDReadsHeadings(t *testing.T) {
 	dir := t.TempDir()
-	content := "# heading comment mentions graphify\nuse the realskill here\n"
+	content := "## Use the `graphify` skill before every release\nuse the realskill here\n"
 	if err := os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// home empty so only the temp cwd CLAUDE.md is read (hermetic).
 	lines := LoadClaudeMD(dir, "", "")
-	if ClaudeMDReferences(lines, "graphify") {
-		t.Error("a name appearing only in a comment line must not count")
+	if !ClaudeMDReferences(lines, "graphify") {
+		t.Error("a skill named in a heading is not protected")
 	}
 	if !ClaudeMDReferences(lines, "realskill") {
-		t.Error("a name in a non-comment line should count")
+		t.Error("a name in a line of text should count")
 	}
 }
 

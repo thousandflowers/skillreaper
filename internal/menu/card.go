@@ -335,7 +335,9 @@ func (m *Menu) drawCard(r *Row, at, of int, chosen, effective string, options []
 			m.put(17+n, 3, line, plain)
 		}
 	}
-	m.put(h-5, 3, cut(r.Path, wd-8), dim)
+	if h-5 > 6 { // at the smallest window the path gives way to the line that explains the choice
+		m.put(h-5, 3, cut(r.Path, wd-8), dim)
+	}
 	if notice != "" {
 		m.put(h-3, 3, cut(notice, wd-6), asBold(m.tint(tintAmber)))
 	}

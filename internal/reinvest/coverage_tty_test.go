@@ -672,3 +672,27 @@ func TestTTYCov_the_picker_needs_a_terminal_on_both_sides(t *testing.T) {
 		t.Error("the screen was taken although the keyboard could not be")
 	}
 }
+
+// Shrunk until no swap fits, the picker takes no key but the ones that leave:
+// Enter used to accept a swap that was nowhere on the screen.
+func TestTTYCov_a_window_too_small_accepts_nothing(t *testing.T) {
+	pt := ttyCovOpen(t, 30, 160)
+	a := fakeApp(t)
+	a.stdin, a.term = pt.slave, pt.slave
+	done := ttyCovPick(a, ttyCovSwaps())
+	ttyCovFirstFrame(t, pt)
+	before := pt.frames()
+	pt.resize(t, 5, 60)
+	if err := syscall.Kill(os.Getpid(), syscall.SIGWINCH); err != nil {
+		t.Fatal(err)
+	}
+	screen := pt.waitFor(t, "a frame after the resize", func(string) bool { return pt.frames() > before })
+	if last := screen[strings.LastIndex(screen, clearScreen):]; !strings.Contains(last, "window too small") {
+		t.Errorf("the small window shows %q", last)
+	}
+	pt.press(t, "\r") // would accept the first swap
+	pt.typeKeys(t, "q")
+	if got := ttyCovResult(t, done); got.err != nil || len(got.chosen) != 0 {
+		t.Errorf("a swap was accepted unseen: %v %v", ttyCovNames(got.chosen), got.err)
+	}
+}

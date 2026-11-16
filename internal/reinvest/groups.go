@@ -314,7 +314,8 @@ func gapScore(k kind) float64 {
 
 // findGaps gives the recurring, delegable kinds of work that no skill covers,
 // used or merely installed (that is `reap reuse`).
-func (a *app) findGaps(kinds []kind, installed []skill) ([]kind, error) {
+// The number is how many there are in all; the list is the first maxGaps of them.
+func (a *app) findGaps(kinds []kind, installed []skill) ([]kind, int, error) {
 	var open []kind
 	for _, k := range kinds {
 		if k.Sessions >= minSessions && k.Delegable && k.Task != "" && k.CoveredBy == "" {
@@ -323,11 +324,11 @@ func (a *app) findGaps(kinds []kind, installed []skill) ([]kind, error) {
 	}
 	covering, answered, err := a.coveringSkills(open, installed)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if !answered { // not knowing what covers this work is not the same as nothing covering it
 		a.failed("checking your installed skills got no answer · nothing proposed this run")
-		return nil, nil
+		return nil, 0, nil
 	}
 	var gaps []kind
 	for i, k := range open {
@@ -336,5 +337,5 @@ func (a *app) findGaps(kinds []kind, installed []skill) ([]kind, error) {
 		}
 	}
 	sort.SliceStable(gaps, func(i, j int) bool { return gapScore(gaps[i]) > gapScore(gaps[j]) })
-	return gaps[:min(maxGaps, len(gaps))], nil
+	return gaps[:min(maxGaps, len(gaps))], len(gaps), nil
 }

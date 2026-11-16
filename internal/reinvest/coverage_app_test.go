@@ -634,3 +634,33 @@ func TestAppCov_a_server_weighed_now_that_cannot_be_forgotten_says_so(t *testing
 		t.Errorf("got %q", log)
 	}
 }
+
+// In a window too small to show the swap under the cursor the picker draws no
+// swap at all, only what to do: a swap nobody can see is not there to accept.
+func TestPickerInAWindowTooSmallDrawsNoSwap(t *testing.T) {
+	swaps := ttyCovSwaps()
+	for _, size := range [][2]int{{0, 0}, {1, 80}, {6, 80}, {8, 80}, {24, 23}, {8, 30}} {
+		drawn := frame(swaps, 0, size[0], size[1])
+		for _, d := range drawn {
+			if d.y != 0 || !strings.HasPrefix(tooSmallNotice, d.text) {
+				t.Errorf("at %dx%d the picker draws %q on row %d", size[0], size[1], d.text, d.y)
+			}
+		}
+		if roomFor(size[0], size[1]) {
+			t.Errorf("%dx%d counts as room for a swap", size[0], size[1])
+		}
+	}
+	if !roomFor(minPickerRows, minPickerCols) || len(frame(swaps, 0, minPickerRows, minPickerCols)) < 5 {
+		t.Error("the smallest window that fits a swap does not show it")
+	}
+}
+
+// An accepted candidate with no weight yet makes the net unknown, not zero.
+func TestPickerTotalsWithAnUnweighedCandidate(t *testing.T) {
+	s := ttyCovSwaps()[0]
+	s.OK = true
+	s.Cands = []candidate{{Name: "srv", Kind: kindMCP}}
+	if got := totals([]swap{s}); !strings.HasPrefix(got, "1 accepted") || !strings.HasSuffix(got, "net unknown (an MCP weight is unknown)") {
+		t.Errorf("totals = %q", got)
+	}
+}

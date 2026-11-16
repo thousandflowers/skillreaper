@@ -625,7 +625,7 @@ func firstOf(a, b string) string {
 // be reading it too.
 func sharedDir(r *Row) string {
 	if link := firstOf(r.LinkTarget, r.ViaLink); link != "" {
-		return filepath.Dir(link)
+		return term.Visible(filepath.Dir(link)) // a link's target is text from disk: cleaned before it is drawn
 	}
 	if r.cat() == "skill" && !r.Removable && !isPlugin(r) {
 		return filepath.Dir(filepath.Dir(r.Path))

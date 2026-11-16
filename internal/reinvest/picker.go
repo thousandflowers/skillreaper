@@ -102,7 +102,17 @@ const (
 	detailIndent = 15
 	rowsPerSwap  = 4
 	listTop      = 2 // the first row of the list, under the title
+
+	// The smallest window that shows the swap under the cursor whole: the
+	// title, a gap, its five rows, the totals and the row the terminal keeps.
+	minPickerRows  = listTop + rowsPerSwap + 1 + 2
+	minPickerCols  = 24 // the verb and the start of the candidate's name
+	tooSmallNotice = "window too small: enlarge it, or q to leave"
 )
+
+// roomFor reports whether a window of this size can show a swap. Where it
+// cannot, the picker shows none and takes no key that would change one.
+func roomFor(height, width int) bool { return height >= minPickerRows && width >= minPickerCols }
 
 func alreadyPicked(swaps []swap, at int) bool {
 	name := swaps[at].cand().Name
@@ -160,6 +170,10 @@ func frame(swaps []swap, cur, height, width int) []drawn {
 			return
 		}
 		out = append(out, drawn{y, x, firstRunes(text, room), attr})
+	}
+	if !roomFor(height, width) {
+		put(0, 0, tooSmallNotice, attrBold)
+		return out
 	}
 	put(0, swapIndent, pickerTitle, attrBold)
 	// The list lives between the title and the totals, and scrolls just far

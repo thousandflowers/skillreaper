@@ -270,6 +270,8 @@ func TestRun_arguments(t *testing.T) {
 			options{days: 30, max: 5, dryRun: true, regroup: true, online: true, mcp: true}},
 		{[]string{"--no-mcp"}, exitOK, true, options{days: 120, max: 3, noMCP: true}},
 		{[]string{"--days", "many"}, exitUsage, false, options{}},
+		{[]string{"--days", "010"}, exitUsage, false, options{}}, // octal 8 to the flag package, ten to a person
+		{[]string{"--max=0x3"}, exitUsage, false, options{}},
 		{[]string{"--nope"}, exitUsage, false, options{}},
 		{[]string{"stray"}, exitUsage, false, options{}},
 		{[]string{"--help"}, exitOK, false, options{}},

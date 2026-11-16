@@ -104,7 +104,7 @@ func TestPluginOffTakesTheWholePlugin(t *testing.T) {
 }
 
 func TestPluginOffAsksWhenSomethingInItIsInUse(t *testing.T) {
-	const question = "Disable acme@market? [y/N] all 2 rows go, 1 you use, keep, muted or reap is unsure about: fmt"
+	const question = "Disable acme@market? [y/n] all 2 rows go, 1 you use, keep, muted or reap is unsure about: fmt"
 	used := func(t *testing.T, keys ...term.Key) *session {
 		d := flowData()
 		d.Report.Rows[3].Uses = 3 // acme:fmt fires

@@ -3,6 +3,7 @@ package report
 import (
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"time"
 
@@ -211,9 +212,10 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 	case VerdictReview:
 		switch row.Reason {
 		case ReasonGrace:
-			left := in.GraceDays - in.daysSinceInstall(row)
-			if left < 0 {
-				left = 0
+			left := in.GraceDays
+			if !row.InstalledAt.IsZero() { // to the day the verdict lets go: a date in the future pushes it out
+				ends := row.InstalledAt.AddDate(0, 0, in.GraceDays)
+				left = max(0, int(math.Ceil(ends.Sub(in.Now).Hours()/24)))
 			}
 			return fmt.Sprintf("wait — %d day(s) left in the %d-day grace period", left, in.GraceDays)
 		case ReasonNoEvidence:
@@ -320,7 +322,7 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 	}
 
 	if e.Verdict == VerdictMute {
-		field("uses per session", fmt.Sprintf("%.0f%% (below %.0f%% threshold)",
+		field("uses/session", fmt.Sprintf("%.0f%% (below %.0f%% threshold)",
 			e.FiringRate*100, e.MuteThreshold*100))
 	}
 

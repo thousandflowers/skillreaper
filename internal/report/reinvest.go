@@ -9,16 +9,20 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
-// ReinvestPath is where reinvest leaves its last proposals, beside reap's own
-// cache. Empty when the platform has no cache directory.
-func ReinvestPath() string {
+// ReinvestPath is where reinvest leaves its last proposals for a Claude config
+// folder, beside reap's own cache. Empty when the platform has no cache
+// directory.
+func ReinvestPath(claudeDir string) string {
 	base, err := os.UserCacheDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(base, "skillreaper", "reinvest", "swaps.json")
+	home, _ := os.UserHomeDir()
+	return filepath.Join(base, "skillreaper", "reinvest", scan.ProfileKey(claudeDir, home), "swaps.json")
 }
 
 // reinvestSwaps is the part of reinvest's swaps.json the hint needs. Command

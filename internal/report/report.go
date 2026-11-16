@@ -47,7 +47,7 @@ type Opts struct {
 	BlindReason map[string]string
 	// RetentionDays is Claude Code's transcript retention, 0 when unknown.
 	RetentionDays int
-	// ClaudeMDLines holds the non-comment lines of every detected CLAUDE.md.
+	// ClaudeMDLines holds the lines of every detected CLAUDE.md, headings included.
 	// A skill whose name appears here is held at KEEP(claude-md-ref).
 	ClaudeMDLines []string
 	// MuteThreshold / MuteMinTokens drive the MUTE verdict for skills: a used

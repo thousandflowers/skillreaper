@@ -28,3 +28,23 @@ func TestAnEndlessPriceIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// "010" is ten to whoever types it, and the flag package reads it as octal 8:
+// the report said "last 8 days". A number not written in base ten is refused.
+func TestIntegerFlagsAreBaseTen(t *testing.T) {
+	deleteHome(t)
+	for _, args := range [][]string{{"--days", "010"}, {"--days=0x10"}, {"gap", "--min-sessions", "1_0"}} {
+		code, out := reapRun(args...)
+		if code != 2 || !strings.Contains(out, "base ten") {
+			t.Errorf("%v: %d %s", args, code, firstLine(out))
+		}
+	}
+	if code, out := reapRun("--days", "10", "--json"); code != 0 {
+		t.Errorf("--days 10: %d %s", code, firstLine(out))
+	}
+}
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return line
+}

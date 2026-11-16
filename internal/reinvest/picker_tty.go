@@ -146,6 +146,12 @@ func (s *screen) paint(items []drawn) error {
 	return err
 }
 
+// hasRoom reports whether the window can show a swap right now.
+func (s *screen) hasRoom() bool {
+	rows, cols, err := windowSize(s.out)
+	return err == nil && roomFor(rows, cols)
+}
+
 func (s *screen) draw(swaps []swap, cur int) error {
 	rows, cols, err := windowSize(s.out)
 	if err != nil {
@@ -204,6 +210,9 @@ func (a *app) pickLoop(scr *screen, swaps []swap, interrupts, resizes <-chan os.
 			continue
 		}
 		stale = true
+		if key != 'q' && key != keyEscape && !scr.hasRoom() {
+			continue // no swap is on the screen: no key may change one unseen
+		}
 		if key == 'p' {
 			if err := a.previewOutside(scr, swaps[cur].cand()); err != nil {
 				return nil, err

@@ -192,6 +192,14 @@ def names(mute: list[dict]) -> str:
 # Picker
 # ---------------------------------------------------------------------------
 
+MIN_PICKER_ROWS, MIN_PICKER_COLS = 9, 24  # the title, a gap, the five rows of a swap, the totals, the last row
+TOO_SMALL = "window too small: enlarge it, or q to leave"
+
+
+def room_for(height: int, width: int) -> bool:
+    return height >= MIN_PICKER_ROWS and width >= MIN_PICKER_COLS
+
+
 def _draw(scr, swaps: list[dict], cur: int):
     scr.erase()
     h, w = scr.getmaxyx()
@@ -200,6 +208,10 @@ def _draw(scr, swaps: list[dict], cur: int):
         if 0 <= y < h - 1:
             scr.addnstr(y, x, text, max(0, w - x - 1), attr)
 
+    if not room_for(h, w):  # no swap fits: none is drawn, and pick() takes no key that would change one
+        put(0, 0, TOO_SMALL, curses.A_BOLD)
+        scr.refresh()
+        return
     put(0, 2, "reinvest · swaps   ↑↓ swap · ←→ candidate · enter accept · p read · m mute on/off · q done",
         curses.A_BOLD)
     # The list lives between the title and the totals, and scrolls just far enough for the swap under the
@@ -273,6 +285,8 @@ def pick(swaps: list[dict]) -> list[dict]:
         while not done:
             _draw(scr, swaps, cur)
             key = scr.getch()
+            if key not in (ord("q"), 27) and not room_for(*scr.getmaxyx()):
+                continue
             if key == ord("p"):
                 curses.def_prog_mode()
                 curses.endwin()

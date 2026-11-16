@@ -40,6 +40,7 @@ func runGrouped(cmd *exec.Cmd) error {
 	case sig := <-sigs:
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		err := <-done
+		runStopHook() // a swap half done says what it changed before reinvest goes
 		exitOnSignal(128 + int(sig.(syscall.Signal)))
 		return err
 	}

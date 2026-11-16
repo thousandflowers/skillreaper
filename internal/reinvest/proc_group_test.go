@@ -36,6 +36,8 @@ func TestProcess_a_signal_during_a_step_ends_the_step_too(t *testing.T) {
 	old := exitOnSignal
 	t.Cleanup(func() { exitOnSignal = old })
 	exitOnSignal = func(code int) { exited <- code }
+	said := make(chan bool, 1)
+	defer setStopHook(func() { said <- true })()
 	go func() {
 		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 			if b, err := os.ReadFile(pidFile); err == nil && len(b) > 0 {
@@ -52,6 +54,11 @@ func TestProcess_a_signal_during_a_step_ends_the_step_too(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the run never ended for the signal")
+	}
+	select {
+	case <-said:
+	default:
+		t.Error("reinvest ended for the signal without saying what was half done")
 	}
 	b, _ := os.ReadFile(pidFile)
 	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))

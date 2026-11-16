@@ -230,7 +230,7 @@ func TestListKeysOnAGroup(t *testing.T) {
 }
 
 func TestListSelection(t *testing.T) {
-	const selecting = "SELECTING 2 rows · 4 items · ~950 tok · shift+↑↓ to extend · space prunes them · esc cancels"
+	const selecting = "SELECTING 2 rows · 4 items · ~950 tok · shift+↑↓ to extend · space chooses · esc cancels"
 
 	t.Run("shift+down selects from the cursor and says what is in it", func(t *testing.T) {
 		x := play(t, term.KeyShiftDown)

@@ -405,12 +405,22 @@ func (a *app) applyOne(s swap) []string {
 // carryOut is applyOne that also says whether the swap is now in place.
 func (a *app) carryOut(s swap) (log []string, applied bool) {
 	c := s.cand()
+	var muted []skill
+	installing, inHand := true, ""
+	// Ctrl-C ends reinvest inside the step it interrupts. The swap is then half
+	// done, and says so before going: what is in place, and what is not.
+	defer setStopHook(func() {
+		for _, line := range stoppedHalfway(c, installing, log, muted, inHand, s.Mute) {
+			fmt.Fprintln(a.term, line)
+		}
+	})()
 	log, stop := a.install(s)
 	if stop {
 		return log, false
 	}
-	var muted []skill
+	installing = false
 	for _, x := range s.Mute {
+		inHand = x.Name
 		// --yes: the swap was accepted in reinvest's own question, with this mute
 		// listed in it. reap would otherwise ask again on a terminal nobody sees.
 		err := a.runStep([]string{reapName, "--yes", "mute", x.target()})
@@ -433,6 +443,33 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 		log = append(log, "  ✓  muted "+x.Name+" (reap unmute "+scan.ShellArg(x.target())+" undoes)")
 	}
 	return log, true
+}
+
+// stoppedHalfway is what a swap says when a signal ends reinvest inside it.
+func stoppedHalfway(c candidate, installing bool, log []string, muted []skill, inHand string, all []skill) []string {
+	lines := []string{"", "  ⚠  stopped in the middle of the swap for " + c.Name + ":"}
+	if installing {
+		lines = append(lines, "  ?  "+c.Name+": its install was cut short (it may be half there)")
+	}
+	lines = append(lines, log...)
+	done := map[string]bool{inHand: true}
+	for _, x := range muted {
+		done[x.Name] = true
+		lines = append(lines, "  ✓  muted "+x.Name+" (reap unmute "+scan.ShellArg(x.target())+" undoes)")
+	}
+	if inHand != "" && (len(muted) == 0 || muted[len(muted)-1].Name != inHand) {
+		lines = append(lines, "  ?  "+inHand+": its mute was cut short (reap unmute lists what is muted)")
+	}
+	var rest []string
+	for _, x := range all {
+		if !done[x.Name] {
+			rest = append(rest, x.Name)
+		}
+	}
+	if len(rest) > 0 {
+		lines = append(lines, "  ·  not muted: "+strings.Join(rest, ", "))
+	}
+	return lines
 }
 
 // apply carries out the chosen swaps, or with dryRun says what it would run.

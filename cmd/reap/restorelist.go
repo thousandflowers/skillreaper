@@ -55,7 +55,7 @@ func listMuted(claudeDir string, stdout, stderr io.Writer) int {
 	for _, e := range entries {
 		line := e.Name
 		if copies[e.Name] > 1 {
-			line += "  " + e.Path
+			line += "  " + shown(e.Path)
 		}
 		if mute.Strippable(e.Path) {
 			line += "  (mute lost: its description came back)"

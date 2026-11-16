@@ -22,6 +22,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/thousandflowers/skillreaper/internal/flagcheck"
 )
 
 const (
@@ -71,7 +73,10 @@ func printUsage(w io.Writer, fs *flag.FlagSet) {
 // parseArgs reads the command line. ok is false when Run should stop with code.
 func parseArgs(args []string, stdout, stderr io.Writer) (opts options, code int, ok bool) {
 	fs := newFlagSet(&opts)
-	err := fs.Parse(args)
+	err := flagcheck.Decimal(fs, args)
+	if err == nil {
+		err = fs.Parse(args)
+	}
 	if err == nil && fs.NArg() > 0 {
 		err = fmt.Errorf("unrecognized arguments: %s", strings.Join(fs.Args(), " "))
 	}
@@ -195,11 +200,11 @@ func (a *app) pipeline(opts options) (outcome, error) {
 		return outcome{}, err
 	}
 	kinds := kindsOfWork(groups, sessions)
-	gaps, err := a.findGaps(kinds, state.Installed)
+	gaps, open, err := a.findGaps(kinds, state.Installed)
 	if err != nil {
 		return outcome{}, err
 	}
-	a.step(fmt.Sprintf("%d kinds of work · %d with no skill", len(kinds), len(gaps)), true)
+	a.step(gapsLine(len(kinds), open, len(gaps)), true)
 
 	cands, refused, err := a.candidates(opts, gaps, sessions, state)
 	if err != nil {
@@ -351,4 +356,14 @@ func (a *app) chooseAndApply(swaps []swap, dryRun bool) error {
 		return nil
 	}
 	return a.dropProposals(applied) // a swap that failed is still on offer
+}
+
+// gapsLine is the step's line: how many kinds of work have no skill, and how
+// many of those this run takes up when it is not all of them.
+func gapsLine(kinds, open, taken int) string {
+	line := fmt.Sprintf("%d kinds of work · %d with no skill", kinds, open)
+	if taken < open {
+		line += fmt.Sprintf(" · the first %d taken up", taken)
+	}
+	return line
 }

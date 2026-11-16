@@ -359,3 +359,13 @@ func TestTypedNameFollowsTheNpmWrapperNotTheBinary(t *testing.T) {
 		})
 	}
 }
+
+// The notice is printed before any screen is taken, in whatever locale: it has
+// no character an ASCII-only terminal cannot draw.
+func TestTheReadingNoticeIsPlainASCII(t *testing.T) {
+	for _, c := range readingNotice {
+		if c > 127 {
+			t.Errorf("the notice holds %q: %s", c, readingNotice)
+		}
+	}
+}

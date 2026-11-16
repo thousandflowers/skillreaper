@@ -354,3 +354,42 @@ func TestWrittenSkills_a_write_with_no_answer_is_reported(t *testing.T) {
 		t.Errorf("a write that worked: %d skills, screen %q", len(out), termText(b))
 	}
 }
+
+// Ctrl-C in the middle of a swap ends reinvest there. What the swap had already
+// changed is said before it goes: it used to end without a word, a new skill
+// installed and half of the old ones muted.
+func TestApply_a_stop_halfway_through_a_swap_says_what_was_done(t *testing.T) {
+	tempHome(t)
+	a := fakeApp(t)
+	stepsRecorded(a, func(cmd []string) error {
+		if sameWords(cmd, []string{reapName, "--yes", "mute", "second"}) {
+			runStopHook() // what a signal does once the step's group is ended
+		}
+		return nil
+	})
+	a.applyOne(writtenSwap("first", "second", "third"))
+	said := termText(a)
+	for _, want := range []string{
+		"⚠  stopped in the middle of the swap for ship-release",
+		"✓  created ship-release in ",
+		"✓  muted first (reap unmute first undoes)",
+		"?  second: its mute was cut short (reap unmute lists what is muted)",
+		"·  not muted: third",
+	} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the stop does not say %q:\n%s", want, said)
+		}
+	}
+	runStopHook() // the swap is over: nothing more to say
+	if termText(a) != said {
+		t.Errorf("a stop after the swap still speaks:\n%s", termText(a))
+	}
+
+	// Stopped during the install itself: only that is known.
+	b := fakeApp(t)
+	stepsRecorded(b, func([]string) error { runStopHook(); return nil })
+	b.applyOne(swap{Mute: []skill{{Name: "old"}}, Cands: []candidate{{Kind: kindSkill, Name: "r", Source: "acme/tools", Slug: "release"}}})
+	if got := termText(b); !strings.Contains(got, "?  r: its install was cut short") || !strings.Contains(got, "not muted: old") {
+		t.Errorf("a stop during the install says:\n%s", got)
+	}
+}

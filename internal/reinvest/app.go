@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 const (
@@ -71,9 +73,10 @@ type app struct {
 
 // newApp wires an app to the real world.
 func newApp(stdin io.Reader, stdout, stderr io.Writer) *app {
+	profile := scan.ProfileKey(claudeDir(), homeDir()) // "" for the usual folder: each other one keeps its own
 	a := &app{
-		cacheDir:       defaultCacheDir(),
-		stateDir:       defaultStateDir(),
+		cacheDir:       filepath.Join(defaultCacheDir(), profile),
+		stateDir:       filepath.Join(defaultStateDir(), profile),
 		projectsDir:    filepath.Join(claudeDir(), "projects"),
 		stdin:          stdin,
 		term:           stdout,

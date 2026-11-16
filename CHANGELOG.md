@@ -177,6 +177,35 @@ really injected, with multi-line descriptions read in full.
   other blocks now; both had drifted from what reap prints.
 - The plugin's `reap` skill no longer says a piped word answers the prune
   question: without a terminal prune and mute stop and ask for `--yes`.
+- A skill named in a heading of your CLAUDE.md is protected like one named in
+  its text. Lines starting with `#` were skipped as comments; they are
+  headings, and a session loads them.
+- `reap keep` and `reap keep --remove` take the lock the other commands
+  share: two run at once used to lose one of the two entries.
+- Paths printed by `reap unmute` and `reap restore`, in their listings and
+  their refusals, carry no control characters from a folder's name.
+- The refusal for a kept item gives a `reap keep --remove` that can be pasted
+  for a name with a space.
+- The weekly nudge stays quiet where it cannot write down that it spoke; it
+  used to speak at the start of every session.
+- `reap snapshot --list --json` prints JSON.
+- An integer flag written in another base (`--days 010`, `0x10`, `1_000`) is
+  refused. `010` used to be read as octal: eight days, without a word.
+- `reap why` counts the days left in the grace period to the date the verdict
+  uses, and its rate line reads `uses/session 2%` instead of running the
+  label into the figure.
+- `reap gap` in a narrow window gives up the bar and the token columns
+  before its category names, which were cut to `…` on every row.
+- In the menu: a selection's footer says `space chooses` (it never only
+  pruned); the question before a plugin is turned off reads `[y/n]`, since
+  Enter does not answer it; a shared folder named on the receipt is cleaned
+  of control characters; counts stand clear of the names before them in the
+  narrowest window; the card at its smallest keeps the line that explains
+  the choice; on a flat plan the saved line reads as a sentence.
+- `docs/tapes/README.md` and `hero-fixture.sh` give a rebuild command that
+  sets `SOURCE_DATE_EPOCH`; CONTRIBUTING and `docs/decisions.md` say the
+  plugin's version is set to the tag before a release; the plugin's skills
+  pass a flag together with its value.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -257,6 +286,16 @@ the same cache files and the same checks. What to know before running it:
   written`); it used to read as `0 skills written` with no reason.
 - The help says what `--days` bounds: the transcripts read. Sessions
   remembered from earlier runs still count.
+- Each Claude config folder (`CLAUDE_CONFIG_DIR`) keeps its own session
+  memory and cache, and `reap`'s hint reads the proposals of the folder it
+  reports on. The usual folder keeps the places it had. One memory for all
+  sent one profile's prompts to Claude on behalf of another.
+- Ctrl-C in the middle of a swap says what the swap had already changed
+  before reinvest ends; it ended without a word.
+- The picker draws no swap, and accepts none, in a window too small to show
+  one (under 9 rows or 24 columns).
+- `N with no skill` counts them all, and says when only the first few are
+  taken up.
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

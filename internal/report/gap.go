@@ -163,9 +163,11 @@ func RenderGap(w io.Writer, r *Report, color bool) {
 		{head: "LOADED", right: true, cells: loaded},
 		{head: "FIRED", right: true, cells: fired},
 		{head: "UTIL", right: true, cells: util},
-		{cells: bars, shed: 1},
-		{head: "TOK LOADED", right: true, cells: tokLoaded},
-		{head: "TOK USED", right: true, cells: tokUsed},
+		// Given up in this order as the window narrows, the bar first: the
+		// category is what tells one row from another and goes last of all.
+		{cells: bars, shed: 3},
+		{head: "TOK LOADED", right: true, cells: tokLoaded, shed: 1},
+		{head: "TOK USED", right: true, cells: tokUsed, shed: 2},
 	}, width, 2)
 
 	fmt.Fprintln(w)

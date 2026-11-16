@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"strconv"
 )
 
 // Grouping the sessions into kinds of work, finding the gaps, asking Claude,
@@ -215,7 +217,7 @@ func TestLogicCov_findGaps_orders_by_score_and_keeps_six(t *testing.T) {
 		{Name: "used", Task: "t", Delegable: true, Sessions: 9, CoveredBy: "x"},
 	}
 	calls := answering(t, a, js(t, `{"6": "Release-Tool"}`))
-	gaps, err := a.findGaps(append(append([]kind{}, ruled...), open...), []skill{{Name: "release-tool", Desc: "cuts releases"}})
+	gaps, _, err := a.findGaps(append(append([]kind{}, ruled...), open...), []skill{{Name: "release-tool", Desc: "cuts releases"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +235,7 @@ func TestLogicCov_findGaps_orders_by_score_and_keeps_six(t *testing.T) {
 func TestLogicCov_findGaps_and_coveringSkills_errors(t *testing.T) {
 	a := fakeApp(t)
 	logicCovAskFails(a)
-	if _, err := a.findGaps([]kind{logicCovKind("x", 3, 0, 0)}, nil); !errors.Is(err, errLogicCovBoom) {
+	if _, _, err := a.findGaps([]kind{logicCovKind("x", 3, 0, 0)}, nil); !errors.Is(err, errLogicCovBoom) {
 		t.Errorf("findGaps: %v", err)
 	}
 	a = fakeApp(t)
@@ -603,5 +605,32 @@ func TestLogicCov_loadReapState_a_failing_exit_with_a_report_is_read(t *testing.
 	if state.Dead != 42 || len(state.Installed) != 1 || len(state.Reap) != 1 || len(state.Used) != 0 ||
 		state.MCP["m"] != nil || state.MCP["w"] == nil || *state.MCP["w"] != 7 {
 		t.Errorf("state %+v", state)
+	}
+}
+
+// "with no skill" counts every kind of work with no skill, and says when only
+// the first few are taken up. It used to print the cap (6) as if it were the count.
+func TestGaps_the_count_is_not_the_cap(t *testing.T) {
+	a := fakeApp(t)
+	answering(t, a, js(t, `{}`))
+	kinds := make([]kind, maxGaps+2)
+	for i := range kinds {
+		kinds[i] = kind{Name: "k" + strconv.Itoa(i), Task: "t", Delegable: true, Sessions: 9}
+	}
+	gaps, open, err := a.findGaps(kinds, []skill{{Name: "x", Desc: "y"}})
+	if err != nil || len(gaps) != maxGaps || open != maxGaps+2 {
+		t.Fatalf("got %d gaps of %d open (%v)", len(gaps), open, err)
+	}
+	for _, c := range []struct {
+		kinds, open, taken int
+		want               string
+	}{
+		{8, 8, 6, "8 kinds of work · 8 with no skill · the first 6 taken up"},
+		{8, 3, 3, "8 kinds of work · 3 with no skill"},
+		{0, 0, 0, "0 kinds of work · 0 with no skill"},
+	} {
+		if got := gapsLine(c.kinds, c.open, c.taken); got != c.want {
+			t.Errorf("gapsLine(%d, %d, %d) = %q, want %q", c.kinds, c.open, c.taken, got, c.want)
+		}
 	}
 }

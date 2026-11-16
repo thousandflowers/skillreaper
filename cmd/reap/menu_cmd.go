@@ -30,7 +30,7 @@ const (
 	reportName      = "reap"
 	disableTimeout  = 60 * time.Second
 	maxClaudeJSON   = 64 << 20
-	readingNotice   = "reading your stack and your sessions…"
+	readingNotice   = "reading your stack and your sessions..."
 	errOutputHeader = "claude plugin disable: "
 )
 

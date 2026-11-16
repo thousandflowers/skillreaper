@@ -33,7 +33,8 @@ The npm package downloads the correct platform binary the first time
 it runs, checks it against the release's checksums, and wraps it as a
 Node CLI. Same binary either way. It keeps the binary next to the
 package, or, when that folder is not yours to write (a global install
-made with sudo), in `~/.cache/skillreaper/<version>/`.
+made with sudo), in `skillreaper/<version>/` under `$XDG_CACHE_HOME`, else
+under `%LOCALAPPDATA%` on Windows, else under `~/.cache`.
 
 **Verify**:
 ```bash

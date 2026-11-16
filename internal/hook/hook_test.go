@@ -375,3 +375,19 @@ func TestInstallWritesThroughALink(t *testing.T) {
 		t.Errorf("got %q", b)
 	}
 }
+
+// A settings file whose SessionStart is not a list is refused with what is
+// wrong and where, not with the decoder's own words.
+func TestOddSessionStartIsNamedWithItsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"hooks":{"SessionStart":{"a":1}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := Installed(path, Command("/usr/local/bin/reap"), false)
+	if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "hooks.SessionStart is not a list") {
+		t.Errorf("install: %v", err)
+	}
+	if _, err := Uninstalled(path); err == nil || !strings.Contains(err.Error(), path) {
+		t.Errorf("uninstall: %v", err)
+	}
+}

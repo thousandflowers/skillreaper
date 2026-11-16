@@ -143,6 +143,9 @@ type options struct {
 	// the state commands have a directory, and gather must not read that as a
 	// request to scan Claude Code alone.
 	claudeDirExplicit bool
+	// claudeJSONGiven records that --claude-json was passed: without --claude-dir
+	// the folder is detected, and the file must not be swapped for the detected one.
+	claudeJSONGiven bool
 	// hasClaudeCode says opts.claudeDir is a Claude Code directory. On a machine
 	// with only other tools, state lives under the first of those instead, and
 	// what only Claude Code reads (settings.json, its retention) does not apply.
@@ -329,6 +332,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	case reinvestCommand: // reached only with a flag in front of it
 		typed := []string{"reap", reinvestCommand} // its own flags as typed, wherever they stood
+		if opts.claudeDirExplicit {                // reinvest has no --claude-dir: it reads the folder from the environment
+			typed = append([]string{"CLAUDE_CONFIG_DIR=" + scan.ShellArg(opts.claudeDir)}, typed...)
+		}
 		for _, arg := range reinvest.OwnArgs(args) {
 			typed = append(typed, scan.ShellArg(arg))
 		}
@@ -509,6 +515,7 @@ func fillDefaults(opts *options, stderr io.Writer) error {
 		*p = abs
 	}
 	opts.claudeDirExplicit = opts.claudeDir != ""
+	opts.claudeJSONGiven = opts.claudeJSON != ""
 	opts.hasClaudeCode = opts.claudeDirExplicit
 	if opts.claudeDirExplicit && opts.claudeJSON == "" {
 		opts.claudeJSON = configBeside(opts.claudeDir)
@@ -518,7 +525,9 @@ func fillDefaults(opts *options, stderr io.Writer) error {
 		for _, p := range detected {
 			if p.ID == platform.ClaudeCode {
 				opts.claudeDir = p.ConfigDirAbs
-				opts.claudeJSON = p.ConfigFileAbs
+				if !opts.claudeJSONGiven { // a file that was named is the one to read and to edit
+					opts.claudeJSON = p.ConfigFileAbs
+				}
 				opts.hasClaudeCode = true
 				break
 			}
@@ -648,6 +657,11 @@ func gather(opts options) (*report.Report, error) {
 		platforms = detectPlatforms()
 		if len(platforms) == 0 {
 			return nil, fmt.Errorf("no supported AI coding platform found")
+		}
+		for i, p := range platforms {
+			if p.ID == platform.ClaudeCode && opts.claudeJSONGiven {
+				platforms[i].ConfigFileAbs = opts.claudeJSON
+			}
 		}
 	}
 
@@ -1402,9 +1416,21 @@ func findRow(r *report.Report, typed string, eligible func(report.Row) bool) ([]
 	if len(matches) < 2 {
 		return matches, nil
 	}
-	// A shared folder is listed once per tool reading it, and it is one item.
 	if matches[0].Path != "" && !slices.ContainsFunc(matches, func(m report.Row) bool { return m.Path != matches[0].Path }) {
-		return matches[:1], nil
+		var scopes []string
+		for _, m := range matches {
+			if !slices.Contains(scopes, m.Source) {
+				scopes = append(scopes, m.Source)
+			}
+		}
+		// A shared folder is listed once per tool reading it, and it is one item.
+		if len(scopes) == 1 {
+			return matches[:1], nil
+		}
+		// One file, several scopes: a server for every project and one for a single
+		// project are two items under one name and one path.
+		return nil, fmt.Errorf("%s is defined %d times in %s (%s); by name reap cannot tell which you mean: choose its row in the menu (reap menu)",
+			typed, len(scopes), shown(matches[0].Path), shown(strings.Join(scopes, ", ")))
 	}
 	lines := make([]string, len(matches))
 	for i, m := range matches {
@@ -1515,7 +1541,7 @@ func cmdInstallHook(opts options, stdout, stderr io.Writer) int {
 	} else {
 		fmt.Fprintf(stdout, "installed SessionStart nudge hook in %s\n", settings)
 	}
-	fmt.Fprintf(stdout, "Undo: reap uninstall-hook\n")
+	fmt.Fprintf(stdout, "Undo: reap uninstall-hook%s\n", sameFolder(opts))
 	return 0
 }
 

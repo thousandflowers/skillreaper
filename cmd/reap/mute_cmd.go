@@ -9,7 +9,6 @@ import (
 
 	"github.com/thousandflowers/skillreaper/internal/mute"
 	"github.com/thousandflowers/skillreaper/internal/report"
-	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -200,7 +199,7 @@ func (o muteOutcome) printSummary(opts options, stdout, stderr io.Writer, r *rep
 	if named {
 		row := o.muted[0]
 		fmt.Fprintf(stdout, "muted %s — description stripped (~%d tok/session saved)\n", row.Name, report.MuteSaving(row))
-		fmt.Fprintf(stdout, "Undo: reap unmute %s%s\n", scan.ShellArg(row.Name), sameFolder(opts))
+		fmt.Fprintf(stdout, "Undo: reap unmute%s\n", pasteTail(opts, row.Name))
 		if report.IsPluginSource(row.Source) {
 			fmt.Fprintln(stdout, "A plugin update can bring the description back.")
 		}

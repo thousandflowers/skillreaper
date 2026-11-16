@@ -102,7 +102,7 @@ func Installed(settingsPath, command string, dryRun bool) ([]byte, Change, error
 	}
 	groups, err := sessionStartGroups(doc)
 	if err != nil {
-		return nil, Unchanged, err
+		return nil, Unchanged, fmt.Errorf("settings %s: %w", settingsPath, err)
 	}
 	out, change := doc, Added
 	for i, g := range groups {
@@ -174,7 +174,7 @@ func Uninstalled(settingsPath string) (removed bool, err error) {
 	}
 	groups, err := sessionStartGroups(doc)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("settings %s: %w", settingsPath, err)
 	}
 	out := doc
 	// Backwards, so the indexes still to come stay valid as elements go.
@@ -300,7 +300,7 @@ func sessionStartGroups(doc []byte) ([]group, error) {
 	}
 	var groups []group
 	if err := json.Unmarshal(raw, &groups); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hooks.SessionStart is not a list of hook groups: %w", err)
 	}
 	return groups, nil
 }

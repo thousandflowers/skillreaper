@@ -44,7 +44,7 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 
 	fmt.Fprintf(stdout, "\n  %-6s  %s\n  %s\n", row.Category, row.Name, shown(row.Path))
 	if row.PrunedCopyID != "" {
-		fmt.Fprintf(stdout, "  A copy is in quarantine (id %s). It stays there: reap restore %s can still bring that one back.\n", row.PrunedCopyID, row.PrunedCopyID)
+		fmt.Fprintf(stdout, "  A copy is in quarantine (id %s). It stays there: reap restore %s%s can still bring that one back.\n", row.PrunedCopyID, row.PrunedCopyID, sameFolder(opts))
 	}
 	if row.LinkTarget != "" {
 		fmt.Fprintf(stdout, "  This is a link: the link goes, and what it points to stays at %s\n", shown(row.LinkTarget))

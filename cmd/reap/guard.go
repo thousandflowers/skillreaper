@@ -131,8 +131,10 @@ func hintRewriter(invoked string, args []string) func([]byte) []byte {
 			names = append(names, regexp.QuoteMeta(cmd))
 		}
 	}
-	re := regexp.MustCompile(`(^|[\s\x60(])reap ((?:` + strings.Join(names, "|") + `))`)
-	with := []byte("${1}" + invoked + " ${2}")
+	// After the name: a subcommand or a "[", a flag, the word "to", or the
+	// backquote that closes a bare `reap`.
+	re := regexp.MustCompile(`(^|[\s\x60(])reap( (?:` + strings.Join(names, "|") + `|--|to )|\x60)`)
+	with := []byte("${1}" + invoked + "${2}")
 	pad := []byte(strings.Repeat(" ", len(invoked)-len("reap")))
 	return func(p []byte) []byte {
 		lines := bytes.SplitAfter(p, []byte("\n"))

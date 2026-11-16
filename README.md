@@ -497,12 +497,11 @@ how much of what you load you actually use.
 <p align="center"><sub>Same generated sample stack as the report at the top of this
 page, so the two agree. The numbers further up the page are measured on mine.</sub></p>
 
-Each row breaks down by category (skill, MCP, agent) with item count, token
-weight, and a 10-segment utilization bar. The token column reads
-*loaded → actually used*: the left number loads every session, the right is all
-that is ever touched - the gap between them is dead weight that reloads each
-time. Low utilization (<10 %) is red, medium (<50 %) yellow,
-high (≥50 %) green.
+Each row breaks down by category (skill, MCP, agent) with item count, a
+10-segment utilization bar and two token columns: `TOK LOADED` loads every
+session, `TOK USED` is all that is ever touched - the gap between them is dead
+weight that reloads each time. The bar and the percent beside it carry the
+magnitude; the rows are not tinted, so the view reads the same without colour.
 
 The default `reap` report also includes a compact utilization summary line:
 
@@ -516,8 +515,8 @@ The default `reap` report also includes a compact utilization summary line:
 blocks above it.</sub></p>
 
 This is the **real** gap between what your agent carries and what it fires -
-complementary to the shock box (which only counts items that are safe to prune
-right now).
+complementary to the report's REAP count (which only counts items that are safe
+to prune right now).
 
 <pre>reap gap          # text breakdown
 reap gap --json   # JSON output
@@ -527,7 +526,7 @@ The gap view also scores **payload quality** for MCP tools: when a tool fires,
 is the result signal or noise? A fetch/screenshot tool can fire 80× and return
 mostly base64 or boilerplate every call - green under load utilization, but
 context burned on each call. Tools that fire often *and* return mostly noise are
-flagged `⚑ noisy`. This is the second utilization axis (load is the first), and
+flagged `noisy`. This is the second utilization axis (load is the first), and
 mute does not catch it.
 
 <br>
@@ -619,9 +618,10 @@ reap diff                # newest vs previous
 reap diff &lt;a&gt; &lt;b&gt;        # two named snapshots
 reap diff --json         # structured output</pre>
 
-Snapshots are never taken automatically. State nobody asked for is the disease
-this tool treats; `reap install-hook` is the place to opt into a periodic one,
-once `diff` has proved useful.
+Snapshots are never taken automatically: state nobody asked for is the disease
+this tool treats. Take one with `reap snapshot` when you want a point to compare
+against. The hook `reap install-hook` installs only nudges; a periodic snapshot
+would belong there, and is not there yet.
 
 <br>
 
@@ -636,7 +636,7 @@ Claude Code session. If 7 days have passed and the REAP or MUTE count has grown
 since the last check, it prints a single line to stderr:
 
 ```
-skillreaper: 3 skills flagged for pruning since last check. Run reap to review.
+skillreaper: 3 unused items to prune, more than at the last check. Run `reap` to review.
 ```
 
 Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.

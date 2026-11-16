@@ -40,7 +40,7 @@ has to be taken on trust:
 
 | view (at 80 columns) | before                | after               |
 | -------------------- | --------------------- | ------------------- |
-| `reap`               | 421 lines, widest 364 | 80 lines, widest 80 |
+| `reap`               | 421 lines, widest 364 | 83 lines, widest 80 |
 | `reap route`         | 20 lines, widest 109  | 24 lines, widest 80 |
 | `reap by-project`    | 16 lines, widest 60   | 11 lines, widest 80 |
 | `reap gap`           | 11 lines, widest 78   | 12 lines, widest 80 |
@@ -63,7 +63,7 @@ whatever else shared the line. The headline box was sized from its own text. In
 the fixture that puts **the widest line at 364 columns, in a 421-line report**,
 and on an 80-column terminal every one of those long rows wraps — because when a
 terminal wraps a table row the remainder restarts at column zero and the columns
-stop lining up. The same report is 80 lines wide by 80 lines long after the
+stop lining up. The same report is 80 columns wide by 83 lines long after the
 change, and the margin grows with the stack: the longer the names, the further
 past the edge everything after them used to sit. That is the failure the brief calls unreadable
 fragments, and it was the report's normal condition over SSH.

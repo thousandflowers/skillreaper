@@ -60,6 +60,16 @@ func refuseKept(opts options, row report.Row, stderr io.Writer) bool {
 	return true
 }
 
+// pasteTail ends a printed command: the item's name as one shell word, and the
+// folder when it was named. A name that starts with a dash goes after "--",
+// with the folder's flags before it, or it is read as a flag.
+func pasteTail(opts options, name string) string {
+	if strings.HasPrefix(name, "-") {
+		return sameFolder(opts) + " -- " + scan.ShellArg(name)
+	}
+	return " " + scan.ShellArg(name) + sameFolder(opts)
+}
+
 // sameFolder is what a command printed to be pasted needs in order to act on
 // the folder this run acted on: nothing in the usual one, the folder when
 // --claude-dir named it. Ids start at 001 in every folder, so without it a
@@ -503,7 +513,7 @@ func pruneNameMiss(r *report.Report, name string, muting bool) string {
 			continue
 		}
 		if muting && row.Category == scan.CatMCP {
-			return fmt.Sprintf("error: %s is an MCP server, and mute works on skills and agents: reap prune %s takes it out, reversibly", row.Name, scan.ShellArg(row.Name))
+			return fmt.Sprintf("error: %s is an MCP server, and mute works on skills and agents: reap prune%s takes it out, reversibly", row.Name, pasteTail(options{}, row.Name))
 		}
 		if report.IsPluginSource(row.Source) {
 			return fmt.Sprintf("error: %s is inside a plugin and can only be disabled via /plugin in Claude Code", row.Name)
@@ -532,7 +542,15 @@ func cmdRestore(opts options, args []string, stdin io.Reader, stdout, stderr io.
 			fmt.Fprintf(stderr, "error: %s\n", shown(err.Error()))
 			return 1
 		}
-		fmt.Fprintf(stdout, "restored %s\n", args[0])
+		said := id // what was brought back, not what was typed: a number can be a name
+		if entries, err := prune.LoadManifest(opts.claudeDir); err == nil {
+			for _, e := range entries {
+				if e.ID == id {
+					said += " (" + shown(e.Name) + ")"
+				}
+			}
+		}
+		fmt.Fprintf(stdout, "restored %s\n", said)
 		return 0
 	}
 	count, err := showPruned(opts.claudeDir, stdout)
@@ -583,17 +601,22 @@ func restoreID(claudeDir, arg string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	id := arg
-	if n, err := strconv.Atoi(arg); err == nil && n >= 0 {
-		id = fmt.Sprintf("%03d", n) // an id typed without its zeros is that id
-	}
 	var matches []prune.Entry
 	for _, e := range entries {
-		if e.ID == arg || e.ID == id {
-			return e.ID, nil
+		if e.ID == arg {
+			return arg, nil
 		}
 		if !e.Restored && !prune.NeverMoved(e) && (e.Name == arg || strings.HasSuffix(e.Name, ":"+arg)) {
 			matches = append(matches, e)
+		}
+	}
+	// An id typed without its zeros is that id, when no item in quarantine is
+	// named so and the entry is still there to bring back.
+	if n, err := strconv.Atoi(arg); err == nil && n >= 0 && len(matches) == 0 {
+		for _, e := range entries {
+			if e.ID == fmt.Sprintf("%03d", n) && !e.Restored {
+				return e.ID, nil
+			}
 		}
 	}
 	switch len(matches) {

@@ -144,6 +144,8 @@ renders-check:
 	for f in docs/renders/*-after-*.txt; do \
 		diff -u "$$f" "$$tmp/$$(basename "$$f")" || status=1; \
 	done; \
+	grep ' after ' docs/renders/summary.txt > "$$tmp/summary.committed"; \
+	grep ' after ' "$$tmp/summary.txt" | diff -u "$$tmp/summary.committed" - || status=1; \
 	if [ "$$status" -eq 0 ]; then \
 		echo "docs/renders: the after captures match the working tree binary"; \
 	else \

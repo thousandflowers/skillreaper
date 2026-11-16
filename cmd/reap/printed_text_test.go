@@ -216,3 +216,121 @@ func TestMutingAServerSaysWhatMuteIsFor(t *testing.T) {
 		t.Errorf("mute srv: %d %s", code, out)
 	}
 }
+
+// --claude-json names the file to read and to edit, with or without
+// --claude-dir. Given alone it was dropped without a word: the report read the
+// usual file, and `reap prune <server>` edited that one.
+func TestClaudeJSONGivenAloneIsTheFileReadAndEdited(t *testing.T) {
+	home := deleteHome(t)
+	usual := filepath.Join(home, ".claude.json")
+	before, err := os.ReadFile(usual)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(home, "other.json")
+	if err := os.WriteFile(other, []byte(`{"mcpServers":{"onlyhere":{"command":"x"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := reapRun("--claude-json", other, "prune", "onlyhere", "--yes"); code != 0 {
+		t.Errorf("the server in the file that was named: %d %s", code, out)
+	}
+	if after, _ := os.ReadFile(other); strings.Contains(string(after), "onlyhere") {
+		t.Errorf("the named file still holds the server: %s", after)
+	}
+	if code, out := reapRun("--claude-json", other, "prune", "srv", "--yes"); code == 0 {
+		t.Errorf("a server of the usual file was pruned through another file's name: %s", out)
+	}
+	if after, _ := os.ReadFile(usual); string(after) != string(before) {
+		t.Errorf("the usual file was edited:\n%s", after)
+	}
+}
+
+// One name, one file, two scopes: a server for every project and one for a
+// single project. By name they are two items, and which one is not reap's to
+// guess: it took the first, for good with delete, and said nothing of the other.
+func TestAServerDefinedInTwoScopesIsNotGuessedAt(t *testing.T) {
+	home := deleteHome(t)
+	config := filepath.Join(home, ".claude.json")
+	twice := `{"mcpServers":{"twosrv":{"command":"x"}},"projects":{"/p/a":{"mcpServers":{"twosrv":{"command":"z"}}}}}`
+	if err := os.WriteFile(config, []byte(twice), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, verb := range []string{"delete", "prune"} {
+		code, out := reapRun(verb, "twosrv", "--yes")
+		if code == 0 || !strings.Contains(out, "2 times") || !strings.Contains(out, "/p/a") {
+			t.Errorf("%s twosrv: %d %s", verb, code, out)
+		}
+	}
+	if after, _ := os.ReadFile(config); string(after) != twice {
+		t.Errorf("the file changed:\n%s", after)
+	}
+}
+
+// The undo of install-hook, and delete's word about a copy in quarantine, name
+// the folder when it was named, as the other printed commands do.
+func TestHookUndoNamesTheFolderWhenItWasNamed(t *testing.T) {
+	home := deleteHome(t)
+	other := filepath.Join(home, "elsewhere", ".claude")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, out := reapRun("--claude-dir", other, "install-hook")
+	if code != 0 || !strings.Contains(out, "Undo: reap uninstall-hook --claude-dir "+other+"\n") {
+		t.Errorf("install-hook: %d %s", code, out)
+	}
+}
+
+// An id typed without its zeros is that id only when no item is named so, and
+// never an entry already restored. `reap restore 1` with a skill named "1" in
+// quarantine answered "entry 001 already restored".
+func TestRestoreByNumberPrefersTheItemNamedSo(t *testing.T) {
+	home := deleteHome(t)
+	putSkill(t, home, "1")
+	for _, step := range [][]string{{"prune", "mine", "--yes"}, {"restore", "001"}, {"prune", "skill:1", "--yes"}} {
+		if code, out := reapRun(step...); code != 0 {
+			t.Fatalf("%v: %d %s", step, code, out)
+		}
+	}
+	code, out := reapRun("restore", "1")
+	if code != 0 || !strings.Contains(out, "restored 002 (1)") {
+		t.Errorf("restore 1: %d %s", code, out)
+	}
+	if !lexist(filepath.Join(home, ".claude", "skills", "1", "SKILL.md")) {
+		t.Error("the skill named 1 is not back")
+	}
+}
+
+// A name that starts with a dash goes after "--" in a printed command, the
+// folder's flags before it: pasted as it was, `reap unmute -dash` was read as a flag.
+func TestPrintedCommandsForANameThatStartsWithADash(t *testing.T) {
+	home := deleteHome(t)
+	putSkill(t, home, "-dash")
+	code, out := reapRun("mute", "--yes", "--", "-dash")
+	if code != 0 || !strings.Contains(out, "Undo: reap unmute -- -dash\n") {
+		t.Fatalf("mute: %d %s", code, out)
+	}
+	if code, out := reapRun("unmute", "--", "-dash"); code != 0 {
+		t.Errorf("the command it printed: %d %s", code, out)
+	}
+	dir := filepath.Join(home, ".claude")
+	if code, out := reapRun("--claude-dir", dir, "mute", "--yes", "--", "-dash"); code != 0 ||
+		!strings.Contains(out, "Undo: reap unmute --claude-dir "+dir+" -- -dash\n") {
+		t.Errorf("mute with the folder named: %d %s", code, out)
+	}
+}
+
+// Run under its other name, every command reap prints carries that name: the
+// weekly nudge said "Run `reap`", a command an npm install does not have.
+func TestHintsUnderTheOtherNameNeverSayReap(t *testing.T) {
+	rewrite := hintRewriter("skillreaper", nil)
+	for said, want := range map[string]string{
+		"skillreaper: 3 unused items to prune, more than at the last check. Run `reap` to review.\n": "skillreaper: 3 unused items to prune, more than at the last check. Run `skillreaper` to review.\n",
+		"  3 more · ~334 tok/session · full list: reap --md\n":                                       "  3 more · ~334 tok/session · full list: skillreaper --md\n",
+		"error: no item named x; run reap to list what is there\n":                                   "error: no item named x; run skillreaper to list what is there\n",
+		"reaped skill x (id 001)\n":                                                                  "reaped skill x (id 001)\n",
+	} {
+		if got := string(rewrite([]byte(said))); got != want {
+			t.Errorf("%q became %q, want %q", said, got, want)
+		}
+	}
+}

@@ -64,7 +64,9 @@ header's does, so that the words beside it stay whole; a stray `ESC [`
 (Alt+[) ends at the next Esc or Enter, where it swallowed the arrow after
 it and let its last letter through as a key; a name made of accents alone
 is shown as `(no name)`; a choice that could not be carried out stays chosen,
-so that the same key applies it again once its cause is put right; a name cut in its
+so that the same key applies it again once its cause is put right; an apply
+started from the screen after the last row shows what came of it, where it
+showed nothing; a name cut in its
 middle no longer leaves an accent on the `…`; where the locale cannot draw a
 wide character, the columns after it stay in line.
 

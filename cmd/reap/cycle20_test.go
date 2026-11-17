@@ -67,7 +67,8 @@ func TestMenuDeleteLeavesAnItemThatChangedSinceItWasRead(t *testing.T) {
 
 	out := applier.Apply([]menu.Pick{{Row: row, Verb: menu.Delete}})
 
-	if out[0].Err == nil || !strings.Contains(out[0].Err.Error(), "changed since reap read it") {
+	// The menu's words: no name (the result line gives it), and what to do here.
+	if out[0].Err == nil || !strings.Contains(out[0].Err.Error(), "changed since the menu read it") || strings.Contains(out[0].Err.Error(), "mine") {
 		t.Errorf("delete of a changed item: %v", out[0].Err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "skills", "mine", "SKILL.md")); err != nil {
@@ -181,5 +182,22 @@ func TestPriceNaNIsCalledNotANumber(t *testing.T) {
 	run([]string{"--price", "NaN"}, strings.NewReader(""), &out, &errOut)
 	if said := errOut.String(); !strings.Contains(said, "--price must be a number") || strings.Contains(said, "at least 0") {
 		t.Errorf("--price NaN:\n%s", said)
+	}
+}
+
+// The menu's own mute rewrites the file: a delete of the row beside it that
+// shares that file is not "changed by someone else".
+func TestMenuDeleteAfterItsOwnMuteOfTheSameFile(t *testing.T) {
+	home := deleteHome(t)
+	dir := filepath.Join(home, ".claude")
+	rows := reportRows(t)
+	row := menuRow(t, rows, "skill", "mine")
+	applier := &menuApplier{dir: dir, seen: stampsOf(rows)}
+
+	if out := applier.Apply([]menu.Pick{{Row: row, Verb: menu.Mute}}); out[0].Err != nil {
+		t.Fatalf("mute: %v", out[0].Err)
+	}
+	if out := applier.Apply([]menu.Pick{{Row: row, Verb: menu.Delete}}); out[0].Err != nil {
+		t.Errorf("delete after the menu's own mute: %v", out[0].Err)
 	}
 }

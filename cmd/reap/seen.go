@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/thousandflowers/skillreaper/internal/prune"
@@ -39,22 +38,30 @@ func stampsOf(rows []report.Row) stamps {
 	return seen
 }
 
-// changed is an error when the item is another one, or was written, since it
-// was read: its file, or the folder a delete would take. Only an item that is
-// gone altogether is not: the delete says that itself.
-func (s stamps) changed(row report.Row) error {
+// changed says whether the item is another one, or was written, since it was
+// read: its file, or the folder a delete would take. An item that is gone
+// altogether is not: the delete says that itself.
+func (s stamps) changed(row report.Row) bool {
 	was, known := s[row.Path]
 	if !known {
-		return nil
+		return false
 	}
 	target, err := os.Lstat(prune.Target(row.Item))
 	if err != nil {
-		return nil // nothing there to delete
+		return false // nothing there to delete
 	}
 	now, err := os.Lstat(row.Path)
 	same := err == nil && os.SameFile(was.file, now) && was.file.ModTime().Equal(now.ModTime()) && was.file.Size() == now.Size()
-	if same && (was.target == nil || os.SameFile(was.target, target)) {
-		return nil
+	return !same || (was.target != nil && !os.SameFile(was.target, target))
+}
+
+// refresh reads an item again after reap itself rewrote it (a mute, an
+// unmute): that change is not somebody else's.
+func (s stamps) refresh(row report.Row) {
+	if _, known := s[row.Path]; !known {
+		return
 	}
-	return fmt.Errorf("%s changed since reap read it, and a delete cannot be undone: nothing was deleted. Look at it again, then delete it", row.Name)
+	for path, st := range stampsOf([]report.Row{row}) {
+		s[path] = st
+	}
 }

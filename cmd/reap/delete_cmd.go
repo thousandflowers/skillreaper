@@ -70,8 +70,8 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		fmt.Fprintf(stderr, "error: %s was %s\n", row.Name, keptMeanwhile)
 		return 1
 	}
-	if err := seen.changed(row); err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
+	if seen.changed(row) {
+		fmt.Fprintf(stderr, "error: %s changed since reap read it, and a delete cannot be undone: nothing was deleted. Look at it again, then delete it\n", row.Name)
 		return 1
 	}
 	if row.Category == scan.CatMCP {

@@ -781,3 +781,16 @@ func TestAFailedChoiceStaysChosen(t *testing.T) {
 	mustEqual(t, "applies", len(x.a.calls), 1)
 	mustContain(t, strings.Join(x.final(), "\n"), "apply 1 change")
 }
+
+// An apply started from the screen after the last row says what came of it, as
+// the list and the card do: it said nothing, and a refusal went unseen.
+func TestAnApplyFromTheLastScreenShowsItsResult(t *testing.T) {
+	x := open(t, flowData())
+	x.a.fail = map[string]error{"srv": errors.New("permission denied")}
+	x.m.now = clockAt(0, 0, time.Second)
+
+	keys := append([]term.Key{space}, on(goneCard, down, applyKey, 'y', 'y')...) // choose, walk past the last row, apply there
+	x.press(keys...).run()
+
+	mustShow(t, x.frame("That was the last list.", "not done"), "srv: permission denied")
+}

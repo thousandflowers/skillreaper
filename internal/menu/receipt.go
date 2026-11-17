@@ -66,6 +66,7 @@ func (m *Menu) leftOfApplyLabel(wd, count, hidden int) int {
 // sectionEnd stands between two lists: what you just did, what comes next. Full
 // screen, one key. It returns the list to go on with, or nil to stay.
 func (m *Menu) sectionEnd(name string, items []*Row, nextName string, following []*Row, p *Plan, unitFmt func(int, float64) string, goingUp bool, onApply func() string) []*Row {
+	notice := ""
 	advance := term.KeyDown
 	if goingUp {
 		advance = term.KeyUp
@@ -111,6 +112,9 @@ func (m *Menu) sectionEnd(name string, items []*Row, nextName string, following 
 			m.put(y+6, 3, edge, bold)
 			m.put(h-2, 3, "esc back, then "+term.ApplyKeyName(m.s)+" to apply", dim)
 		}
+		if notice != "" { // what came of an apply started here, as the list and the card say it
+			m.put(h-3, 3, cut(notice, wd-6), bold)
+		}
 		m.drawApplyLabel(h, wd, p.size(), 0)
 		m.s.Refresh()
 		k := m.s.ReadKey(-1)
@@ -120,7 +124,7 @@ func (m *Menu) sectionEnd(name string, items []*Row, nextName string, following 
 		case k == term.KeyEOF:
 			return nil
 		case onApply != nil && term.IsApply(m.s, k, p.size() > 0):
-			onApply()
+			notice = onApply()
 			continue
 		case len(following) > 0 && (k == advance || k == term.KeyEnter):
 			return following

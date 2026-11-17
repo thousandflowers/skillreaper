@@ -226,8 +226,10 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 		}
 		return ignoreGone(err)
 	case menu.Delete:
-		if err := a.seen.changed(row); err != nil {
-			return err
+		if a.seen.changed(row) {
+			// No name: the result line gives it. Reopening is the way to see it
+			// as it is now; the menu shows what it read at launch.
+			return errors.New("changed since the menu read it, and a delete cannot be undone: reopen the menu to delete it")
 		}
 		if row.Category == scan.CatMCP {
 			return ignoreGone(prune.DeleteMCP(a.dir, row.Path, serverScope(row), row.DiskName()))
@@ -237,6 +239,7 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 		if err := mute.Mute(a.dir, row.RootDir, row.Name, row.Path); err != nil && !errors.Is(err, mute.ErrAlreadyMuted) && !goneSinceScan(err) {
 			return err
 		}
+		a.seen.refresh(row) // the menu's own rewrite of the file is not a change by someone else
 		return nil
 	case menu.Unmute:
 		// The row's own file first: a name can be muted in several tools at once.

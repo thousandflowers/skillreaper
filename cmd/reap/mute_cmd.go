@@ -21,6 +21,9 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
+	if scanFailed(r, stderr) {
+		return 1
+	}
 	named := len(args) == 1
 	if !keepListReadable(opts, stderr) {
 		return 1

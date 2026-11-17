@@ -255,8 +255,9 @@ func blockScalar(lines []string, style, chomp byte) string {
 	return out.String()
 }
 
-// frontmatterList reads a top-level list from the frontmatter, written inline
-// (`key: a, b` or `key: [a, b]`) or one item to a line under the key.
+// frontmatterList reads a top-level list from the frontmatter, in the ways
+// YAML writes one: `key: a, b`, `key: [a, b]` (over several lines too), or one
+// item to a line under the key, with blank lines and comments among them.
 func frontmatterList(b []byte, key string) []string {
 	sc := newLineScanner(trimBOM(b))
 	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
@@ -264,30 +265,66 @@ func frontmatterList(b []byte, key string) []string {
 	}
 	var out []string
 	add := func(s string) {
-		if s = strings.Trim(strings.TrimSpace(s), `"'`); s != "" {
-			out = append(out, s)
-		}
-	}
-	under := false // on the lines below the key, reading its items
-	for sc.Scan() {
-		line := strings.TrimRight(sc.Text(), " \t\r")
-		item, isItem := strings.CutPrefix(strings.TrimSpace(line), "-")
-		switch {
-		case strings.TrimSpace(line) == "---":
-			return out
-		case under && isItem:
-			add(item)
-		case line == strings.TrimLeft(line, " \t"): // a top-level line
-			under = false
-			if v, ok := yamlValue(line, key); ok {
-				under = v == ""
-				for _, part := range strings.Split(strings.Trim(v, "[]"), ",") {
-					add(part)
-				}
+		for _, part := range strings.Split(strings.Trim(strings.TrimSpace(s), "[]"), ",") {
+			if part = strings.Trim(strings.TrimSpace(part), `"'`); part != "" {
+				out = append(out, part)
 			}
 		}
 	}
+	under, open := false, false // below the key reading its items; inside brackets not closed yet
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.TrimSpace(line) == "---" {
+			return out
+		}
+		topLevel := line == strings.TrimLeft(line, " \t")
+		if at := strings.Index(line, " #"); at >= 0 {
+			line = line[:at] // a comment, to the end of the line
+		}
+		text := strings.TrimSpace(line)
+		item, isItem := strings.CutPrefix(text, "-")
+		switch {
+		case text == "" || strings.HasPrefix(text, "#"):
+			// a blank line or a comment of its own: the list goes on
+		case open:
+			add(text)
+			open = !strings.Contains(text, "]")
+		case under && isItem:
+			add(item)
+		case topLevel:
+			under = false
+			if value, ok := strings.CutPrefix(text, key+":"); ok {
+				value = strings.TrimSpace(value)
+				under = value == ""
+				open = strings.HasPrefix(value, "[") && !strings.Contains(value, "]")
+				add(value)
+			}
+		default:
+			under = false // an indented line that is no item: a mapping, not a list
+		}
+	}
 	return nil // a header that never closes is no frontmatter
+}
+
+// skillAgent is the agent a skill's frontmatter names under `agent:`.
+func skillAgent(b []byte) string {
+	v, _ := frontmatterValue(b, "agent")
+	return strings.TrimSpace(v)
+}
+
+// SkillAgents names, by platform, the agents some skill runs in.
+func SkillAgents(items []Item) map[string]map[string]bool {
+	agents := map[string]map[string]bool{}
+	for _, it := range items {
+		if it.RunsIn == "" {
+			continue
+		}
+		if agents[it.Platform] == nil {
+			agents[it.Platform] = map[string]bool{}
+		}
+		agents[it.Platform][strings.ToLower(it.RunsIn)] = true
+	}
+	return agents
 }
 
 // AgentLoaded names, by platform, the skills some agent preloads.

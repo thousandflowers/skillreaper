@@ -6,6 +6,10 @@
     "skillreaper": "bin/skillreaper.js",
     "reap": "bin/skillreaper.js"
   },
+  "files": [
+    "bin",
+    "lib"
+  ],
   "scripts": {
     "test": "node --test"
   },

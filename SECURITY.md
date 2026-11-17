@@ -11,7 +11,8 @@ start by hand:
   descriptions; with `--online` it also sends search words drawn from them
   to skills.sh (and, with `--mcp`, the MCP registry), reads what it found
   from GitHub and from the npm and PyPI registries to check it, and, once
-  you answer yes to `apply?`, installs it with `npx`. It says so on its
+  you answer yes to `apply?`, installs it with `npx`, `uvx` or
+  `claude mcp add`, the command shown before the question. It says so on its
   first line.
 - The npm package downloads the release binary the first time it runs,
   and checks it against the release's checksums.

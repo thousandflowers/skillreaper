@@ -48,7 +48,7 @@ func httpGet(url string, timeout time.Duration) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	client := &http.Client{Timeout: timeout}
+	client := &http.Client{Timeout: timeout, CheckRedirect: noDowngrade}
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -120,4 +120,18 @@ func (a *app) getJSON(url string, policy retryPolicy) (any, error) {
 		}
 		a.sleep(wait)
 	}
+}
+
+var errTooManyRedirects = errors.New("stopped after 10 redirects")
+
+// noDowngrade follows a redirect unless it leaves https: what was asked for
+// over an encrypted connection is not read from a plain one.
+func noDowngrade(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errTooManyRedirects
+	}
+	if via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
+		return fmt.Errorf("a redirect from https to %s was not followed", req.URL.Scheme)
+	}
+	return nil
 }

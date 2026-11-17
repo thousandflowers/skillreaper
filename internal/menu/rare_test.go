@@ -719,3 +719,19 @@ func TestTwinsOfOneWeightHaveAFixedOrder(t *testing.T) {
 		mustEqual(t, "order", got, want)
 	}
 }
+
+// The screen for a platform with nothing left to review has q on it too, and q
+// asks before it drops choices made on the other platforms.
+func TestQuitFromAnEmptyPlatformAsksAboutPendingChoices(t *testing.T) {
+	rows := []report.Row{raw("here"), raw("there", platform("codex"), verdict(report.VerdictKeep))}
+	m, s, _ := newMenu(t, one(rows...))
+	l := &list{m: m, p: newPlan()}
+	l.p.set(m.rows[0], vPrune)
+	l.plat = 1
+
+	s.Feed('q', 'n')
+	stay := l.emptyScreen()
+
+	mustEqual(t, "stays after n", stay, true)
+	mustEqual(t, "choices kept", l.p.size(), 1)
+}

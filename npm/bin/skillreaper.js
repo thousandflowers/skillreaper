@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
-import { accessSync, constants as fsConstants, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { accessSync, constants as fsConstants, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { homedir, constants as osConstants } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +40,13 @@ async function download() {
   // into place whole at the end. Two first runs at once shared one archive
   // path: one removed it under the other, and a binary still being unpacked
   // already looked installed.
+  // A run killed while it downloaded left its folder behind: an hour on, nobody is using it.
+  for (const name of readdirSync(home)) {
+    const left = resolve(home, name);
+    if (name.startsWith('.download-') && Date.now() - statSync(left).mtimeMs > 3_600_000) {
+      rmSync(left, { recursive: true, force: true });
+    }
+  }
   const stage = mkdtempSync(resolve(home, '.download-'));
   const tmp = resolve(stage, tarball);
   console.error(`downloading skillreaper ${versionLabel} for ${os}/${archName}...`);
@@ -75,7 +82,13 @@ const child = spawn(bin, process.argv.slice(2), {
   stdio: 'inherit',
   env: { ...process.env, SKILLREAPER_WRAPPER: process.argv[1] },
 });
-process.on('SIGINT', () => {});
+// From a terminal the tool has had this Ctrl-C already, and a second one would
+// end it mid-item. With no terminal anywhere (a task runner, `kill -INT`) the
+// signal came to this process alone, and is passed on.
+const onTerminal = process.stdin.isTTY || process.stdout.isTTY || process.stderr.isTTY;
+process.on('SIGINT', () => {
+  if (!onTerminal) child.kill('SIGINT');
+});
 for (const signal of ['SIGTERM', 'SIGHUP']) {
   process.on(signal, () => child.kill(signal));
 }

@@ -49,6 +49,9 @@ type Info struct {
 	NestedSkills bool
 	// ReadsProjectCLAUDE means the tool loads the working directory's CLAUDE.md.
 	ReadsProjectCLAUDE bool
+	// ReadsClaudeSkills means the tool also loads the skills in ~/.claude/skills:
+	// a use of one there is this tool's, and Claude Code's sessions do not show it.
+	ReadsClaudeSkills bool
 	// TranscriptDBTried is where a sqlite history was looked for, for the warning.
 	TranscriptDBTried string
 
@@ -111,8 +114,10 @@ func All() []Info {
 			HasProse:       true,
 			HasTranscripts: true,
 			TranscriptType: "sqlite",
-			// Its Claude Code compatibility: CLAUDE.md, the same as ProseDirs below.
+			// Its Claude Code compatibility: CLAUDE.md, the same as ProseDirs below,
+			// and the skills folder.
 			ReadsProjectCLAUDE: true,
+			ReadsClaudeSkills:  true,
 		},
 		{
 			ID:             Cursor,

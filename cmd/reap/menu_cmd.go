@@ -299,7 +299,8 @@ func disablePlugin(id string) error {
 		if cut := strings.LastIndex(last, "\n"); cut >= 0 {
 			last = last[cut+1:]
 		}
-		return errors.New(errOutputHeader + firstNonEmpty(last, err.Error()))
+		// What the command printed is not ours: shown without what would spoof the line.
+		return errors.New(errOutputHeader + term.Visible(firstNonEmpty(last, err.Error())))
 	}
 	return nil
 }

@@ -112,7 +112,7 @@ func TestCycle15_a_mute_cut_off_for_time_is_undone_too(t *testing.T) {
 		want    string
 	}{
 		"it had muted, and is unmuted": {nil, "  ↺  rolled back: nothing changed"},
-		"it cannot be told":            {errors.New("not muted"), "  ?  second: its mute was cut short (reap unmute lists what is muted)"},
+		"it cannot be told":            {errors.New("not muted"), "  ?  second: its mute did not end cleanly and could not be undone (reap unmute lists what is muted)"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			tempHome(t)
@@ -134,7 +134,7 @@ func TestCycle15_a_mute_cut_off_for_time_is_undone_too(t *testing.T) {
 			if !containsCmd(*calls, undo...) {
 				t.Errorf("the mute that was cut off was not undone: %v", *calls)
 			}
-			if n := len(log); n < 2 || log[n-2] != "  ✗  reap mute second: no answer in 120 s" || log[n-1] != c.want {
+			if said := strings.Join(log, "\n"); !strings.Contains(said, "  ✗  reap mute second: no answer in 120 s\n  ↺  rolled back") || log[len(log)-1] != c.want {
 				t.Errorf("got %q", log)
 			}
 		})

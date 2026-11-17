@@ -372,6 +372,26 @@ really injected, with multi-line descriptions read in full.
 - INSTALL.md says to run `reap uninstall-hook` before uninstalling;
   SECURITY.md says what `--online` reaches and where a config is kept
   unmasked.
+- More things at work with no use of their own on record are held, each with
+  its reason: the agent `settings.json` runs the session as (`main-agent`),
+  the agent a skill names under `agent:` (`skill-agent`), a skill one of your
+  own SessionStart hooks reads (`hook-loaded`), and a skill in
+  `~/.claude/skills` that OpenCode used from there (REVIEW,
+  `used-elsewhere`). An agent's `skills:` list is read however YAML writes
+  it, and names a skill by its frontmatter name too.
+- A transcript that cannot be opened makes the evidence incomplete: nothing
+  is REAP or MUTE on it, as the README says.
+- A failed scan is said by `route`, `by-project`, `apm` and `mute` too;
+  `reap manifest ""` is refused; a prune that leaves an item alone because
+  it was kept meanwhile names it.
+- A server whose name ends in a character tool names drop no longer shows a
+  second, transcript-only row; a server's prompt counts with a note after
+  its name.
+- In the menu, `q` on the screen of a platform with nothing left asks before
+  it drops choices made on another platform.
+- The npm package passes on an interrupt sent to it alone, clears a download
+  folder a killed run left, names the URL that failed, and ships only what
+  it runs.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -381,6 +401,16 @@ really injected, with multi-line descriptions read in full.
 
 ### Behaviour changes on the command line
 
+- `reap prune <name>` prunes that one item. In 0.8 the name was ignored and
+  the whole plan was queued.
+- A muted item is no longer REAP: its verdict is `-` with the reason `muted`,
+  so the counts of the report and the rows of `--json` change for anyone who
+  had muted something. `--json` also gained `MutedCount`, `Platforms`,
+  `PriceBasis`, `PricePerToken`, `MonthlyBasisDays`, `PlatformSessions` and
+  `PlatformSessionsPerMonth`.
+- The session count and the measured tokens are lower than 0.8 printed for
+  the same folder: a session counts by when it happened, and a message is
+  measured once.
 - `echo y | reap prune` is refused, and a declined prompt exits 3.
 - `--dry-run` on `prune` and `mute` exits 2: they show their plan and ask
   already.
@@ -495,6 +525,12 @@ the same cache files and the same checks. What to know before running it:
 - The undo command printed after a swap carries no control character from a
   skill's path, and a mute that was killed is undone like one cut off for
   time.
+- With `--online`, the command that installs what was found is on screen
+  before `apply?`. For an MCP server the question came with its name alone,
+  and the package that would run at every launch was never shown.
+- With `--online`, only a few short words go out as a search, an npm package
+  is taken only at a whole version, and a page asked for over https is not
+  read from http.
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

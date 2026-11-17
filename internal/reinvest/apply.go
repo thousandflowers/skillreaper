@@ -445,9 +445,13 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 		if left := a.rollBack(c, muted); len(left) > 0 {
 			outcome = "  ↺  rolled back, but still changed: " + strings.Join(left, ", ")
 		} else if unsure {
-			outcome = "  ?  " + x.Name + ": its mute was cut short (reap unmute lists what is muted)"
+			outcome = "  ↺  rolled back, all but perhaps this mute"
 		}
-		return append(log, "  ✗  reap mute "+x.Name+": "+err.Error(), outcome), false
+		log = append(log, "  ✗  reap mute "+x.Name+": "+err.Error(), outcome)
+		if unsure {
+			log = append(log, "  ?  "+x.Name+": its mute did not end cleanly and could not be undone (reap unmute lists what is muted)")
+		}
+		return log, false
 	}
 	if c.Installed {
 		if err := a.forgetServer(c); err != nil {

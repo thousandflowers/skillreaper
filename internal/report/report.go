@@ -16,6 +16,7 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/usage"
+	"slices"
 )
 
 // Opts tunes report generation.
@@ -43,6 +44,9 @@ type Opts struct {
 	// evidence of its own platform: a use in one tool says nothing about the copy
 	// installed in another. Nil judges everything against the merged stats.
 	PerPlatform map[string]*usage.Stats
+	// SkillFolderReaders names, for a platform, the other tools that also load
+	// its skills folder: a use there is a use of the same file.
+	SkillFolderReaders map[string][]string
 	// BlindReason says, per evidence-blind platform, why it has no evidence.
 	BlindReason map[string]string
 	// RetentionDays is Claude Code's transcript retention, 0 when unknown.
@@ -199,7 +203,7 @@ type Report struct {
 // Build joins inventory items with usage stats and computes verdicts
 // and totals.
 func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) *Report {
-	agentLoaded := scan.AgentLoaded(items)
+	agentLoaded, skillAgents := scan.AgentLoaded(items), scan.SkillAgents(items)
 	r := &Report{
 		GeneratedAt:     clock.Now(),
 		Platforms:       opts.PlatformNames,
@@ -306,13 +310,23 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				row.Verdict = VerdictKeep
 				row.Reason = ReasonHookLoaded
 			}
-			// An agent's `skills:` list names it by its whole name or, for a
-			// plugin's skill, by what stands after the plugin's.
-			leaf := it.Name[strings.LastIndexByte(it.Name, ':')+1:]
-			byAgent := agentLoaded[it.Platform][strings.ToLower(it.Name)] || agentLoaded[it.Platform][strings.ToLower(leaf)]
-			if it.Category == scan.CatSkill && byAgent && (row.Verdict == VerdictReap || row.Verdict == VerdictMute) {
-				row.Verdict = VerdictKeep
-				row.Reason = ReasonAgentLoaded
+			// At work with no use of its own on record: a skill an agent names
+			// under `skills:`, the agent a skill runs in, the agent the session
+			// itself runs as. Named by any name the item goes by.
+			condemned := row.Verdict == VerdictReap || row.Verdict == VerdictMute
+			namedIn := func(names map[string]bool) bool {
+				return slices.ContainsFunc(evidenceKeys(it), func(key string) bool { return names[key] })
+			}
+			switch {
+			case !condemned:
+			case it.Category == scan.CatSkill && namedIn(agentLoaded[it.Platform]):
+				row.Verdict, row.Reason = VerdictKeep, ReasonAgentLoaded
+			case it.Category == scan.CatAgent && it.MainAgent:
+				row.Verdict, row.Reason = VerdictKeep, ReasonMainAgent
+			case it.Category == scan.CatAgent && namedIn(skillAgents[it.Platform]):
+				row.Verdict, row.Reason = VerdictKeep, ReasonSkillAgent
+			case it.Category == scan.CatSkill && !IsPluginSource(it.Source) && usedByAReader(opts, evidenceFor, it):
+				row.Verdict, row.Reason = VerdictReview, ReasonUsedElsewhere
 			}
 			// Muting removed the description that makes a skill fire, so its
 			// zero uses are the mute's doing and say nothing about the skill.
@@ -450,9 +464,9 @@ func synthesizeTranscriptOnlyMCP(items []scan.Item, st *usage.Stats) []scan.Item
 			known[key] = true
 			// A server named a__b fires as mcp__a__b__tool, which the parser first
 			// reads as a server "a". That is this row's use, not another server.
-			if first, _, ok := strings.Cut(key, usage.ToolSepDefault); ok {
-				known[first] = true
-			}
+			// The same for one whose name ends in "_": under_ fires as
+			// mcp__under___tool, read as "under".
+			known[usage.CreditedServer(key+usage.ToolSepDefault+"x")] = true
 		}
 	}
 
@@ -622,4 +636,16 @@ func (r *Report) SessionsOf(platformID string) int {
 		return r.Sessions
 	}
 	return r.PlatformSessions[platformID]
+}
+
+// usedByAReader says whether another tool that loads this item's folder used
+// it. OpenCode reads ~/.claude/skills: a skill there that only OpenCode calls
+// has no use in Claude Code's sessions, and is not dead.
+func usedByAReader(opts Opts, evidenceFor func(string) platformEvidence, it scan.Item) bool {
+	for _, reader := range opts.SkillFolderReaders[it.Platform] {
+		if uses, _ := lookupUses(evidenceFor(reader).canon, it); uses > 0 {
+			return true
+		}
+	}
+	return false
 }

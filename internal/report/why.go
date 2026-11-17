@@ -178,6 +178,12 @@ func summaryFor(row Row) string {
 		return "injected every session by its plugin's hook — in use without being invoked"
 	case ReasonAgentLoaded:
 		return "an agent names it under `skills:` and loads it when it starts — in use without being invoked"
+	case ReasonMainAgent:
+		return "settings.json runs the session itself as this agent — in use without being invoked"
+	case ReasonSkillAgent:
+		return "a skill names it under `agent:` and runs in it — in use whenever that skill is"
+	case ReasonUsedElsewhere:
+		return "another tool that loads this folder used it — Claude Code's sessions alone do not show it"
 	default:
 		return row.Reason
 	}
@@ -220,6 +226,8 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 			return fmt.Sprintf("wait — %d day(s) left in the %d-day grace period", left, in.GraceDays)
 		case ReasonNoEvidence:
 			return "judge it yourself: reap has no record of its use on this platform"
+		case ReasonUsedElsewhere:
+			return "used by another tool from this same folder, so reap will not condemn it. if you are sure, run: reap prune " + scan.ShellArg(CanonicalName(row))
 		case ReasonRare:
 			// More sessions change nothing here: it is held for a use on record.
 			return "used before this window, so reap will not condemn it. if you are sure, run: reap prune " + scan.ShellArg(CanonicalName(row))

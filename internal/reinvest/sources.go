@@ -152,7 +152,7 @@ func (a *app) searchPage(q string) any {
 func (a *app) searchSkills(queries []string, skipNames map[string]bool) []candidate {
 	found := map[string]candidate{}
 	var order []string
-	for _, q := range queries {
+	for _, q := range searchWords(queries) {
 		page, _ := a.searchPage(q).(*obj)
 		skills, _ := page.val("skills").([]any)
 		for rank, raw := range skills {
@@ -266,4 +266,31 @@ func (a *app) downloadSkill(item candidate) string {
 		return ""
 	}
 	return renderTree(tree)
+}
+
+// What may leave the machine as one search, and how many of them.
+const (
+	maxSearchWords = 3
+	maxSearchChars = 40
+	maxSearches    = 12
+)
+
+var searchWordsRE = regexp.MustCompile(`\A[A-Za-z0-9][A-Za-z0-9 .+#-]*\z`)
+
+// searchWords keeps the queries that are what the notice says goes out: a few
+// short words. They come from a model's answer, and a longer one could carry a
+// piece of a session into a URL.
+func searchWords(queries []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, q := range queries {
+		key := strings.ToLower(q)
+		short := len(q) <= maxSearchChars && len(strings.Fields(q)) <= maxSearchWords
+		if seen[key] || !short || !searchWordsRE.MatchString(q) || len(out) == maxSearches {
+			continue
+		}
+		seen[key] = true
+		out = append(out, q)
+	}
+	return out
 }

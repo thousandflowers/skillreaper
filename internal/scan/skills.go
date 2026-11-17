@@ -25,6 +25,13 @@ func ScanSkillsIn(dir, platformID string, nested bool) ([]Item, []Warning) {
 
 	root := filepath.Join(dir, "skills")
 	items, warns = appendSkillsFromDir(items, warns, root, "", "personal", time.Time{}, true, platformID)
+	// A SessionStart hook of the person's own can read a skill into every
+	// session, as a plugin's does.
+	if loaded := userHookLoadedSkills(dir); len(loaded) > 0 {
+		for i := range items {
+			items[i].HookLoaded = loaded[items[i].Name]
+		}
+	}
 	if nested {
 		items, warns = appendCategoryFolders(items, warns, root, platformID)
 	}
@@ -179,6 +186,7 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			InstalledAt:     datedOr(installedAt, readPath),
 			Removable:       removable && viaLink == "",
 			ToolSurface:     toolSurface(b, "allowed-tools"),
+			RunsIn:          skillAgent(b),
 			LinkTarget:      linkTarget,
 			ViaLink:         viaLink,
 			FolderLink:      rootTarget != "",

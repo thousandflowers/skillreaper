@@ -498,8 +498,10 @@ func (l *list) emptyScreen() bool {
 	m.put(h-2, 3, "f platform · g group by · q", dim)
 	m.s.Refresh()
 	switch m.s.ReadKey(-1) {
-	case 'q', term.KeyEOF:
+	case term.KeyEOF:
 		return false
+	case 'q':
+		return !l.mayQuit() // choices made on another platform are still pending
 	case 'f':
 		l.plat = (l.plat + 1) % (len(m.platforms) + 1)
 		l.resetView()

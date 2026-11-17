@@ -713,3 +713,34 @@ func TestHeadlineSplitsWhatPruneCanRemove(t *testing.T) {
 		t.Errorf("Split() = %q, want empty", got)
 	}
 }
+
+// OpenCode reads ~/.claude/skills too. A skill there that only OpenCode used
+// has no use in Claude Code's sessions, and is not dead.
+func TestBuildHoldsASkillAnotherToolUsedFromTheSameFolder(t *testing.T) {
+	quiet, busy := usage.NewStats(30), usage.NewStats(30)
+	quiet.Sessions, busy.Sessions = 60, 20
+	busy.Uses[scan.CatSkill]["shared-one"] = 1
+	merged := usage.NewStats(30)
+	merged.Sessions = 80
+	items := []scan.Item{
+		{Category: scan.CatSkill, Name: "shared-one", Platform: "claude-code", Source: "personal", DescChars: 370},
+		{Category: scan.CatSkill, Name: "nobody", Platform: "claude-code", Source: "personal", DescChars: 370},
+		{Category: scan.CatSkill, Name: "p:shared-one", Platform: "claude-code", Source: "plugin:p@m", DescChars: 370},
+	}
+
+	r := Build(items, merged, nil, Opts{
+		MinSessions: 10, Cutoff: time.Date(2026, 5, 11, 0, 0, 0, 0, time.UTC),
+		PerPlatform:        map[string]*usage.Stats{"claude-code": quiet, "opencode": busy},
+		SkillFolderReaders: map[string][]string{"claude-code": {"opencode"}},
+	})
+
+	got := map[string]string{}
+	for _, row := range r.Rows {
+		got[row.Name] = row.Verdict + "(" + row.Reason + ")"
+	}
+	for name, want := range map[string]string{"shared-one": "REVIEW(used-elsewhere)", "nobody": "REAP(unused)", "p:shared-one": "REAP(unused)"} {
+		if got[name] != want {
+			t.Errorf("%s: %s, want %s", name, got[name], want)
+		}
+	}
+}

@@ -168,6 +168,7 @@ jobs:
           # directory has no copy of its own, so pull the canonical one
           # in at publish time.
           cp README.md npm/README.md
+          cp LICENSE npm/LICENSE
           cd npm
           VERSION="${GITHUB_REF_NAME#v}"
           npm version "$VERSION" --no-git-tag-version --allow-same-version

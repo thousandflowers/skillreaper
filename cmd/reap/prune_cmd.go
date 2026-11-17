@@ -291,6 +291,9 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 		}
 		if nowKept(row) {
 			out.failed = append(out.failed, problemOf(row, keptMeanwhile))
+			if !machine {
+				fmt.Fprintf(stderr, "error: %s was %s\n", row.Name, keptMeanwhile)
+			}
 			continue
 		}
 		var e prune.Entry

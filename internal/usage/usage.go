@@ -28,7 +28,7 @@ import (
 // embedded file contents can be huge.
 const maxLineBytes = 10 * 1024 * 1024
 
-var commandNameRe = regexp.MustCompile(`<command-name>/?([^<\s]+)</command-name>`)
+var commandNameRe = regexp.MustCompile(`<command-name>/?([^<\s]+)(?: \([^<)]*\))?</command-name>`)
 
 // commandNames returns the commands a user entry ran. Claude Code writes a
 // command block at the very start of the entry; the same tags further into a
@@ -776,6 +776,8 @@ func parseFile(path, project string, st *Stats) string {
 	if err != nil {
 		st.MalformedLines++
 		st.UnreadableFiles++
+		// The use that would have kept an item may be in it: a zero proves nothing.
+		st.IncompleteEvidence = true
 		return ""
 	}
 	sessionID := ""

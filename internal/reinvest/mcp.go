@@ -24,6 +24,7 @@ const (
 // packageSpec is how one package type is run, pinned to the version the
 // registry lists, and where its own metadata lives.
 type packageSpec struct {
+	exact  *regexp.Regexp // what a pinned version looks like; nil when any version is one release
 	runner []string
 	pin    func(id, version string) string
 	meta   func(id, version string) string
@@ -31,6 +32,8 @@ type packageSpec struct {
 
 var packageSpecs = map[string]packageSpec{
 	"npm": {
+		// A whole version: "1" or "1.x" is a range, resolved again at every launch.
+		exact:  regexp.MustCompile(`\A[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]+)?\z`),
 		runner: []string{"npx", "-y"},
 		pin:    func(id, v string) string { return id + "@" + v },
 		meta:   func(id, v string) string { return "https://registry.npmjs.org/" + id + "/" + v },
@@ -81,7 +84,7 @@ func targetOf(server *obj) installTarget {
 		kind, _ := pkg.str("registryType")
 		id, okID := pkg.str("identifier")
 		version, okVersion := pkg.str("version")
-		if _, known := packageSpecs[kind]; known && okID && okVersion && packageIDRE.matches(id) && versionRE.MatchString(version) {
+		if _, known := packageSpecs[kind]; known && okID && okVersion && packageIDRE.matches(id) && versionRE.MatchString(version) && packageSpecs[kind].pinned(version) {
 			return installTarget{pkg: pkg}
 		}
 	}
@@ -247,7 +250,7 @@ func lastSegment(name string) string {
 func (a *app) registryServers(words []string) []*obj {
 	seen := map[string]bool{}
 	var servers []*obj
-	for _, w := range words {
+	for _, w := range searchWords(words) {
 		query := "search=" + url.QueryEscape(w) + "&limit=" + mcpSearchLimit + "&version=latest"
 		data, err := a.httpJSON(mcpRegistry+"?"+query, onceMore)
 		if err != nil {
@@ -300,4 +303,9 @@ func (a *app) searchRegistry(words []string) []candidate {
 			Server: server, Doc: docs[i]})
 	}
 	return out
+}
+
+// pinned says whether version names one release of this kind of package.
+func (s packageSpec) pinned(version string) bool {
+	return s.exact == nil || s.exact.MatchString(version)
 }

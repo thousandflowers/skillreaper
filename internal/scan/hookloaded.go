@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 // skillFileRe finds "skills/<name>/SKILL.md" in a script, whichever way it
@@ -78,4 +79,48 @@ func sessionStartCommands(installPath string) []string {
 		}
 	}
 	return commands
+}
+
+// hookWordRe finds what could be a path in a hook command.
+var hookWordRe = regexp.MustCompile(`[~$\w./{}-]+`)
+
+// userHookLoadedSkills names the skills the person's own SessionStart hooks
+// read: named in the command itself, or in a script the command names.
+func userHookLoadedSkills(dir string) map[string]bool {
+	loaded := map[string]bool{}
+	home, _ := os.UserHomeDir()
+	for _, base := range []string{"settings.json", "settings.local.json"} {
+		b, err := readCapped(filepath.Join(dir, base))
+		if err != nil {
+			continue
+		}
+		var s settingsHooks
+		if json.Unmarshal(b, &s) != nil {
+			continue
+		}
+		for _, g := range s.Hooks["SessionStart"] {
+			for _, h := range g.Hooks {
+				text := h.Command
+				for _, word := range hookWordRe.FindAllString(h.Command, -1) {
+					if script, err := readCapped(underHome(word, home)); err == nil {
+						text += "\n" + string(script)
+					}
+				}
+				for _, m := range skillFileRe.FindAllStringSubmatch(text, -1) {
+					loaded[m[1]] = true
+				}
+			}
+		}
+	}
+	return loaded
+}
+
+// underHome writes out the home folder a hook command names as ~ or $HOME.
+func underHome(word, home string) string {
+	for _, short := range []string{"~/", "$HOME/", "${HOME}/"} {
+		if rest, ok := strings.CutPrefix(word, short); ok {
+			return filepath.Join(home, rest)
+		}
+	}
+	return word
 }

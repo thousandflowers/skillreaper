@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,32 @@ func ScanAgents(dir, platformID string) ([]Item, []Warning) {
 			filepath.Join(p.InstallPath, "agents"),
 			p.Name+":", "plugin:"+p.FullName, p.InstalledAt, false, platformID)
 	}
+	if main := mainAgents(dir); len(main) > 0 {
+		for i := range items {
+			items[i].MainAgent = main[strings.ToLower(items[i].Name)] || items[i].FrontmatterName != "" && main[strings.ToLower(items[i].FrontmatterName)]
+		}
+	}
 	return items, warns
+}
+
+// mainAgents names the agents the settings run the session itself as
+// (`"agent": "name"`, what `claude --agent name` does for one run). Such an
+// agent is the session, and no transcript records it as a use.
+func mainAgents(dir string) map[string]bool {
+	main := map[string]bool{}
+	for _, base := range []string{"settings.json", "settings.local.json"} {
+		b, err := readCapped(filepath.Join(dir, base))
+		if err != nil {
+			continue
+		}
+		var s struct {
+			Agent string `json:"agent"`
+		}
+		if json.Unmarshal(b, &s) == nil && s.Agent != "" {
+			main[strings.ToLower(s.Agent)] = true
+		}
+	}
+	return main
 }
 
 func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source string, installedAt time.Time, removable bool, platformID string) ([]Item, []Warning) {

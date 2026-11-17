@@ -46,6 +46,15 @@ const (
 	// ReasonAgentLoaded holds a skill at KEEP because an agent names it under
 	// `skills:`: it is loaded into that agent whenever the agent starts.
 	ReasonAgentLoaded = "agent-loaded"
+	// ReasonMainAgent holds an agent at KEEP because settings.json runs the
+	// session itself as it.
+	ReasonMainAgent = "main-agent"
+	// ReasonSkillAgent holds an agent at KEEP because a skill names it under
+	// `agent:` and runs in it.
+	ReasonSkillAgent = "skill-agent"
+	// ReasonUsedElsewhere holds a skill at REVIEW because another tool that
+	// loads the same folder used it.
+	ReasonUsedElsewhere = "used-elsewhere"
 )
 
 // VerdictOpts configures the smart verdict logic.

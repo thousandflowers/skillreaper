@@ -50,6 +50,11 @@ type Item struct {
 	// `skills:`. Claude Code loads them into the agent when it starts, and no
 	// transcript records that as a use.
 	Preloads []string `json:",omitempty"`
+	// RunsIn is, for a skill, the agent its frontmatter names under `agent:`:
+	// the skill runs in that agent, and no transcript records the agent's use.
+	RunsIn string `json:",omitempty"`
+	// MainAgent is set on the agent settings.json runs the session itself as.
+	MainAgent bool `json:",omitempty"`
 	// ToolSurface is the permission breadth of a skill/agent: the count of
 	// tools it is restricted to via the "allowed-tools" (skill) or "tools"
 	// (agent) frontmatter field. ToolSurfaceAll means no restriction — the

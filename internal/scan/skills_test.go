@@ -334,3 +334,27 @@ func TestScanAgentsReadsTheSkillsAnAgentPreloads(t *testing.T) {
 		}
 	}
 }
+
+// The ways YAML writes a list, and what stands around its items.
+func TestFrontmatterListReadsEveryWayAListIsWritten(t *testing.T) {
+	for front, want := range map[string]string{
+		"skills:\n  - a\n\n  - b\n":            "a b", // a blank line inside the list
+		"skills: [a,\n  b]\n":                  "a b", // brackets over two lines
+		"skills: [\n  a,\n  b\n]\nname: x\n":   "a b",
+		"skills: # note\n  - a\n":              "a",   // a comment after the key
+		"skills:\n  - a # why\n  - \"b\"\n":    "a b", // a comment after an item
+		"skills: [a, b] # note\n":              "a b", // a comment after the brackets
+		"skills:\n- a\n- b\nname: x\n":         "a b", // items not indented
+		"skills:\n  # only a comment\n  - a\n": "a",
+		"skills: a, 'b'\n":                     "a b", // one line, no brackets
+		"name: x\nskills:\n  nested: map\n":    "",    // not a list
+		"other:\n  skills:\n    - a\n":         "",    // someone else's key
+	} {
+		if got := strings.Join(frontmatterList([]byte("---\n"+front+"---\nbody\n"), "skills"), " "); got != want {
+			t.Errorf("%q gives %q, want %q", front, got, want)
+		}
+	}
+	if got := frontmatterList([]byte("---\nskills:\n  - a\n"), "skills"); got != nil {
+		t.Errorf("a header that never closes gives %q", got)
+	}
+}

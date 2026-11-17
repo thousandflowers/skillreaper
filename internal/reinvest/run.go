@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/thousandflowers/skillreaper/internal/flagcheck"
+	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/tty"
 )
 
@@ -337,8 +338,7 @@ func (a *app) chooseAndApply(swaps []swap, dryRun bool) error {
 		return nil
 	}
 	for _, s := range chosen {
-		fmt.Fprintf(a.term, "  %s  in place of  %s\n", named(s.cand()), names(s.Mute))
-		a.showDoc(s.cand())
+		a.showSwap(s)
 	}
 	if !dryRun {
 		yes, err := a.confirmed()
@@ -418,4 +418,24 @@ func (a *app) confirmed() (bool, error) {
 		return false, err
 	}
 	return pyLower(pyStrip(answer)) == "y", nil
+}
+
+// showSwap puts a chosen swap on screen before the question: what comes in and
+// what goes, the skill's text, and the command that fetches and installs what
+// was found elsewhere. For an MCP server that command is all there is to see
+// of the code that will start with every session.
+func (a *app) showSwap(s swap) {
+	c := s.cand()
+	fmt.Fprintf(a.term, "  %s  in place of  %s\n", named(c), names(s.Mute))
+	a.showDoc(c)
+	if c.Installed || c.Created {
+		return
+	}
+	if argv, ok := installCommand(c); ok {
+		words := make([]string, len(argv))
+		for i, w := range argv {
+			words[i] = scan.ShellArg(printable(w))
+		}
+		fmt.Fprintf(a.term, "    will run: %s\n", strings.Join(words, " "))
+	}
 }

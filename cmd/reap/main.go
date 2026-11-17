@@ -996,10 +996,17 @@ func gather(opts options) (*report.Report, error) {
 			servers[it.Platform] = append(servers[it.Platform], scopedName(it.Platform, usage.MCPServerKey(it.Name)))
 		}
 	}
+	readers := map[string][]string{}
+	for _, p := range platform.All() {
+		if p.ReadsClaudeSkills {
+			readers[string(platform.ClaudeCode)] = append(readers[string(platform.ClaudeCode)], string(p.ID))
+		}
+	}
 	return report.Build(items, st, uniqueWarnings(warns), report.Opts{
-		PlatformNames: names,
-		PriceBasis:    priceBasis,
-		PrunedCopies:  prunedCopies(opts.claudeDir),
+		SkillFolderReaders: readers,
+		PlatformNames:      names,
+		PriceBasis:         priceBasis,
+		PrunedCopies:       prunedCopies(opts.claudeDir),
 		// The durable record, consulted so an item that fired before the
 		// retention sweep is not mistaken for one that never fired at all.
 		History: func(platformID, category, name string) (int, time.Time, bool) {
@@ -1753,6 +1760,9 @@ func cmdByProject(opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
+	if scanFailed(r, stderr) {
+		return 1
+	}
 	if opts.asJSON {
 		if err := report.RenderByProjectJSON(stdout, r); err != nil {
 			fmt.Fprintf(stderr, "error: %v\n", err)
@@ -1768,6 +1778,9 @@ func cmdRoute(opts options, stdout, stderr io.Writer) int {
 	r, err := gather(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if scanFailed(r, stderr) {
 		return 1
 	}
 	plan := report.BuildRoutePlan(r, opts.routeThreshold)
@@ -1796,6 +1809,9 @@ func cmdApm(opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
+	if scanFailed(r, stderr) {
+		return 1
+	}
 	cwd, _ := os.Getwd()
 	declared, lock, err := report.LoadAPMContext(opts.apmDiff, cwd)
 	if err != nil {
@@ -1818,7 +1834,7 @@ func cmdApm(opts options, stdout, stderr io.Writer) int {
 }
 
 func cmdManifest(opts options, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
+	if len(args) == 0 || strings.TrimSpace(args[0]) == "" { // an empty name is no item: it matched the first one
 		fmt.Fprintln(stderr, "usage: reap manifest <name>")
 		return 2
 	}

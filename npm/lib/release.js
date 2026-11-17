@@ -111,7 +111,7 @@ async function fetchOk(url, headerMs = FETCH_TIMEOUT_MS) {
   try {
     const resp = await fetch(url, { signal: controller.signal });
     if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText} (${url})`);
     }
     return { resp, controller };
   } finally {

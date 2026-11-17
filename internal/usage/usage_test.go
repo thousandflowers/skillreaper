@@ -786,3 +786,20 @@ func TestMeasuredCountsAMessageOnce(t *testing.T) {
 		t.Errorf("measured %+v, models %v; want msg_1 once, msg_2 once and the two with no id", st.Measured, st.ModelUse)
 	}
 }
+
+// A server's prompt can be written with a note after its name.
+func TestAServersPromptIsItsUseWithANoteAfterTheName(t *testing.T) {
+	dir := t.TempDir()
+	at := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		`{"type":"user","sessionId":"s","timestamp":"`+at+`","message":{"content":"<command-name>/mcp__promptsrv__review (MCP)</command-name>"}}`)
+
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if st.Uses[scan.CatMCP]["promptsrv"] != 1 {
+		t.Errorf("uses = %v", st.Uses[scan.CatMCP])
+	}
+}

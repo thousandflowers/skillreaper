@@ -16,6 +16,9 @@ import (
 // (for a skill, the folder the file is in).
 type stamp struct {
 	file, target os.FileInfo
+	// real is the file behind the path, through a link that is the file
+	// itself: two rows are one file when this is the same.
+	real os.FileInfo
 	// inside is every file of the folder a delete takes, with its size and
 	// date: the delete takes them all, whoever put them there and when.
 	inside string
@@ -68,7 +71,8 @@ func stampsOf(rows []report.Row) stamps {
 		takes := prune.Target(row.Item)
 		target, _ := os.Lstat(takes)
 		inside, _ := insideOf(takes)
-		seen[row.Path] = stamp{file: file, target: target, inside: inside, takes: takes}
+		real, _ := os.Stat(row.Path)
+		seen[row.Path] = stamp{file: file, real: real, target: target, inside: inside, takes: takes}
 	}
 	return seen
 }
@@ -108,7 +112,7 @@ func (s stamps) untouched(row report.Row) []string {
 	}
 	var paths []string
 	for path, st := range s {
-		if os.SameFile(st.file, was.file) && !s.changedAt(path) {
+		if os.SameFile(st.real, was.real) && !s.changedAt(path) {
 			paths = append(paths, path)
 		}
 	}
@@ -125,8 +129,11 @@ func (s stamps) refresh(untouched []string) {
 			delete(s, path) // gone with what reap did: nothing left to compare
 			continue
 		}
-		// The listing of the row's own folder too: the file reap rewrote is in it.
+		// What a delete takes too: the folder's listing holds the file reap
+		// rewrote, and an item that is one file is that file, written anew.
 		st.file = file
+		st.real, _ = os.Stat(path)
+		st.target, _ = os.Lstat(st.takes)
 		st.inside, _ = insideOf(st.takes)
 		s[path] = st
 	}

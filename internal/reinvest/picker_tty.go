@@ -219,6 +219,12 @@ func (a *app) pickLoop(scr *screen, swaps []swap, interrupts, resizes <-chan os.
 			if err := a.previewOutside(scr, swaps[cur].cand()); err != nil {
 				return nil, err
 			}
+			// Ctrl-C typed in the pager reached reinvest too (one foreground
+			// group): it was the pager's, and must not end the picker now.
+			select {
+			case <-interrupts:
+			default:
+			}
 			continue
 		}
 		var done bool

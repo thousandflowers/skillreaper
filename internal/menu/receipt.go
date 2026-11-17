@@ -452,26 +452,31 @@ func (v *receiptView) draw(question string) bool {
 	for n, line := range v.warnings {
 		m.put(y-shift-n, x, cut(line, pw), asBold(m.tint(tintAmber)))
 	}
-	summary := plural(len(v.picks), "item")
-	if v.tok > 0 {
-		summary += " · ~" + m.tokens(v.tok) + " tokens lighter every session"
-	}
+	summary, back := plural(len(v.picks), "item"), ""
 	switch {
 	case v.back == 1:
-		summary += " · 1 comes back heavier"
+		back = " · 1 comes back heavier"
 	case v.back > 1:
-		summary += " · " + itoa(v.back) + " come back heavier"
+		back = " · " + itoa(v.back) + " come back heavier"
 	}
+	if v.tok > 0 { // in fewer words where the window is narrow, before it is cut
+		lighter := " · ~" + m.tokens(v.tok)
+		summary += firstFitting(pw-cells(summary+back), lighter+" tokens lighter every session", lighter+" tok/session lighter", lighter+" tok lighter")
+	}
+	summary += back
 	m.put(y+1, x, cut(summary, pw), bold)
 	if v.tok > 0 {
 		// "To save": this is the question, nothing is saved before the answer.
-		above, beside, figure := "", "tokens to save every session", m.tokens(v.tok)
+		above, beside, brief, least, figure := "", "tokens to save every session", "to save a session", "a session", m.tokens(v.tok)
 		short := m.short(float64(v.tok))
 		if v.unit == unitMoney {
 			above, beside = m.bigMoneyWords("to save every month")
+			_, brief = m.bigMoneyWords(map[bool]string{true: "a month", false: "to save a month"}[m.subscriber])
+			least = "a month"
 			figure, short = m.money(v.priced), m.shortMoney(v.priced*m.price*m.cur.Rate)
 		}
 		figure = m.fitBig(figure, short, beside, pw)
+		beside = firstFitting(pw-2-bigWidth(figure), beside, brief, least)
 		m.put(y+2, x, above, dim)
 		end := m.big(y+3, x, figure, 0, y+4) // green: what you get back, not what you waste
 		m.put(y+4, end+2, beside, asBold(m.tint(tintGreen)))

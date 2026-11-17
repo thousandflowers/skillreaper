@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // maxImportDepth is how many @imports Claude Code follows from a memory file.
@@ -78,7 +79,7 @@ func readMemoryFile(path, home string, seen map[string]bool, depth int) []string
 		return nil
 	}
 	var lines []string
-	sc := newLineScanner(b)
+	sc := newLineScanner(trimBOM(b)) // or the mark hides what the first line begins with
 	for sc.Scan() {
 		line := sc.Text() // headings too: "#" opens one in Markdown, and the session loads it
 		lines = append(lines, line)
@@ -100,10 +101,10 @@ func resolveImport(ref, dir, home string) string {
 }
 
 // nameChar is what can extend a name: "plan" is not mentioned by "planner",
-// "code-plan" or "ecc:plan".
-func nameChar(c byte) bool {
-	return c == '-' || c == '_' || c == ':' ||
-		c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+// "code-plan" or "ecc:plan", nor "обзор" by "обзорный". A letter is one in
+// any alphabet.
+func nameChar(r rune) bool {
+	return r == '-' || r == '_' || r == ':' || unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r)
 }
 
 // endsWord reports whether a name ending at line[j] stops there. A colon closes
@@ -112,15 +113,33 @@ func endsWord(line string, j int) bool {
 	if j == len(line) {
 		return true
 	}
-	if line[j] == ':' {
-		return j+1 == len(line) || !nameChar(line[j+1])
+	r, size := utf8.DecodeRuneInString(line[j:])
+	if r == ':' {
+		next, _ := utf8.DecodeRuneInString(line[j+size:])
+		return j+size == len(line) || !nameChar(next)
 	}
-	return !nameChar(line[j])
+	return !nameChar(r)
 }
 
 // nameMarks are the pairs of marks a name is written between: code, emphasis
 // (bold, and a bold label "**name:**"), a link's text, quotes.
-var nameMarks = [][2]string{{"`", "`"}, {"*", "*"}, {"*", ":*"}, {"[", "]("}, {`"`, `"`}, {"'", "'"}}
+var nameMarks = [][2]string{
+	{"`", "`"}, {"<code>", "</code>"}, {"*", "*"}, {"*", ":*"}, {"[", "]("}, {"[", "]["},
+	{`"`, `"`}, {"'", "'"}, {"“", "”"}, {"‘", "’"}, {"«", "»"},
+}
+
+const (
+	// nearName is how far before a name a mark beside it can begin. The
+	// patterns that end at the name read that much, not the whole line: a
+	// long line that repeats the name took seconds.
+	nearName = 64
+	// longestHead is the longest start of a line that can be a list mark and
+	// the names listed before this one.
+	longestHead = 256
+)
+
+// listedBefore is the names listed before this one: "- review, deploy".
+const listedBefore = `(?:[^\s,]+,\s*)*`
 
 var (
 	// commandBefore is the slash of a command, or of a path into a skills
@@ -128,14 +147,14 @@ var (
 	commandBefore = regexp.MustCompile("(?i)(?:^|[\\s(\"'`*\\[,;:]|skills)/$")
 	// skillBefore and skillAfter are the word "skill" beside the name: English
 	// puts it after, Italian before. "review skills" is a sentence.
-	skillBefore = regexp.MustCompile(`(?i)\bskill:? $`)
+	skillBefore = regexp.MustCompile(`(?i)\bskills?(?: named| called)?:? ` + listedBefore + `$`)
 	skillAfter  = regexp.MustCompile(`(?i)^ skill\b`)
 	// itemBefore is what stands before the first word of a list item (ticked
 	// or numbered too), of a quoted line, or of a heading.
-	itemBefore = regexp.MustCompile(`^\s*(?:(?:>\s*)+|(?:>\s*)*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|#+\s+)$`)
-	// itemAfter is what follows a name that heads one: nothing, a colon, or a
-	// dash and its text.
-	itemAfter = regexp.MustCompile(`^(?::|\s*$|\s+[-–—]\s)`)
+	itemBefore = regexp.MustCompile(`^\s*(?:(?:>\s*)+|(?:>\s*)*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|#+\s+)` + listedBefore + `$`)
+	// itemAfter is what follows a name that heads one: nothing, a colon, a
+	// dash and its text, a comma and the next name, or a bracket.
+	itemAfter = regexp.MustCompile(`^(?::|\s*$|\s+[-–—]\s|\s*[,(])`)
 	// cellBefore and cellAfter are the bars of a table cell that is the name.
 	cellBefore = regexp.MustCompile(`\|\s*$`)
 	cellAfter  = regexp.MustCompile(`^\s*\|`)
@@ -151,9 +170,13 @@ func writtenAsName(line string, i, j int) bool {
 			return true
 		}
 	}
-	return commandBefore.MatchString(before) || skillBefore.MatchString(before) || skillAfter.MatchString(after) ||
-		itemBefore.MatchString(before) && itemAfter.MatchString(after) ||
-		cellBefore.MatchString(before) && cellAfter.MatchString(after)
+	near := before // what ends at the name is near it
+	if len(near) > nearName {
+		near = near[len(near)-nearName:]
+	}
+	return commandBefore.MatchString(near) || skillBefore.MatchString(near) || skillAfter.MatchString(after) ||
+		len(before) <= longestHead && itemBefore.MatchString(before) && itemAfter.MatchString(after) ||
+		cellBefore.MatchString(near) && cellAfter.MatchString(after)
 }
 
 // ClaudeMDReferences reports whether a skill is named in any of the given lines.
@@ -185,8 +208,9 @@ func ClaudeMDMentions(lines []string, name string) bool {
 	if name == "" {
 		return false
 	}
+	_, bare, isPlugin := strings.Cut(name, ":") // a plugin's skill goes by its short name too
 	for _, line := range lines {
-		if wordAt(line, name, nil) {
+		if wordAt(line, name, nil) || isPlugin && bare != "" && wordAt(line, bare, nil) {
 			return true
 		}
 	}
@@ -212,7 +236,8 @@ func wordAt(line, word string, check func(line string, i, j int) bool) bool {
 			return false
 		}
 		i, j := from+k, from+k+len(word)
-		alone := (i == 0 || !nameChar(line[i-1])) && endsWord(line, j)
+		last, _ := utf8.DecodeLastRuneInString(line[:i])
+		alone := (i == 0 || !nameChar(last)) && endsWord(line, j)
 		if alone && (check == nil || check(line, i, j)) {
 			return true
 		}

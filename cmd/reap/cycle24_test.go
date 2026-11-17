@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/hook"
+	"github.com/thousandflowers/skillreaper/internal/menu"
 	"github.com/thousandflowers/skillreaper/internal/report"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 )
@@ -86,7 +88,60 @@ func TestWhyReadsCLAUDEMDForSkillsAndSaysAPlainWord(t *testing.T) {
 		t.Errorf("why mcp:srv:\n%s%s", said, errOut.String())
 	}
 	run([]string{"why", "skill:mine"}, strings.NewReader(""), &skill, &errOut)
-	if said := skill.String(); !strings.Contains(said, "a plain word, which protects nothing") || !strings.Contains(said, "reap keep mine") {
+	if said := skill.String(); !strings.Contains(said, "a plain word, which protects nothing") || !strings.Contains(said, "reap keep skill:mine") {
 		t.Errorf("why skill:mine:\n%s%s", said, errOut.String())
+	}
+}
+
+// An agent is one file, and the menu's mute writes it anew: the delete that
+// followed was refused as changed by someone else. Through a link too.
+func TestMenuDeleteOfAnAgentAfterItsOwnMute(t *testing.T) {
+	home := deleteHome(t)
+	if err := os.Symlink("ag.md", filepath.Join(home, ".claude", "agents", "aglink.md")); err != nil {
+		t.Skip(err)
+	}
+	rows := reportRows(t)
+	applier := &menuApplier{dir: filepath.Join(home, ".claude"), seen: stampsOf(rows)}
+
+	if out := applier.Apply([]menu.Pick{{Row: rowOf(t, rows, "claude-code", "agent", "aglink"), Verb: menu.Mute}}); out[0].Err != nil {
+		t.Fatalf("mute through the link: %v", out[0].Err)
+	}
+	if out := applier.Apply([]menu.Pick{{Row: rowOf(t, rows, "claude-code", "agent", "ag"), Verb: menu.Delete}}); out[0].Err != nil {
+		t.Errorf("delete of the agent the menu muted: %v", out[0].Err)
+	}
+}
+
+// The undo printed for one mute undoes that mute. Two tools had a skill of one
+// name, both muted one after the other: "reap unmute dup" brought both back.
+func TestTheUndoOfAMuteNamesTheCopyThatWasMuted(t *testing.T) {
+	home := deleteHome(t)
+	var first, second, errOut bytes.Buffer
+	if code := run([]string{"mute", "claude-code:skill:dup", "--yes"}, strings.NewReader(""), &first, &errOut); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, first.String(), errOut.String())
+	}
+	if code := run([]string{"mute", "codex:skill:dup", "--yes"}, strings.NewReader(""), &second, &errOut); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, second.String(), errOut.String())
+	}
+	want := "Undo: reap unmute " + filepath.Join(home, ".codex", "skills", "dup", "SKILL.md")
+	if said := second.String(); !strings.Contains(said, want) || strings.Contains(said, "Undo: reap unmute dup\n") {
+		t.Errorf("the undo of the second mute:\n%s", said)
+	}
+	var one bytes.Buffer
+	run([]string{"mute", "copied", "--yes"}, strings.NewReader(""), &one, &errOut)
+	if said := one.String(); !strings.Contains(said, "Undo: reap unmute copied\n") {
+		t.Errorf("a name only one item has is undone by name:\n%s", said)
+	}
+}
+
+// A named mute that would save nothing is refused like the others: a skill
+// whose description is empty was rewritten for "~0 tok/session saved".
+func TestANamedMuteThatSavesNothingIsRefused(t *testing.T) {
+	home := deleteHome(t)
+	path := filepath.Join(home, ".claude/skills/emp/SKILL.md")
+	mustWriteFile(t, path, "---\nname: emp\ndescription: \"\"\n---\nbody\n")
+	var out, errOut bytes.Buffer
+	code := run([]string{"mute", "emp", "--yes"}, strings.NewReader(""), &out, &errOut)
+	if b, _ := os.ReadFile(path); code != 1 || !strings.Contains(errOut.String(), "save nothing") || !strings.Contains(string(b), "description") {
+		t.Errorf("exit %d:\n%s%s\nfile: %q", code, out.String(), errOut.String(), b)
 	}
 }

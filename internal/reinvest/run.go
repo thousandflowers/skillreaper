@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"sort"
 	"strings"
@@ -196,6 +197,10 @@ func (a *app) pipeline(opts options) (outcome, error) {
 	if err != nil {
 		return outcome{}, err
 	}
+	// Missing is no Claude Code here, and says nothing. Unreadable is not "0 sessions".
+	if _, err := os.ReadDir(a.projectsDir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		a.failed("your sessions could not be read: " + printable(err.Error()))
+	}
 	a.step(counted(len(sessions), "session")+" read", true)
 
 	a.step("grouping your work", false)
@@ -281,6 +286,7 @@ func (a *app) candidates(opts options, gaps []kind, sessions []session, state re
 		cands = append(cands, got.cands...)
 		refused = append(refused, got.refused...)
 	}
+	a.sayLookups()
 	a.step(counted(len(cands), "candidate"), true)
 	return cands, refused, nil
 }

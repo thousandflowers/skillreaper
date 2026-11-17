@@ -76,7 +76,10 @@ between lists is counted there; after the menu's own mute of a file, every
 row that is that file can still be deleted, unless somebody else changed it
 in the meantime: that change is still refused; the Linux console's F1 to F5
 type nothing, where they chose or marked a row; in plain text a title is cut
-at the window only; where the locale cannot draw the big font (`LC_ALL=C`), figures
+at the window only; where the locale cannot draw a currency's symbol the
+amount carries the currency's code, where a sum in yuan read `JPY`; the
+green line and the question's words are said in fewer words before they are
+cut by a narrow window; an agent the menu muted can be deleted; where the locale cannot draw the big font (`LC_ALL=C`), figures
 and titles are plain text, where they were blocks of `#`; a name cut in its
 middle no longer leaves an accent on the `…`; where the locale cannot draw a
 wide character, the columns after it stay in line.
@@ -567,10 +570,12 @@ really injected, with multi-line descriptions read in full.
   stderr. They exited 0 in silence, and a script took that for done.
 - A skill whose name is one plain word is protected by your CLAUDE.md only
   where the word is written as a name: `/review`, between backticks,
-  asterisks, quotes or as a link's text, beside the word "skill", heading
-  a list item or a heading of its own, or alone in a table cell. "always
-  review the diff" protected a skill named `review` that nothing used; so
-  did "docs/review" and "review skills". A word is one in any alphabet. A
+  asterisks, quotes or as a link's text, beside the word "skill", in a
+  list item that begins with names (`- review: …`, `- review, deploy`) or
+  a heading of its own, or alone in a table cell. "always review the
+  diff" protected a skill named `review` that nothing used; so did
+  "docs/review" and "review skills". A word is one in any alphabet, and a
+  longer word is not the name it begins with (`обзорный` for `обзор`). A
   name with a dash, a colon, an underscore or a digit counts wherever it
   stands, as before. `reap why` says when a name is in your CLAUDE.md as a
   plain word that protects nothing, and speaks of CLAUDE.md for skills
@@ -588,6 +593,19 @@ really injected, with multi-line descriptions read in full.
   that are removable and unmeasured; with sessions of two tools the
   dead-token figure says it is an average over both; `reap gap` counts
   the MUTE rows a bulk mute leaves alone beside the ones it takes.
+- A skill in `~/.claude/skills` is held at REVIEW when another tool that
+  loads that folder could not be read (OpenCode's history without the
+  `sqlite3` CLI): it may be in use there, unseen. It came out REAP and went
+  into the prune plan. The warning about that tool says so.
+- A CLAUDE.md saved with a byte order mark is read from its first line: a
+  list of skills that began there protected nothing. One long line that
+  repeats a skill's name no longer takes seconds to read.
+- "Monthly figures are extrapolated from N days of history" takes N from
+  the tools the figures come from, not from one with nothing unused in it.
+- The undo printed after a mute names the file when another tool has an
+  item of that name: `reap unmute <name>` brought back every copy. A named
+  mute of a description that is empty, or no longer than the name, is
+  refused: it rewrote the file to save nothing.
 - With two tools, `reap --agent` and `--md` say that the dead-token figure
   is an average over all their sessions, as the report does: the rows under
   it did not add up to it. `reap gap --agent` has no row for a kind of item
@@ -804,6 +822,12 @@ the same cache files and the same checks. What to know before running it:
   skill was checked against no installed one. An answer about none of the
   kinds of work asked about, `assign` as text, or `skills` that is no list,
   is no answer either; a rejection with no reason says `no reason given`.
+- With `--online`, a search or a download that could not be made is said,
+  with the reason: a 403 from skills.sh read as `0 candidates`. A projects
+  folder that cannot be read is said, where it read as `0 sessions`.
+- Ctrl-C typed in the pager no longer ends the picker when the pager
+  closes. A candidate kept with no reason given says so, where its line
+  was blank.
 - No file of reinvest's own is written through a link, and the picker cuts
   wide characters at the window. A mute that gave no answer in time is
   still named when a stop comes while it is undone.

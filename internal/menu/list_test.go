@@ -347,7 +347,7 @@ func TestListPlatformFilter(t *testing.T) {
 		x := open(t, mixed()).press('f', 'f', space, applyKey, 'y').run()
 		moved := open(t, mixed()).press('f', 'f', space, applyKey, 'y', 'f').run()
 
-		mustShow(t, x.final(), "nothing to review for codex", "✓ 1 gone", "f platform · g group by · q")
+		mustShow(t, x.final(), "nothing to review for codex", "✓ 1 gone", "f platform · g group by · q quit")
 		mustShow(t, moved.final(), "suggest to prune")
 	})
 }
@@ -358,7 +358,7 @@ func TestListWithNothingInIt(t *testing.T) {
 	t.Run("a stack with nothing to list says so", func(t *testing.T) {
 		x := open(t, empty).run()
 
-		mustShow(t, x.final(), "nothing to review", "f platform · g group by · q")
+		mustShow(t, x.final(), "nothing to review", "f platform · g group by · q quit")
 	})
 
 	t.Run("no key chooses anything there, and q leaves", func(t *testing.T) {

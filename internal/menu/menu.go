@@ -69,6 +69,7 @@ func New(s term.Screen, d Data, a Applier) *Menu {
 	}
 	m.subscriber = strings.Contains(m.billing, "subscription")
 	m.plain = term.Narrow()
+	m.cur = inLocale(m.cur, m.plain)
 	for _, raw := range d.Report.Rows {
 		r := cleanRow(raw)
 		m.all = append(m.all, r)

@@ -381,7 +381,8 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 		// A name in CLAUDE.md protects a skill and nothing else: no line.
 	case e.ClaudeMDPlain:
 		name := strings.TrimPrefix(e.Name, e.Category+":") // a plain word: letters only
-		field("claude-md", fmt.Sprintf("in it as a plain word, which protects nothing: write it there as `%s` or /%s, or run reap keep %s", name, name, name))
+		// The full key: an agent of the same name makes the bare one ambiguous.
+		field("claude-md", fmt.Sprintf("in it as a plain word, which protects nothing: write it there as `%s` or /%s, or run reap keep skill:%s", name, name, name))
 	default:
 		field("claude-md", referencedStr(e.ClaudeMD))
 	}

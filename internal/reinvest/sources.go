@@ -126,6 +126,27 @@ func (a *app) isFresh(path string) bool {
 	return err == nil && a.now().Sub(info.ModTime()) < searchTTL
 }
 
+// lookupFailed logs a request that could not be made and counts it, for the
+// one line the step says: "0 candidates" alone read as "searched, found none".
+func (a *app) lookupFailed(what string, err error) {
+	a.logf("%s: %v", what, err)
+	a.logMu.Lock()
+	defer a.logMu.Unlock()
+	a.lookups++
+	a.lookupWhy = err.Error()
+}
+
+// sayLookups says how many requests failed since it last spoke, if any did.
+func (a *app) sayLookups() {
+	a.logMu.Lock()
+	n, why := a.lookups, a.lookupWhy
+	a.lookups, a.lookupWhy = 0, ""
+	a.logMu.Unlock()
+	if n > 0 {
+		a.failed(fmt.Sprintf("%s to skills.sh or the MCP registry could not be made (the last: %s) · log: %s", counted(n, "request"), printable(why), a.cachePath(logFile)))
+	}
+}
+
 // searchPage is one query's results, from the cache when it is fresh.
 func (a *app) searchPage(q string) any {
 	path := a.cacheFile("search", pyLower(q), ".json")
@@ -137,8 +158,8 @@ func (a *app) searchPage(q string) any {
 		}
 	}
 	data, err := a.skillsSh(skillsShURL + "/api/search?q=" + url.QueryEscape(q) + "&limit=" + fmt.Sprint(perQuery))
-	if err != nil { // a failed query just contributes nothing
-		a.logf("skills.sh search %s: %v", pyQuote(q), err)
+	if err != nil { // a failed query contributes nothing, and is counted
+		a.lookupFailed("skills.sh search "+pyQuote(q), err)
 		return nil
 	}
 	page, _ := data.(*obj)
@@ -248,8 +269,8 @@ func (a *app) downloadSkill(item candidate) string {
 		return ""
 	}
 	data, err := a.skillsSh(skillsShURL + "/api/download/" + item.Source + "/" + item.Slug)
-	if err != nil { // logged: a silent miss is what hid the 429s
-		a.logf("skills.sh download %s: %v", item.ID, err)
+	if err != nil { // logged and counted: a silent miss is what hid the 429s
+		a.lookupFailed("skills.sh download "+item.ID, err)
 		return ""
 	}
 	page, _ := data.(*obj)

@@ -808,6 +808,7 @@ func gather(opts options) (*report.Report, error) {
 
 	evidenceBlind := map[string]bool{}
 	blindReason := map[string]string{}
+	historyUnread := map[string]string{} // there, and could not be read: see report.Opts.HistoryUnread
 	perPlatform := map[string]*usage.Stats{}
 	// cleanupPeriodDays governs Claude Code's transcripts and nothing else, so
 	// the corpus it is compared against has to be Claude Code's alone. The
@@ -950,19 +951,27 @@ func gather(opts options) (*report.Report, error) {
 			case p.TranscriptType == "sqlite":
 				if errors.Is(sqliteErr, usage.ErrNoSQLite) {
 					reason = "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH"
+					historyUnread[pid] = reason
 				} else if sqliteErr != nil {
 					reason = fmt.Sprintf("its SQLite history could not be read: %v", sqliteErr)
+					historyUnread[pid] = reason
 				} else {
 					reason = fmt.Sprintf("no session history was found (looked in %s)", p.TranscriptDBTried)
 				}
 			case p.TranscriptType != "jsonl" && p.TranscriptType != "codex-jsonl":
 				reason = fmt.Sprintf("its transcripts use a format skillreaper does not parse yet (%s)", p.TranscriptType)
+				historyUnread[pid] = reason
 			}
 			evidenceBlind[pid] = true
 			blindReason[pid] = reason
+			shown := "its items are shown"
+			if _, unread := historyUnread[pid]; unread && p.ReadsClaudeSkills {
+				// It loads Claude Code's skills folder too: a skill there may be in use here, unseen.
+				shown = "its items, and the skills of Claude Code's own folder that it loads too, are shown"
+			}
 			warns = append(warns, scan.Warning{
 				Path:     p.ConfigDirAbs,
-				Msg:      fmt.Sprintf("%s usage is not counted because %s; its items are shown as REVIEW, not REAP/MUTE.", p.Name, reason),
+				Msg:      fmt.Sprintf("%s usage is not counted because %s; %s as REVIEW, not REAP/MUTE.", p.Name, reason, shown),
 				Advisory: true,
 			})
 		}
@@ -1047,6 +1056,7 @@ func gather(opts options) (*report.Report, error) {
 		KeepSet:       keepSet,
 		EvidenceBlind: evidenceBlind,
 		BlindReason:   blindReason,
+		HistoryUnread: historyUnread,
 		PerPlatform:   perPlatform,
 		RetentionDays: retentionFor(opts.claudeDir),
 		ClaudeMDLines: claudeMD,

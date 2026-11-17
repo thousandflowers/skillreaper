@@ -85,7 +85,7 @@ func TestWhySaysWhatCLAUDEMDDoesForThisItem(t *testing.T) {
 	skill := Row{Item: scan.Item{Category: scan.CatSkill, Name: "review", Path: "/s/review/SKILL.md", Removable: true}, Verdict: VerdictReap, Reason: ReasonUnused}
 	var plain, none, server bytes.Buffer
 	RenderWhy(&plain, BuildExplanation(skill, 10, ExplainInput{ClaudeMDPlain: true}), false)
-	if said := plain.String(); !strings.Contains(said, "a plain word") || !strings.Contains(said, "reap keep review") || strings.Contains(said, "not referenced") {
+	if said := plain.String(); !strings.Contains(said, "a plain word") || !strings.Contains(said, "reap keep skill:review") || strings.Contains(said, "not referenced") {
 		t.Errorf("a plain word:\n%s", said)
 	}
 	RenderWhy(&none, BuildExplanation(skill, 10, ExplainInput{}), false)

@@ -254,7 +254,7 @@ func (a *app) registryServers(words []string) []*obj {
 		query := "search=" + url.QueryEscape(w) + "&limit=" + mcpSearchLimit + "&version=latest"
 		data, err := a.httpJSON(mcpRegistry+"?"+query, onceMore)
 		if err != nil {
-			a.logf("MCP registry %s: %v", pyQuote(w), err)
+			a.lookupFailed("MCP registry "+pyQuote(w), err)
 			continue
 		}
 		page, _ := data.(*obj)

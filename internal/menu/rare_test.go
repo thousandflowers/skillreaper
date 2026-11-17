@@ -860,10 +860,10 @@ func TestTheHeaderNeverCallsSavedWhatWasNot(t *testing.T) {
 	mustNotShow(t, locked.final(), "would save")
 
 	m := open(t, pricedData()).m
-	mustEqual(t, "money", m.savedMoney("$1", "$5"), "you saved at least $1, would save at least $5 more a month")
+	mustEqual(t, "money", m.savedMoney("$1", "$5")[0], "you saved at least $1, would save at least $5 more a month")
 	m.subscriber = true
-	mustEqual(t, "flat plan", m.savedMoney("$1", "$5"), "you saved $1, would save $5 more a month, at API prices")
-	mustEqual(t, "flat plan, applied", m.savedMoney("$1", ""), "you saved $1 a month, at API prices")
+	mustEqual(t, "flat plan", m.savedMoney("$1", "$5")[0], "you saved $1, would save $5 more a month, at API prices")
+	mustEqual(t, "flat plan, applied", m.savedMoney("$1", "")[0], "you saved $1 a month, at API prices")
 }
 
 // A sum under one unit of the currency is not "0" in the short figure: the
@@ -943,4 +943,70 @@ func TestTheScreenBetweenListsCountsALock(t *testing.T) {
 	shown := x.frame("✓ 1 locked")
 	mustShow(t, shown, "1 of 1 chosen")
 	mustNotShow(t, shown, "nothing chosen")
+}
+
+// Where the locale cannot draw a currency's symbol, the amount carries the
+// currency's code: "¥" came out as "JPY" for a sum in yuan, and a symbol the
+// table did not know as "?".
+func TestAPlainLocaleNamesTheCurrencyByItsCode(t *testing.T) {
+	yuan := Currency{Code: "CNY", Sym: "¥", Rate: 7, Decimal: ".", Group: ",", Digits: 2}
+	if got := inLocale(yuan, true).Sym; got != "CNY" {
+		t.Errorf("yuan in a plain locale: %q", got)
+	}
+	if got := inLocale(yuan, false).Sym; got != "¥" {
+		t.Errorf("yuan where it can be drawn: %q", got)
+	}
+	if got := inLocale(USD, true).Sym; got != "US$" {
+		t.Errorf("a symbol that is plain already: %q", got)
+	}
+}
+
+// The green line is said whole in the window it has: at 80 columns "you saved
+// at least US$12.00, would save at leas" lost the figure it was there for.
+func TestTheSavedLineFitsItsWindow(t *testing.T) {
+	for _, cols := range []int{58, 80, 120} {
+		x := openSized(t, 24, cols, pricedData())
+		x.m.now = clockAt(0, 0, time.Second)
+		x.press(space, applyKey, 'y', 'y').wait().press(space).wait().run()
+		line := strings.TrimRight(lineWith(x.final(), "would save"), " ")
+		if line == "" || !(strings.HasSuffix(line, " more") || strings.HasSuffix(line, " more a month")) {
+			t.Errorf("%d columns: %q", cols, lineWith(x.final(), "saved"))
+		}
+	}
+	if got := firstFitting(10, "a long sentence", "shorter", "tiny"); got != "shorter" {
+		t.Errorf("first fitting: %q", got)
+	}
+	if got := firstFitting(2, "a long sentence", "shorter", "tiny"); got != "tiny" {
+		t.Errorf("nothing fits: %q", got)
+	}
+}
+
+// The question's words are said whole too, in shorter words where the window
+// is narrow (it can shrink while the question is open): "tokens to save every s".
+func TestTheReceiptsWordsFitANarrowWindow(t *testing.T) {
+	for _, keys := range [][]term.Key{{space, applyKey, term.KeyResize, term.KeyNone}, {tab, space, applyKey, term.KeyResize, term.KeyNone}} {
+		x := openSized(t, 30, 80, pricedData())
+		x.s.resizeAt = map[int][2]int{len(keys) - 2: {30, 40}}
+		x.press(keys...).run()
+		var shown []string // the last frame of the question, drawn after the window shrank
+		for _, frame := range x.s.frames {
+			if lineWith(frame, "Do it?") != "" {
+				shown = frame
+			}
+		}
+		if shown == nil {
+			t.Fatalf("no frame shows the question: %q", x.final())
+		}
+		whole := false // the words beside the figure end where they should
+		for _, line := range shown {
+			line = strings.TrimRight(line, " ")
+			whole = whole || strings.HasSuffix(line, " a session") || strings.HasSuffix(line, " a month")
+		}
+		if !whole {
+			t.Errorf("40 columns, the words beside the figure are cut:\n%s", strings.Join(shown, "\n"))
+		}
+		if line := strings.TrimRight(lineWith(shown, "lighter"), " "); !strings.HasSuffix(line, "session") && !strings.HasSuffix(line, "lighter") {
+			t.Errorf("40 columns, the summary: %q", line)
+		}
+	}
 }

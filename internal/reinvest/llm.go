@@ -488,6 +488,9 @@ func (a *app) coveringSkills(kinds []kind, installed []skill) (names []string, a
 	}
 	answer, ok := out.(*obj)
 	if !ok {
+		if out != nil {
+			a.noteAsk("an answer that is not the object asked for")
+		}
 		return nil, false, nil
 	}
 	// It has to speak of at least one kind asked about ("0": null is an

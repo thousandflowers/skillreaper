@@ -261,7 +261,11 @@ func applyMonthlyFigures(r *Report, st *usage.Stats, t platformTally, opts Opts,
 		r.PlatformSessionsPerMonth[id] = perMonth
 		r.SessionsPerMonth += perMonth
 		r.MoneyPerMonth += money(t.dead[id], perMonth)
-		if r.MonthlyBasisDays == 0 || days < r.MonthlyBasisDays {
+		// The basis of the monthly figures is the history of the tools that
+		// put something in them: a tool with nothing dead adds no money, and
+		// its one day of history is not what the figure was scaled from.
+		counted := t.dead[id] > 0 || t.mute[id] > 0
+		if counted && (r.MonthlyBasisDays == 0 || days < r.MonthlyBasisDays) {
 			r.MonthlyBasisDays = days
 		}
 		deadWeighted += t.dead[id] * ps.Sessions

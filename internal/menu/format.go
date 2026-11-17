@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Currency is how amounts are written: the symbol and separators of the system,
@@ -85,9 +86,10 @@ func (m *Menu) worth(text string) string {
 	return "at least " + text
 }
 
-// savedMoney is the same line in money a month. An empty figure is a part
+// savedMoney is the same line in money a month, from the whole sentence to
+// the fewest words that still carry both figures. An empty figure is a part
 // there is nothing of.
-func (m *Menu) savedMoney(applied, pending string) string {
+func (m *Menu) savedMoney(applied, pending string) []string {
 	figure := func(text string) string {
 		if text == "" || m.subscriber {
 			return text
@@ -98,7 +100,22 @@ func (m *Menu) savedMoney(applied, pending string) string {
 	if m.subscriber {
 		tail += ", at API prices"
 	}
-	return saved(figure(applied), figure(pending), tail)
+	return []string{saved(figure(applied), figure(pending), tail), saved(applied, pending, " a month"), saved(applied, pending, ""), chosenOnly(applied, pending)}
+}
+
+// savedTokens is the line in tokens a session, in the same three lengths.
+func savedTokens(applied, pending string) []string {
+	return []string{saved(applied, pending, " tokens per session"), saved(applied, pending, " tok/session"), saved(applied, pending, ""), chosenOnly(applied, pending)}
+}
+
+// chosenOnly is the line where there is room for one figure: what the choice
+// in hand would save, which is what the person is deciding; what was applied
+// when nothing is chosen.
+func chosenOnly(applied, pending string) string {
+	if applied != "" && pending != "" {
+		return "would save " + pending + " more"
+	}
+	return saved(applied, pending, "")
 }
 
 // saved is the header's green line. "You saved" is for what was applied; a
@@ -203,4 +220,26 @@ func (m *Menu) fitTitle(name string, width int) string {
 		return cut(name, width)
 	}
 	return fitTitle(name, width)
+}
+
+// inLocale is the currency as this locale can write it: by its code where
+// the symbol cannot be drawn. A stand-in for the symbol named another
+// currency ("¥" read JPY for a sum in yuan), or was a "?".
+func inLocale(c Currency, plain bool) Currency {
+	drawn := strings.IndexFunc(c.Sym, func(r rune) bool { return r >= utf8.RuneSelf }) < 0
+	if plain && !drawn && c.Code != "" {
+		c.Sym = c.Code
+	}
+	return c
+}
+
+// firstFitting is the first of the texts that fits in room cells, or the
+// last: a sentence is said in fewer words before it is cut.
+func firstFitting(room int, texts ...string) string {
+	for _, text := range texts {
+		if cells(text) <= room {
+			return text
+		}
+	}
+	return texts[len(texts)-1]
 }

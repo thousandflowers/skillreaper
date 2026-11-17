@@ -263,9 +263,11 @@ func sortVerdicts(cands []candidate, keys []string, verdicts map[string]verdict,
 		if c.Kind == kindMCP {
 			c.Where = mcpWhere(c.Server)
 		}
-		c.Fit, c.Why = v.Fit, v.Use
-		if c.Why == "" {
-			c.Why = v.Reason
+		c.Fit, c.Why = v.Fit, noReasonGiven
+		for _, said := range []string{v.Reason, v.Use} { // the use when there is one
+			if strings.TrimSpace(said) != "" {
+				c.Why = said
+			}
 		}
 		passing = append(passing, c)
 	}

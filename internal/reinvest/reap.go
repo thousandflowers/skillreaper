@@ -47,7 +47,8 @@ func parseReapState(output string) (reapState, error) {
 	// another version's answer or not a report: read as an empty stack, the
 	// run went on and checked a new skill against no installed one.
 	data, _ := v.(*obj)
-	if _, isReport := data.get("Rows"); !isReport {
+	rows, isReport := data.get("Rows")
+	if _, isList := rows.([]any); !isReport || (rows != nil && !isList) {
 		return reapState{}, errors.New("`reap --json` did not answer with a report (no \"Rows\" in it): is it this version's reap?")
 	}
 	state := reapState{MCP: map[string]*int{}}

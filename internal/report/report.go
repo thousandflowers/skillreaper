@@ -49,6 +49,10 @@ type Opts struct {
 	SkillFolderReaders map[string][]string
 	// BlindReason says, per evidence-blind platform, why it has no evidence.
 	BlindReason map[string]string
+	// HistoryUnread holds the platforms whose history is there and could not
+	// be read (OpenCode's SQLite store without the sqlite3 CLI), with why. A
+	// skill in a folder such a tool loads too may be in use there, unseen.
+	HistoryUnread map[string]string
 	// RetentionDays is Claude Code's transcript retention, 0 when unknown.
 	RetentionDays int
 	// ClaudeMDLines holds the lines of every detected CLAUDE.md, headings included.
@@ -327,6 +331,11 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				row.Verdict, row.Reason = VerdictKeep, ReasonSkillAgent
 			case it.Category == scan.CatSkill && !IsPluginSource(it.Source) && usedByAReader(opts, evidenceFor, it):
 				row.Verdict, row.Reason = VerdictReview, ReasonUsedElsewhere
+			case it.Category == scan.CatSkill && !IsPluginSource(it.Source) && unreadReader(opts, it) != "":
+				// No use seen is no use only where every tool that loads the
+				// folder was read: this one may call the skill daily.
+				row.Verdict, row.Reason = VerdictReview, ReasonNoEvidence
+				row.EvidenceNote = unreadReader(opts, it)
 			}
 			// Muting removed the description that makes a skill fire, so its
 			// zero uses are the mute's doing and say nothing about the skill.
@@ -647,6 +656,21 @@ func (r *Report) SessionsOf(platformID string) int {
 		return r.Sessions
 	}
 	return r.PlatformSessions[platformID]
+}
+
+// unreadReader names another tool that loads this item's folder and whose
+// history could not be read, with why; empty when every such tool was read.
+func unreadReader(opts Opts, it scan.Item) string {
+	for _, reader := range opts.SkillFolderReaders[it.Platform] {
+		if why, unread := opts.HistoryUnread[reader]; unread {
+			name := opts.PlatformNames[reader]
+			if name == "" {
+				name = reader
+			}
+			return name + " loads this folder too, and " + why
+		}
+	}
+	return ""
 }
 
 // usedByAReader says whether another tool that loads this item's folder used

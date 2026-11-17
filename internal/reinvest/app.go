@@ -25,6 +25,11 @@ const (
 // the outside (Claude, the network, installers, the clock), so each can be
 // replaced in a test.
 type app struct {
+	// lookups is how many requests of the online search failed since the step
+	// last said so, lookupWhy the last one's error; both under logMu.
+	lookups   int
+	lookupWhy string
+
 	cacheDir    string // searches, documents, verdicts, the report: all can be fetched or asked again
 	stateDir    string // what cannot: the memory of sessions Claude Code has since deleted
 	projectsDir string // Claude Code's transcripts

@@ -500,7 +500,7 @@ func (l *list) emptyScreen() bool {
 	}
 	m.put(1, 3, title, bold)
 	m.put(3, 3, l.msg, asBold(m.tint(tintGreen))) // what just emptied the list
-	m.put(h-2, 3, "f platform · g group by · q", dim)
+	m.put(h-2, 3, "f platform · g group by · q quit", dim)
 	m.s.Refresh()
 	switch m.s.ReadKey(-1) {
 	case term.KeyEOF:

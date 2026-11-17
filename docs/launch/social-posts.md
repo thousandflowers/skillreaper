@@ -1,11 +1,12 @@
 # Launch Posts
 
-> Drafts from the first launch, kept for their wording. Before posting any of
-> them: the figures in the X thread (187, 183, 76%, 8000, 45) are examples and
-> have to be replaced by measured ones (`reap` on a real stack, or
-> `make readme-numbers`); and reap does not measure latency or wrong tool
-> picks (README, roadmap #55), so the lines that promise those need a source
-> or have to go.
+> Drafts from the first launch, kept for their wording. Their figures are
+> the June 2026 measurement of the author's own stack (187 items scanned,
+> 142 never used = 76%, 45 left, ~8,000 tokens a session). The README now
+> carries the 2026-08-23 one (382 loaded, 13 fired, ~19,755 dead tokens a
+> session): post with the newest measured numbers. reap does not measure
+> latency or wrong tool picks (README, roadmap #55), so the lines that
+> promise those need a source or have to go.
 
 ## Hacker News
 
@@ -44,9 +45,9 @@ https://github.com/thousandflowers/skillreaper
 
 Your AI agent reads 187 skill descriptions every session.
 
-You use 4.
+You use 45.
 
-The other 183 are dead weight - consuming context, increasing latency,
+The other 142 are dead weight - consuming context, increasing latency,
 and causing wrong tool picks.
 
 I built `reap` to find and quarantine them.

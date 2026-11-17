@@ -578,6 +578,10 @@ really injected, with multi-line descriptions read in full.
   that are removable and unmeasured; with sessions of two tools the
   dead-token figure says it is an average over both; `reap gap` counts
   the MUTE rows a bulk mute leaves alone beside the ones it takes.
+- A clock pinned by `SOURCE_DATE_EPOCH` is said when it cannot be right for
+  this stack: a transcript is newer than it, or it lies in the future. A
+  shell that exports the variable for its own reasons (nix) had every age
+  and window measured against a date decades back, with no word of it.
 - `reap why` on a skill that runs only by hand
   (`disable-model-invocation: true`) says it weighs `0 tok`, and why: it
   said `weight unknown` of a weight that is known.

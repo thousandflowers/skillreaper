@@ -40,3 +40,16 @@ func TestNowUsesTheRealClockWhenUnset(t *testing.T) {
 		t.Fatalf("expected the real clock, got one %v away from it", delta)
 	}
 }
+
+func TestPinnedSaysWhetherTheClockIsPinned(t *testing.T) {
+	t.Setenv(EnvVar, "1788091200")
+	once, pinned = resetForTest()
+	if at, ok := Pinned(); !ok || !at.Equal(time.Unix(1788091200, 0).UTC()) {
+		t.Errorf("Pinned() = %v, %v", at, ok)
+	}
+	t.Setenv(EnvVar, "")
+	once, pinned = resetForTest()
+	if _, ok := Pinned(); ok {
+		t.Error("unset, and pinned")
+	}
+}

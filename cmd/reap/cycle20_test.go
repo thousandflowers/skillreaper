@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/menu"
 	"github.com/thousandflowers/skillreaper/internal/report"
@@ -429,5 +430,33 @@ func TestMenuDeleteOfTheRealFolderAfterAMuteThroughItsLink(t *testing.T) {
 	}
 	if out := applier.Apply([]menu.Pick{{Row: rowOf(t, rows, "codex", "skill", "shared"), Verb: menu.Delete}}); out[0].Err != nil {
 		t.Errorf("delete of the real folder after the menu's own mute: %v", out[0].Err)
+	}
+}
+
+// A clock pinned by SOURCE_DATE_EPOCH is said when the evidence shows it is
+// wrong for this stack: a transcript newer than it, or a date in the future.
+// A shell that exports it (nix) measured every age against 1980, in silence.
+func TestAPinnedClockThatDisagreesWithTheEvidenceIsSaid(t *testing.T) {
+	real := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	newest := real.Add(-time.Hour)
+	for name, c := range map[string]struct {
+		pinned time.Time
+		warn   bool
+	}{
+		"long before the newest transcript": {time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC), true},
+		"in the future":                     {real.AddDate(0, 1, 0), true},
+		"a capture's clock, after its data": {newest.Add(2 * time.Hour), false},
+		"within a day of the data":          {newest.Add(-3 * time.Hour), false},
+	} {
+		w, ok := pinnedClockWarning(c.pinned, real, newest, "/x/.claude")
+		if ok != c.warn {
+			t.Errorf("%s: warned %v, want %v", name, ok, c.warn)
+		}
+		if ok && (!strings.Contains(w.Msg, "SOURCE_DATE_EPOCH") || !strings.Contains(w.Msg, c.pinned.Format("2006-01-02")) || !w.Advisory) {
+			t.Errorf("%s: %+v", name, w)
+		}
+	}
+	if _, ok := pinnedClockWarning(time.Time{}, real, newest, "/x"); ok {
+		t.Error("no pin, and a warning")
 	}
 }

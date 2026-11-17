@@ -973,6 +973,17 @@ func gather(opts options) (*report.Report, error) {
 	if w, ok := retentionWarning(opts, claudeCorpus); ok {
 		warns = append(warns, w)
 	}
+	if at, isPinned := clock.Pinned(); isPinned {
+		newest := st.NewestTranscript // of every tool: each keeps its own
+		for _, tool := range perPlatform {
+			if tool.NewestTranscript.After(newest) {
+				newest = tool.NewestTranscript
+			}
+		}
+		if w, ok := pinnedClockWarning(at, time.Now(), newest, opts.claudeDir); ok {
+			warns = append(warns, w)
+		}
+	}
 	if digestDirty {
 		// A failure to persist is not worth interrupting a report for: the
 		// run is still correct, it simply did not extend the record.
@@ -1185,6 +1196,32 @@ const corpusReachesHorizon = 0.9
 // satisfied), and a corpus that already reaches the horizon (the sweep is
 // deleting evidence now). A corpus far shorter than the horizon is just a
 // young installation and stays silent.
+// pinnedClockWarning says that SOURCE_DATE_EPOCH pins reap's clock, when the
+// pin cannot be right for this stack: a transcript is more than a day newer
+// than it, or it lies more than a day ahead of the real clock. A capture made
+// with a fixed clock set after its data gets no warning. A shell that exports
+// the variable for its own reasons (nix) used to measure every age against a
+// date decades back, in silence.
+func pinnedClockWarning(pinned, real, newest time.Time, path string) (scan.Warning, bool) {
+	const slack = 24 * time.Hour
+	why := ""
+	switch {
+	case pinned.IsZero():
+		return scan.Warning{}, false
+	case newest.After(pinned.Add(slack)):
+		why = "a transcript here is newer than that"
+	case pinned.After(real.Add(slack)):
+		why = "that is in the future"
+	default:
+		return scan.Warning{}, false
+	}
+	return scan.Warning{
+		Path:     path,
+		Msg:      fmt.Sprintf("the clock is pinned to %s by %s, and %s: ages and windows are measured against it. Unset %s to use today's date.", pinned.Format("2006-01-02"), clock.EnvVar, why, clock.EnvVar),
+		Advisory: true,
+	}, true
+}
+
 func retentionWarning(opts options, st *usage.Stats) (scan.Warning, bool) {
 	if strings.TrimSpace(opts.claudeDir) == "" || st == nil || !opts.hasClaudeCode {
 		return scan.Warning{}, false

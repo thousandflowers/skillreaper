@@ -66,9 +66,10 @@ func (m *Menu) cardTitle(r *Row, fit string, weight float64, fate string) {
 	if fate == vMute {
 		st.Bold, st.Dim = false, true
 	}
-	for row, text := range banner(fit) {
+	for row, text := range m.title(fit) {
 		// Colour is the weight. The fate is the shape: struck through, or faded.
-		if struck[fate] && row == 1 {
+		// In plain text the name is on that row, and stays readable.
+		if struck[fate] && row == 1 && !m.plain {
 			text = strings.Repeat("━", runes(strings.TrimRight(text, " ")))
 		}
 		m.put(1+row, 3, text, st)

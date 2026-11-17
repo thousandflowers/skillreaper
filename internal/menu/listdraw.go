@@ -144,7 +144,7 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 			figure = m.cur.Sym + m.short(value)
 		}
 		m.put(0, 3, above, dim)
-		end := m.big(1, 3, figure, frac)
+		end := m.big(1, 3, figure, frac, 1)
 		m.put(1, end+2, words, bold)
 		m.put(2, end+2, "~"+m.tokens(int(left))+" tokens re-sent every session", dim)
 		if l.shown > 0 {
@@ -156,7 +156,7 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 		if bigWidth(figure) > wd-5-len(words) {
 			figure = m.short(left)
 		}
-		end := m.big(1, 3, figure, frac)
+		end := m.big(1, 3, figure, frac, 1)
 		m.put(1, end+2, words, bold)
 		if l.totalMonth > 0 {
 			month := "~" + m.short(math.Max(0, l.totalMonth-l.deadMonth*deadShare)) + " in a month of sessions"

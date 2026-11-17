@@ -48,6 +48,9 @@ type Menu struct {
 	cur           Currency
 	billing       string
 	subscriber    bool
+	// plain is a locale that cannot draw the big font: its blocks all come out
+	// as "#". Figures and titles are then plain text.
+	plain bool
 	// applied is what this session already carried out: out of the list, its
 	// saving still counted.
 	applied map[*Row]string
@@ -62,6 +65,7 @@ func New(s term.Screen, d Data, a Applier) *Menu {
 		m.cur = USD
 	}
 	m.subscriber = strings.Contains(m.billing, "subscription")
+	m.plain = term.Narrow()
 	for _, raw := range d.Report.Rows {
 		r := cleanRow(raw)
 		m.all = append(m.all, r)

@@ -162,10 +162,17 @@ func bigWidth(s string) int {
 }
 
 // big draws a figure three rows tall and returns the column after it.
-func (m *Menu) big(y, x int, s string, rampAt float64) int {
+//
+// wordsRow is the row of the words beside it: where the big font cannot be
+// drawn the figure is plain text on that row, so that the two read as one line.
+func (m *Menu) big(y, x int, s string, rampAt float64, wordsRow int) int {
 	st := bold
 	if !m.s.Light() {
 		st = asBold(m.rampColour(ramp, rampAt, false))
+	}
+	if m.plain {
+		m.put(wordsRow, x, s, st)
+		return x + cells(s)
 	}
 	for _, c := range s {
 		g := bigGlyph(c)
@@ -175,6 +182,15 @@ func (m *Menu) big(y, x int, s string, rampAt float64) int {
 		x += runes(g[0]) + 1
 	}
 	return x
+}
+
+// title is a word in the big font, three rows; plain text on the middle one
+// where the big font cannot be drawn.
+func (m *Menu) title(word string) [3]string {
+	if m.plain {
+		return [3]string{"", word, ""}
+	}
+	return banner(word)
 }
 
 // banner is a word in the big font, three rows.

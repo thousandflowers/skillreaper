@@ -69,7 +69,8 @@ started from the screen after the last row shows what came of it, where it
 showed nothing, and that screen counts what was just applied; a delete of a
 row whose file the menu itself changed through another row is not refused; the
 header says `you would save` for what is chosen and `you saved` only once it
-is applied; a name cut in its
+is applied; where the locale cannot draw the big font (`LC_ALL=C`), figures
+and titles are plain text, where they were blocks of `#`; a name cut in its
 middle no longer leaves an accent on the `…`; where the locale cannot draw a
 wide character, the columns after it stay in line.
 

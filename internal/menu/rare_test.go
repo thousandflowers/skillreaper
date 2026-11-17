@@ -842,3 +842,43 @@ func TestTheHeaderSaysSavedOnlyForWhatWasApplied(t *testing.T) {
 	mustShow(t, failing.final(), "you would save")
 	mustNotShow(t, failing.final(), "you saved")
 }
+
+// Where the locale cannot draw the big font (its blocks all come out "#"), the
+// figures and the titles are plain text, on the line of the words beside them.
+func TestWithoutBlockCharactersTheBigFontIsPlainText(t *testing.T) {
+	noBlocks := func(frame []string) {
+		t.Helper()
+		for _, line := range frame {
+			if strings.ContainsAny(line, "▀▄") { // the font's half blocks; a bar is made of whole ones
+				t.Errorf("a line in the big font: %q", line)
+			}
+		}
+	}
+	list := open(t, flowData())
+	list.m.plain = true
+	list.press(space).wait().run()
+	noBlocks(list.final())
+	if line := lineWith(list.final(), "tokens wasted every session"); !strings.ContainsAny(line, "0123456789") {
+		t.Errorf("the figure is not on the line of its words: %q", line)
+	}
+
+	card := open(t, flowData())
+	card.m.plain = true
+	card.press(on(srvCard, 'p')...).run()
+	noBlocks(card.final())
+	mustShow(t, card.final(), "srv")
+
+	receipt := open(t, flowData())
+	receipt.m.plain = true
+	receipt.press(space, applyKey).run()
+	shown := receipt.frame("Do it?")
+	noBlocks(shown)
+	if line := lineWith(shown, "tokens saved every session"); !strings.ContainsAny(line, "0123456789") {
+		t.Errorf("the receipt's figure is not on the line of its words: %q", line)
+	}
+
+	between := openSized(t, 26, 90, flowData())
+	between.m.plain = true
+	between.press(right, down, enter, down, down).run()
+	noBlocks(between.final())
+}

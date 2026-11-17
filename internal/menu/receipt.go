@@ -157,7 +157,7 @@ func (m *Menu) drawNext(y, h, wd int, nextName string, following []*Row, p *Plan
 	title := fitTitle(nextName, wd-8)
 	summaryY := y + 8
 	if h >= bannerRows {
-		for row, text := range banner(title) {
+		for row, text := range m.title(title) {
 			m.put(y+7+row, 3, text, asBold(m.tint(tintGreen)))
 		}
 		if title != nextName || !inFont(title) {
@@ -469,7 +469,7 @@ func (v *receiptView) draw(question string) bool {
 		}
 		figure = m.fitBig(figure, short, beside, pw)
 		m.put(y+2, x, above, dim)
-		end := m.big(y+3, x, figure, 0) // green: what you get back, not what you waste
+		end := m.big(y+3, x, figure, 0, y+4) // green: what you get back, not what you waste
 		m.put(y+4, end+2, beside, asBold(m.tint(tintGreen)))
 	}
 	if v.using != "" {

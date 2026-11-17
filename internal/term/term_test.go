@@ -465,3 +465,24 @@ func TestFramePutsNoC1Control(t *testing.T) {
 		t.Errorf("row = %q", got)
 	}
 }
+
+// A mouse report is read to its end, however slowly it arrives: one that
+// paused for longer than a key may left its tail as keys, and the M that ends
+// it read as the key that mutes the row under the cursor.
+func TestAMouseReportWithAPauseInItIsStillReadWhole(t *testing.T) {
+	src := &paused{before: []byte("\x1b[<64;10"), after: []byte(";5Ma"), silence: 400 * time.Millisecond}
+	d := &decoder{src: src, escWait: escWaitLocal}
+	var keys []Key
+	for {
+		b, st := src.next(time.Hour)
+		if st != gotByte {
+			break
+		}
+		if k, ok := d.decode(b); ok {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) != 2 || keys[1] != 'a' {
+		t.Errorf("keys = %q, want the wheel and then the a typed after it", keys)
+	}
+}

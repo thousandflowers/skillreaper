@@ -53,6 +53,9 @@ A first Ctrl-C while the menu applies stops it after the item in hand and
 shows what was done; a second one ends it at once. A crash gives the terminal
 back as it was.
 
+A mouse report that arrives in two pieces on a slow link is read whole; its
+tail could read as the key that marks the row to mute.
+
 ### reap delete
 
 `reap delete <name>` removes one item for good. It takes exactly one item, asks

@@ -115,14 +115,20 @@ func (d *decoder) afterEsc() (Key, bool) {
 
 func (d *decoder) csi() (Key, bool) {
 	var body []byte
+	wait := d.escWait
 	for {
-		b, ok := d.get()
-		if !ok {
+		b, st := d.src.next(wait)
+		if st != gotByte {
 			return 0, false
 		}
 		body = append(body, b)
 		if b >= 0x40 && b <= 0x7e {
 			break
+		}
+		if b == '<' {
+			// A mouse report: only a terminal writes one, so it is waited for
+			// like a paste. Given up early, its tail arrived as keys.
+			wait = pasteWait
 		}
 	}
 	text := string(body)

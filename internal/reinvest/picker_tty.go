@@ -222,7 +222,10 @@ func (a *app) pickLoop(scr *screen, swaps []swap, interrupts, resizes <-chan os.
 			// Ctrl-C typed in the pager reached reinvest too (one foreground
 			// group): it was the pager's, and must not end the picker now.
 			select {
-			case <-interrupts:
+			case sig := <-interrupts:
+				if sig != os.Interrupt { // a request to end, or a hang-up: not the pager's
+					return nil, errInterrupted
+				}
 			default:
 			}
 			continue

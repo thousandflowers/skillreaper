@@ -399,6 +399,24 @@ func newReceiptView(m *Menu, picks []Pick, unit string) *receiptView {
 	return v
 }
 
+// summary is the receipt's line of totals, in the most words that fit pw
+// cells: what comes back heavier is said whole before anything else gives way.
+func (v *receiptView) summary(pw int) string {
+	items, back, heavier := plural(len(v.picks), "item"), "", ""
+	switch {
+	case v.back == 1:
+		back, heavier = " · 1 comes back heavier", " · 1 heavier"
+	case v.back > 1:
+		back, heavier = " · "+itoa(v.back)+" come back heavier", " · "+itoa(v.back)+" heavier"
+	}
+	if v.tok == 0 {
+		return firstFitting(pw, items+back, items+heavier)
+	}
+	lighter := items + " · ~" + v.m.tokens(v.tok)
+	return firstFitting(pw, lighter+" tokens lighter every session"+back, lighter+" tok/session lighter"+back,
+		lighter+" tok lighter"+back, lighter+" tok lighter"+heavier, lighter+" tok"+heavier)
+}
+
 // draw returns false when the window cannot show the question: then y must not
 // answer it.
 func (v *receiptView) draw(question string) bool {
@@ -452,19 +470,7 @@ func (v *receiptView) draw(question string) bool {
 	for n, line := range v.warnings {
 		m.put(y-shift-n, x, cut(line, pw), asBold(m.tint(tintAmber)))
 	}
-	summary, back := plural(len(v.picks), "item"), ""
-	switch {
-	case v.back == 1:
-		back = " · 1 comes back heavier"
-	case v.back > 1:
-		back = " · " + itoa(v.back) + " come back heavier"
-	}
-	if v.tok > 0 { // in fewer words where the window is narrow, before it is cut
-		lighter := " · ~" + m.tokens(v.tok)
-		summary += firstFitting(pw-cells(summary+back), lighter+" tokens lighter every session", lighter+" tok/session lighter", lighter+" tok lighter")
-	}
-	summary += back
-	m.put(y+1, x, cut(summary, pw), bold)
+	m.put(y+1, x, cut(v.summary(pw), pw), bold)
 	if v.tok > 0 {
 		// "To save": this is the question, nothing is saved before the answer.
 		above, beside, brief, least, figure := "", "tokens to save every session", "to save a session", "a session", m.tokens(v.tok)

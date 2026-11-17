@@ -174,7 +174,11 @@ func writtenAsName(line string, i, j int) bool {
 	if len(near) > nearName {
 		near = near[len(near)-nearName:]
 	}
-	return commandBefore.MatchString(near) || skillBefore.MatchString(near) || skillAfter.MatchString(after) ||
+	head := before // a list of names can run longer than a mark
+	if len(head) > longestHead {
+		head = head[len(head)-longestHead:]
+	}
+	return commandBefore.MatchString(near) || skillBefore.MatchString(head) || skillAfter.MatchString(after) ||
 		len(before) <= longestHead && itemBefore.MatchString(before) && itemAfter.MatchString(after) ||
 		cellBefore.MatchString(near) && cellAfter.MatchString(after)
 }

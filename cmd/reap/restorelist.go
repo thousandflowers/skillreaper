@@ -11,6 +11,15 @@ import (
 	"github.com/thousandflowers/skillreaper/internal/prune"
 )
 
+// ofProject tells apart two servers of one name: the project a server was
+// declared for, when it was declared for one.
+func ofProject(e prune.Entry) string {
+	if e.JSONScope == "" {
+		return ""
+	}
+	return "  (project " + shown(e.JSONScope) + ")"
+}
+
 // showPruned prints what is still in quarantine, newest first, with the id
 // restore takes, and returns how many items that is. The id is otherwise only
 // ever shown at the moment of pruning.
@@ -31,7 +40,7 @@ func showPruned(claudeDir string, stdout io.Writer) (int, error) {
 	}
 	sort.SliceStable(pruned, func(i, j int) bool { return pruned[i].Timestamp.After(pruned[j].Timestamp) })
 	for _, e := range pruned {
-		fmt.Fprintf(stdout, "  %s  %s  %-5s  %s\n", e.ID, e.Timestamp.Local().Format("2006-01-02 15:04"), e.Category, shown(e.Name))
+		fmt.Fprintf(stdout, "  %s  %s  %-5s  %s%s\n", e.ID, e.Timestamp.Local().Format("2006-01-02 15:04"), e.Category, shown(e.Name), ofProject(e))
 	}
 	return len(pruned), nil
 }

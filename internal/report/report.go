@@ -108,6 +108,10 @@ type Row struct {
 	// EvidenceNote says why a platform has no usage evidence, for a no-transcript
 	// row. One text for every surface.
 	EvidenceNote string `json:",omitempty"`
+	// UnreadReader names the other tool that loads this item's folder and
+	// whose history could not be read, when that is why the item is held:
+	// this tool's own sessions were read, and may show uses.
+	UnreadReader string `json:",omitempty"`
 	// PrunedCopyID is the manifest id of a copy of this item in quarantine: it was
 	// pruned and is live again, reinstalled by hand or by an update.
 	PrunedCopyID string `json:",omitempty"`
@@ -335,7 +339,8 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				// No use seen is no use only where every tool that loads the
 				// folder was read: this one may call the skill daily.
 				row.Verdict, row.Reason = VerdictReview, ReasonNoEvidence
-				row.EvidenceNote = unreadReader(opts, it)
+				row.UnreadReader = unreadReader(opts, it)
+				row.EvidenceNote = row.UnreadReader + " loads this folder too, and " + opts.HistoryUnread[unreadReaderID(opts, it)]
 			}
 			// Muting removed the description that makes a skill fire, so its
 			// zero uses are the mute's doing and say nothing about the skill.
@@ -633,7 +638,9 @@ func prunedCopy(copies map[string]string, it scan.Item) string {
 func MuteEligible(row Row) bool {
 	// Not a skill that runs only by hand: its description is in no context,
 	// so a mute saves nothing and takes the text its slash menu shows.
-	return row.Path != "" &&
+	// Nor an item whose mute would save nothing: a description that is empty,
+	// or no longer than the name that stays.
+	return row.Path != "" && MuteSaving(row) > 0 &&
 		row.Removable && !row.ManualOnly &&
 		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
 		(row.Verdict == VerdictReap || row.Verdict == VerdictMute)
@@ -658,19 +665,24 @@ func (r *Report) SessionsOf(platformID string) int {
 	return r.PlatformSessions[platformID]
 }
 
-// unreadReader names another tool that loads this item's folder and whose
-// history could not be read, with why; empty when every such tool was read.
-func unreadReader(opts Opts, it scan.Item) string {
+// unreadReaderID is another tool that loads this item's folder and whose
+// history could not be read; empty when every such tool was read.
+func unreadReaderID(opts Opts, it scan.Item) string {
 	for _, reader := range opts.SkillFolderReaders[it.Platform] {
-		if why, unread := opts.HistoryUnread[reader]; unread {
-			name := opts.PlatformNames[reader]
-			if name == "" {
-				name = reader
-			}
-			return name + " loads this folder too, and " + why
+		if _, unread := opts.HistoryUnread[reader]; unread {
+			return reader
 		}
 	}
 	return ""
+}
+
+// unreadReader is that tool by the name it is shown under.
+func unreadReader(opts Opts, it scan.Item) string {
+	id := unreadReaderID(opts, it)
+	if name := opts.PlatformNames[id]; name != "" {
+		return name
+	}
+	return id
 }
 
 // usedByAReader says whether another tool that loads this item's folder used

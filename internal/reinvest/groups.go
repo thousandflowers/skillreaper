@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -269,6 +270,19 @@ func mostFired(ss []session) (string, int) {
 }
 
 // kindsOfWork turns the groups into kinds, with what their sessions add up to.
+// nameOr is a kind of work's name, or the first words of what it does when
+// it was given none: "for  (4 sessions)" named nothing.
+func nameOr(name, task string) string {
+	if strings.TrimSpace(name) != "" {
+		return name
+	}
+	words := strings.Fields(task)
+	return strings.Join(words[:min(len(words), unnamedWords)], " ")
+}
+
+// unnamedWords is how many words of its task stand for a kind with no name.
+const unnamedWords = 4
+
 func kindsOfWork(groups []*obj, sessions []session) []kind {
 	byID := make(map[string]session, len(sessions))
 	for _, s := range sessions {
@@ -285,7 +299,7 @@ func kindsOfWork(groups []*obj, sessions []session) []kind {
 		if len(ss) == 0 {
 			continue
 		}
-		k := kind{Name: oneLine(valueText(g, "name")), Task: oneLine(valueText(g, "task")),
+		k := kind{Name: nameOr(oneLine(valueText(g, "name")), oneLine(valueText(g, "task"))), Task: oneLine(valueText(g, "task")),
 			Delegable: g.val("delegable") == true, Queries: searchQueries(g), MCPQueries: stringList(g.val("mcp_queries")),
 			Sessions: len(ss)}
 		weeks := map[string]bool{}

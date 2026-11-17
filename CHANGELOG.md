@@ -10,6 +10,24 @@ page](https://github.com/thousandflowers/skillreaper/releases).
 group, and a receipt before anything changes. `reap` alone still prints the
 report, and every command still works from the command line.**
 
+### Upgrading from 0.8
+
+Five things behave differently for someone who had 0.8:
+
+- `reap prune <name>` prunes that one item. In 0.8 the name was ignored and
+  the whole plan was queued.
+- A muted item is no longer REAP: its verdict is `-` with the reason `muted`,
+  so the counts of the report and the rows of `--json` change for anyone who
+  had muted something. `--json` also gained `MutedCount`, `Platforms`,
+  `PriceBasis`, `PricePerToken`, `MonthlyBasisDays`, `PlatformSessions` and
+  `PlatformSessionsPerMonth`.
+- The session count and the measured tokens are lower than 0.8 printed for
+  the same folder: a session counts by when it happened, and a message is
+  measured once.
+- `echo y | reap prune` is refused, and a declined prompt exits 3.
+- `--dry-run` on `prune` and `mute` exits 2: they show their plan and ask
+  already.
+
 ### The menu
 
 ```bash
@@ -55,35 +73,6 @@ A first Ctrl-C while the menu applies stops it after the item in hand and
 shows what was done; a second one ends it at once. A crash gives the terminal
 back as it was.
 
-A key or a mouse report that arrives in two pieces on a slow link is read
-whole: its tail could read as a key, and the letter that ends an arrow marked
-the row to delete. Keys pressed while an apply is at work are dropped: a `q`
-pressed during a slow one left the menu before its failures could be read.
-On a narrow window the receipt's big figure gives way to a short one, as the
-header's does, so that the words beside it stay whole; a stray `ESC [`
-(Alt+[) ends at the next Esc or Enter, where it swallowed the arrow after
-it and let its last letter through as a key; a name made of accents alone
-is shown as `(no name)`; a choice that could not be carried out stays chosen,
-so that the same key applies it again once its cause is put right; an apply
-started from the screen after the last row shows what came of it, where it
-showed nothing, and that screen counts what was just applied; a delete of a
-row whose file the menu itself changed through another row is not refused; the
-header says `you saved` for what was applied and `would save` for what is
-chosen or could not be done, each with its own figure, and the question
-before an apply says `to save`; a sum under one unit of the currency is
-`<$1` in the short figure, where it was `$0`; a lock applied from the screen
-between lists is counted there; after the menu's own mute of a file, every
-row that is that file can still be deleted, unless somebody else changed it
-in the meantime: that change is still refused; the Linux console's F1 to F5
-type nothing, where they chose or marked a row; in plain text a title is cut
-at the window only; where the locale cannot draw a currency's symbol the
-amount carries the currency's code, where a sum in yuan read `JPY`; the
-green line and the question's words are said in fewer words before they are
-cut by a narrow window; an agent the menu muted can be deleted; where the locale cannot draw the big font (`LC_ALL=C`), figures
-and titles are plain text, where they were blocks of `#`; a name cut in its
-middle no longer leaves an accent on the `…`; where the locale cannot draw a
-wide character, the columns after it stay in line.
-
 ### reap delete
 
 `reap delete <name>` removes one item for good. It takes exactly one item, asks
@@ -111,544 +100,6 @@ really injected, with multi-line descriptions read in full.
   sessions.
 - Mute savings leave out the name, which stays loaded, and money figures follow
   each platform's own session count.
-
-### Safer prune, mute and restore
-
-- Quarantine paths are unique. Two items with the same name used to overwrite
-  each other there, and `restore` could not bring both back.
-- A name two items share is refused rather than guessed: select with
-  `codex:skill:x` or a path.
-- Named prune and delete reach a plugin's item or a link, and a named mute a
-  plugin's item; a bulk prune or mute never does. A named mute of a skill
-  reached through a link outside the folders reap edits is refused before
-  any question.
-- `reap restore` with no arguments lists what is pruned, with ids.
-- A kept item refuses a named prune or mute until `reap keep --remove`.
-- Removing, deleting or restoring an MCP server checks `~/.claude.json` again
-  just before writing it: if Claude Code changed it meanwhile, nothing is
-  written and the command says to run again, instead of losing that change.
-- On macOS and Linux the prune lock is the system's own (flock): a run that
-  dies drops it, and two runs finding a lock left by a dead one can no longer
-  both get in.
-- `reap unmute <path>` undoes that one copy and leaves a namesake muted in
-  another tool as it is.
-- A YAML description block whose line is indented less than the rest keeps
-  that line's text; its first letters, or half an accented one, were cut.
-- A skill or agent of your own is dated by its file, so one written or edited
-  in the last `--grace-days` is REVIEW(grace), not REAP: it had no date at all,
-  and a skill made today was offered as safe to prune.
-- `reap mute` works on a SKILL.md saved with a byte-order mark, and keeps the
-  mark.
-- The report's `DO` line for `reap prune` counts what a bare `reap prune`
-  takes, not every unused item.
-- `reap uninstall-hook` says when there was no hook to remove, and
-  `reap install-hook` repairs a hook that names a reap binary which moved,
-  and says when there was nothing to change.
-- `reap mute` skips an item another prune moved meanwhile, as prune does,
-  instead of failing on it.
-- Model ids with a release date (`claude-haiku-4-5-20251001`) get their
-  model's price: they were left out of the blended `$/month`.
-- `--days` and `--grace-days` above 36500 are refused: past a century the date
-  arithmetic wrapped and the window came out wrong. `--price` must be finite.
-- A relative `--claude-dir` or `--claude-json` is made absolute first: mute
-  refused it, and what prune and mute recorded named nothing from another
-  folder.
-- `reap uninstall-hook` leaves a hook group that is someone else's alone, even
-  an empty one; `"hooks": null` or `[]` in settings.json counts as no hooks.
-- The weekly nudge says what grew, items to prune or to mute; `reap diff`
-  counts the snapshots still missing; naming a muted item in `reap prune`
-  says it is muted.
-- Under the `skillreaper` name, `help` keeps its columns.
-- After a cleanup the weekly nudge's baseline follows the counts down, so it
-  speaks again when new unused items appear.
-- A menu apply that partly failed shows what went well first, then the
-  failure's cause without the paths that pushed it off the screen.
-- Restore, unmute and `keep --list` on a `--claude-dir` that is not there say
-  so, instead of "Nothing to restore."
-- `--claude-dir` alone finds the `.claude.json` inside or beside it: every MCP
-  server used to drop out.
-- `--source own` and `--source usr` work, as the report labels those sources;
-  a mute with no match lists the sources there are.
-- A joined emoji in a name shows as its emoji in the menu, not with
-  replacement marks.
-- Pruning an agent whose file is named `SKILL.md` moves that file, not the
-  whole agents folder.
-- MCP servers of one name in several projects are each listed; one of them,
-  picked at random, used to stand for all.
-- `--agent` says items were held back from REAP only when some were.
-- `--mute-threshold` is described as what it counts: uses ÷ sessions.
-- Paths reap prints (delete's confirmation among them) carry no control
-  characters from a folder's name.
-- `install-hook` repairs every stale hook of ours, not the last one.
-- `reap <flag> reinvest` says reinvest comes first, instead of calling it
-  unknown.
-- In the menu, Option+arrow (Option as Meta) is no key, as other Alt keys
-  are; its tail no longer arrived as `[` and `a`, which chose every
-  suggestion. Esc pressed twice quickly is one Esc, not nothing.
-- The README lists Hermes as inventory only, as the code has it: its history
-  is not parsed yet, so its items are REVIEW, never REAP.
-- `reap --agent` and `reap gap --agent` say `n/a`, not `0%`, when the window
-  holds no session, and the gap view says so in a line: nothing was read, so
-  nothing is measured.
-- `reap mute` and `reap unmute` leave the file's date as it was. A personal
-  skill is dated by its file, so one muted and unmuted read as installed
-  today and sat in the grace period again.
-- INSTALL.md no longer offers `~/.claude/reaped` as leftovers to clear after
-  an uninstall: it holds the pruned items and the mute backups. It now says
-  to restore and unmute first.
-- Ctrl-C pressed while the menu waits behind another run's lock stops the
-  apply. It used to be lost, and everything went through once the lock came
-  free.
-- Two projects whose folders share a name are two groups in the menu, each
-  named by its whole path; they used to share one name and open together.
-- In a narrow window the menu's legend keeps `q quit`: it takes the place of
-  the last keys shown instead of being the one cut.
-- `reap why` on an item held for a use before the window says so, and how to
-  overrule it, instead of asking for more sessions that change nothing.
-- A command reap prints to be pasted (`reap unmute`, `reap keep --remove`,
-  the hints of `reap why`) carries a name or a path with a space as one
-  quoted word.
-- The README's `reap why` and `reap share` examples are generated with the
-  other blocks now; both had drifted from what reap prints.
-- The plugin's `reap` skill no longer says a piped word answers the prune
-  question: without a terminal prune and mute stop and ask for `--yes`.
-- A skill named in a heading of your CLAUDE.md is protected like one named in
-  its text. Lines starting with `#` were skipped as comments; they are
-  headings, and a session loads them.
-- `reap keep` and `reap keep --remove` take the lock the other commands
-  share: two run at once used to lose one of the two entries.
-- Paths printed by `reap unmute` and `reap restore`, in their listings and
-  their refusals, carry no control characters from a folder's name.
-- The refusal for a kept item gives a `reap keep --remove` that can be pasted
-  for a name with a space.
-- The weekly nudge stays quiet where it cannot write down that it spoke; it
-  used to speak at the start of every session.
-- `reap snapshot --list --json` prints JSON.
-- An integer flag written in another base (`--days 010`, `0x10`, `1_000`) is
-  refused. `010` used to be read as octal: eight days, without a word.
-- `reap why` counts the days left in the grace period to the date the verdict
-  uses, and its rate line reads `uses/session 2%` instead of running the
-  label into the figure.
-- `reap gap` in a narrow window gives up the bar and the token columns
-  before its category names, which were cut to `…` on every row.
-- In the menu: a selection's footer says `space chooses` (it never only
-  pruned); the question before a plugin is turned off reads `[y/n]`, since
-  Enter does not answer it; a shared folder named on the receipt is cleaned
-  of control characters; counts stand clear of the names before them in the
-  narrowest window; the card at its smallest keeps the line that explains
-  the choice; on a flat plan the saved line reads as a sentence.
-- `docs/tapes/README.md` and `hero-fixture.sh` give a rebuild command that
-  sets `SOURCE_DATE_EPOCH`; CONTRIBUTING and `docs/decisions.md` say the
-  plugin's version is set to the tag before a release; the plugin's skills
-  pass a flag together with its value.
-- `CLAUDE_CONFIG_DIR` written with a trailing slash or as a relative path is
-  the same folder: it used to open a second, empty record of past uses.
-- A command printed to be pasted (`reap restore 001`, `reap unmute`, `reap
-  keep --remove`) repeats `--claude-dir` when the run was given one. Ids
-  start at 001 in every folder, so the pasted undo acted on another folder.
-- `reap restore` takes an id typed without its zeros (`reap restore 1`), and
-  its listing prints a server's name with no control characters.
-- `reap unmute <path>` takes a relative path.
-- `reap mute <server>` says mute is for skills and agents and points to
-  `reap prune`, instead of saying to edit the config by hand.
-- `reap <flags> reinvest` gives a command that keeps the reinvest flags that
-  were typed; it used to drop them, so the pasted line was not a dry run.
-- In the menu: Ctrl-C while another run holds the lock ends the wait at
-  once; the other rows of a plugin already switched off are not reported as
-  interrupted; a selection's footer counts what space will choose; two rows
-  of one name from two marketplaces say which plugin each is; in the
-  narrowest window the status and a group's name are cut short of the apply
-  label and of the count, and the column title is not cut mid-word.
-- `docs/tapes/README.md` says which two tapes need changing before they
-  record again, and `docs/decisions.md` is newest first again.
-- A credential after `Authorization: Basic` or `Token`, after `curl -u`, or in
-  a `Cookie:` header is masked in the report, `--json` and `--md`. Only the
-  scheme was masked before, and the credential was printed.
-- A skill used under another letter case than its folder's is found in the
-  record of past uses. It read as never used and could come out REAP.
-- `--claude-json` given without `--claude-dir` is the file read and edited.
-  It was dropped without a word, and `reap prune <server>` edited the usual
-  file.
-- A server defined for every project and again for one project, in one file,
-  is not guessed at by name: `reap prune` and `reap delete` took the first.
-- A project folder linked to another one in the same `projects` folder is
-  counted once, and the measured token totals count only the window.
-- A parse is counted from the start of the day the window opens on (UTC), so
-  a cached parse and a fresh one agree at the window's edge.
-- A warning about the plugin registry is printed once, not three times.
-- With `--claude-dir` and no session in the window, the report says none was
-  found, not that Claude Code keeps no transcripts.
-- `reap why` counts the sessions still needed against the minimum the verdict
-  uses for an item installed inside the window.
-- `reap restore 7` brings back the item named 7 when there is one, never an
-  entry already restored, and says what it restored (`restored 002 (name)`).
-- A printed command for a name that starts with a dash puts it after `--`;
-  the undo of `install-hook` and delete's restore hint repeat `--claude-dir`.
-- Run as `skillreaper`, every hint says `skillreaper`: the weekly nudge said
-  ``Run `reap` ``, a command an npm install does not have.
-- `install-hook` on a settings file whose `hooks.SessionStart` is not a list
-  says so and names the file.
-- In the menu: with nothing chosen the status has the whole row (a failure's
-  reason was cut off); unlocking two rows that share a lock is no failure; a
-  stray byte no longer eats the keys typed after it; a skill and an agent of
-  one name say which is which; a narrow receipt keeps a gap before the
-  amount; rows and groups of equal weight keep one order at every launch.
-- The README describes the gap view, snapshots and the nudge line as they
-  are; `docs/renders/summary.txt` matches its captures and `make
-  renders-check` now checks it; INSTALL.md names every place the npm binary
-  can be kept.
-- A secret in a hook or server command is masked in more shapes: in quotes
-  (`--token "…"`, `TOKEN="…"`, `{"api_key":"…"}`), after `=` when it
-  begins with a dash, as the user part of a URL, after `--user` or glued to
-  `-u`, with a space in it, and in a Digest `Authorization` header. A server's
-  argument with a space in it stays one word, so all of it is masked.
-- An MCP server whose name holds `__` is found in the record of past uses.
-  Its calls were filed under the part before the first `__`, so once its
-  transcripts aged out it came out REAP and a bulk prune took it.
-- `--claude-dir` on a folder with no `.claude.json` of its own takes no other
-  profile's: the file next to the folder is read only for a folder named
-  `.claude`. `reap prune --claude-dir ~/.claude-work` edited `~/.claude.json`.
-- A lock from the menu is written by the item's name on disk. For a name with
-  a control character in it the menu said locked and nothing was protected.
-- In the menu, a lock is every copy's lock (the keep list goes by category
-  and name): the other copies show locked at once and the receipt says so.
-  Two rows in quarantine under one name say where each was and its id; the
-  card names the marketplace when two plugins share a name; a receipt line
-  keeps the name beside an amount too wide for the window.
-- A command inside an error (`reap restore 001`, `reap unmute <name>`,
-  `reap prune <server>`) repeats `--claude-dir` when the run named a folder.
-- A name that begins like a selector (`codex:foo`, `agent:bar`) is found by
-  prune, mute and delete; the way out of a kept item whose name begins with
-  a dash is printed by its key (`reap keep --remove skill:-name`).
-- `reap share` counts nothing for an item put back by hand, and `reap restore
-  001` means the item named 001 when the entry 001 is already back.
-- A mistyped `--claude-json`, `--claude-dir` on a file and `snapshot --list`
-  on a missing folder are errors, not an empty stack.
-- `reap why`, `reap manifest` and `reap route` count an item against the
-  sessions of its own tool, as its verdict does. `reap why` says when a
-  skill's weight is what the last session's listing kept of its description.
-- A mute or unmute keeps the file's date with no gap: a run killed right
-  after the write left today's date, and the skill read as newly installed.
-- Pruning a server whose key is written twice in the config takes every
-  spelling; the earlier one used to become the live definition.
-- `install-hook` reads `"SessionStart": null` as an empty list, and a run
-  stopped by SIGTERM exits 143, not Ctrl-C's 130.
-- SECURITY.md names a private channel for a vulnerability; the README says
-  that a Codex item with no use stays REVIEW.
-- The masking also finds a secret's name behind another flag's `=`
-  (`--env=TOKEN=…`), after what joins commands (`;`, `|`), in a connection
-  string, and under more names (cookie, session, passphrase, `--pass`,
-  `--pwd`, `--sig`, `--jwt`); the value is masked whole, whatever characters
-  it holds. SECURITY.md says what the masking reads and what it cannot.
-- An MCP server whose name ends in a character tool names drop (`docs.`, a
-  lone `é`) is seen as used: its calls were credited to another name, and it
-  came out REAP. So is a server named with `__` that was only reached
-  through the resource tools, once its transcripts are gone.
-- A session counts in the window when one of its turns happened in it. The
-  file's date counted it before: a folder restored from a backup, or copied
-  to a new machine, made every old session a recent one with no use in it.
-- A typed name that is one item's whole name and, read as
-  `platform:category:name`, another item, is not guessed: reap lists both
-  forms, each quoted as one word. It took the other item, `--yes` included.
-- The keep list is read again after the question is answered. An item kept
-  from another terminal while `Prune…? [y/N]` was open is left alone by
-  prune, mute and delete.
-- A scan that could read nothing is said as a failed scan by `snapshot`,
-  `share`, `gap` and `prune` too, and no snapshot of it is stored.
-- `reap why` takes a whole name before a namespaced one, finds a name with a
-  control character by what it is on disk, and for an item with a use on
-  record no longer asks for more sessions that change nothing.
-- `reap mute` waiting behind another run stops at once on Ctrl-C; `reap mute
-  mcp:<name>` says the item is a server; the `reap unmute` command inside an
-  error works for a name that begins with a dash.
-- `--claude-json` is checked by the commands that read it, not by `version`
-  or `install-hook`; the answer to a misplaced `reinvest` is no longer under
-  a page of usage; a name in the Markdown report cannot read as a tag or a
-  link.
-- The plugin's skill prunes the one item that was named, not everything;
-  INSTALL.md checks the downloaded archive against `checksums.txt`.
-- In the menu: a lock on a name that ends in a space comes off again; a
-  paste that pauses is still swallowed whole; a lock is applied before the
-  rest, so a prune of another copy in the same apply is always the one
-  refused; twins of one name and weight keep one order at every launch.
-- A delete that fails on the way says that part of the item is already gone.
-- A skill an agent names under `skills:` in its frontmatter is held at KEEP
-  (`agent-loaded`). Claude Code loads it into the agent when the agent
-  starts, no transcript records that, and it came out REAP.
-- An MCP server used through its prompts (`/mcp__server__prompt`) is seen as
-  used. The prompt was filed as a skill of that name and the server came
-  out REAP.
-- The measured token totals count a message once. Claude Code writes one
-  line per content block, each with the message's whole usage, and every
-  line was counted.
-- CLAUDE.md protects a skill named in any letter case, and `CLAUDE.local.md`
-  is read like `CLAUDE.md`.
-- A server is not kept by the calls of another whose name begins with its
-  own (`a` and `a__b`, `docs` and `docs.`): in the record of past uses a
-  call goes to the longest configured name that begins it.
-- The masking takes a password with no user in a URL (`redis://:…@host`), a
-  value with an escaped space, text glued after a closing quote, and a
-  connection string's value with a space in it.
-- `reap keep` writes the key by the item's name on disk, and takes the name
-  as the report shows it or ending in a space. For a name the report shows
-  cleaned it said `excluded from prune` and protected nothing.
-- The path of a config file is not the name of a server in it: typed where a
-  name goes it took the first server of the file, `--yes` and `delete`
-  included. The list of a shared name offers a quoted path for a skill or
-  an agent and none for a server.
-- `--claude-dir ""` and `--claude-json ""` are refused: read as not
-  given, the command ran on the usual folder.
-- A mute stopped because the item was kept meanwhile says so; the menu lets
-  no C1 control character through; a backslash in a name no longer breaks a
-  cell of the Markdown report.
-- Two first runs of the npm package at once both succeed: each downloads
-  into a folder of its own and moves the binary into place whole.
-- INSTALL.md says to run `reap uninstall-hook` before uninstalling;
-  SECURITY.md says what `--online` reaches and where a config is kept
-  unmasked.
-- More things at work with no use of their own on record are held, each with
-  its reason: the agent `settings.json` runs the session as (`main-agent`),
-  the agent a skill names under `agent:` (`skill-agent`), a skill one of your
-  own SessionStart hooks reads (`hook-loaded`), and a skill in
-  `~/.claude/skills` that OpenCode used from there (REVIEW,
-  `used-elsewhere`). An agent's `skills:` list is read however YAML writes
-  it, and names a skill by its frontmatter name too.
-- A transcript that cannot be opened makes the evidence incomplete: nothing
-  is REAP or MUTE on it, as the README says.
-- A failed scan is said by `route`, `by-project`, `apm` and `mute` too;
-  `reap manifest ""` is refused; a prune that leaves an item alone because
-  it was kept meanwhile names it.
-- A server whose name ends in a character tool names drop no longer shows a
-  second, transcript-only row; a server's prompt counts with a note after
-  its name.
-- In the menu, `q` on the screen of a platform with nothing left asks before
-  it drops choices made on another platform.
-- The npm package passes on an interrupt sent to it alone, clears a download
-  folder a killed run left, names the URL that failed, and ships only what
-  it runs.
-- `reap mute` leaves a file whose `---` header never closes as it is: it has
-  no frontmatter, as the scanner reads it.
-- The npm wrapper gives up on a download only when it stops arriving, not
-  after 30 seconds of a slow one.
-- Installed with npm into a folder you cannot write (`sudo npm i -g`), the
-  binary goes to `~/.cache/skillreaper/<version>/` instead of failing.
-- The headline's numbers add up when a muted skill has fired: it was taken
-  off the never-fired, among which it never was, and "held back" came out
-  one short for each.
-- An agent that a plugin's own `settings.json` runs the session as is KEEP
-  (`main-agent`), and `settings.local.json` has the last word on which
-  agent that is.
-- A SessionStart hook of yours is followed into the scripts beside the one
-  it names, and through `$CLAUDE_CONFIG_DIR`; a hook path that is relative
-  is the project's and is not read against the folder reap runs in.
-- Three things no longer protect a skill or an agent that nothing uses: a
-  README at a plugin's root that lists the plugin's skills, the word
-  `agent:` inside a skill's description, and `skills: null` in an agent.
-- `reap unmute` after one that was cut short finds the description back
-  and clears the entry. It failed on the missing copy at every run, and
-  `unmute --all` could not finish.
-- `reap mute` takes all of a quoted description whose lines are not
-  indented; the first line alone left a header that no longer parsed.
-  A file that begins with a byte order mark and was edited while muted
-  gets its description back.
-- `reap restore` of a server into a config whose `mcpServers` is `null` or
-  a list says so, where it said `not found`; `reap prune` and `reap mute`
-  with nothing to do say when the report has warnings.
-- The README lists every reason a verdict can carry; INSTALL.md's download
-  block stops at a failed download or checksum; the plugin's skill repeats
-  `--claude-dir` on the prune it runs.
-- An item whose name holds a character reap rewrites to print it (a
-  direction mark, a control character) is found under the name its uses
-  are filed under. It read as never used, and came out REAP.
-- A hook's script is followed when punctuation is glued to its path
-  (`start.sh;`, `start.sh&`), when a quote stands between the variable and
-  the rest (`"$HOME"/.claude/hooks/x.sh`), and when the script beside it
-  is a link to a file. The skill each of them loads was REAP.
-- `reap mute` reads a quote that closes on the description's own line as
-  the end of the value: an apostrophe inside single quotes, or a comment
-  holding a quote, made it say the file had no description, or take the
-  next key along.
-- `reap unmute` with its copy of the description gone says what to do
-  (write one back, run it again) in place of the system's `no such file`.
-- A `platform:category:name` that matches nothing is `not found`; it was
-  answered with a line about another tool's item of that name. A name not
-  found beside a report with warnings points at them: a file reap could
-  not read holds items it cannot find.
-- The money after `reap prune` and `reap mute` is priced with the sessions
-  of each moved item's own tool. An item of a tool with no session on
-  record claimed a monthly saving from Claude Code's.
-- One day is `1 day` and one session `1 session` in every view; a few
-  items fired among very many is `<1%` in every view, not `0%` in some;
-  the muted line says how many of the muted never fired, so that the
-  headline's figures close; the masthead puts what does not fit on a
-  second line, where it was cut before the words `warnings below`.
-- `reap why` has a sentence for `rare`; `reap apm` says its session count
-  is of all projects; `--json` leaves out the date of an item never used
-  or with no install date, where it wrote year 1.
-- `--model` takes an id with a date or `[1m]` after it for the weight and
-  for the price alike; `--mute-min-tokens 0` turns MUTE off, and the help
-  says so; `agent:` and list items in a header take a comment after a tab.
-- Run through `npx`, a printed hint names `npx skillreaper`: neither
-  `reap` nor `skillreaper` is on the PATH there.
-- No block of commands in the README, INSTALL.md or the changelog carries a
-  `# comment` after a command: pasted into zsh, where `#` is no comment,
-  the words after it became arguments. The usage lists are tables; the
-  three ways to install are three blocks.
-- `reap delete`, from the command line and from the menu, leaves an item
-  whose file is another one, or was written, since reap read it: a pull or
-  a reinstall can put a different skill under the same name while the
-  question waits, and a delete cannot be undone.
-- A quoted description that runs over several lines is weighed whole, as
-  `reap mute` strips it whole. Weighed as its first line, a heavy skill
-  came out a few tokens, never MUTE, and the saving claimed for muting it
-  was a hundredth of the real one.
-- A hook script whose path is in quotes is followed whatever the path
-  holds (a space, a bracket, an `&`).
-- `reap apm`, `reap manifest` and `reap route` find where a skill fired
-  the way its uses are counted: whatever case the transcript wrote, and
-  under the name in its header. `apm --diff` told you to drop a skill that
-  had fired in the repo.
-- A mute list that cannot be read is named, once, with what to do, before
-  any plan or question; the report warns that it cannot tell what is
-  muted. `reap mute` printed the JSON reader's error once per item.
-- After a prune of MCP servers alone the line says `weight not measured`,
-  not `saving ~0 tok/session`; with a measured item among them it says
-  `at least`.
-- The weekly reminder counts what `reap prune` would take: unused items
-  inside a plugin were counted as `to prune`.
-- `reap share` counts as dead what the report counts as dead: the weight
-  of skills that fired and are only heavy was in its `dead context`.
-- `install-hook --dry-run` on a `settings.json` that is a link leading
-  nowhere says so, as the real run does; the counts that still stood in a
-  fixed plural (`1 items never fired`, `1 uses`, `1 days ago`) agree in
-  number; under `npx` the agent view's `run reap for details` names
-  `npx skillreaper` too.
-- `reap gap` and the weekly reminder count as mutable what `reap mute`
-  takes: a heavy, rarely used skill inside a plugin was promised as
-  `recoverable with reap mute`, which then found nothing to mute.
-- Only a `---` at the start of a line closes a skill's header, for the
-  weight as for `reap mute`: an indented one inside a description is
-  text. The header ended there, and the description weighed a fraction of
-  what mute then took out.
-- A comment after a value in a header (`description: "x" # note`) is not
-  part of it, and `''` inside single quotes is one quote: both were
-  weighed and shown as written. The body of a file with CRLF line ends
-  is counted exactly.
-- A hook path with a space written `\ ` is followed.
-- The check before a delete is on what the delete takes, the skill's
-  folder, and not only on the file reap read in it: another folder of
-  that name with no `SKILL.md` read as `gone`, and was deleted.
-- `reap prune --json` marks a weight that was never measured
-  (`weight_unknown`, `unmeasured`), and the plan's table by source prints
-  `?` for it, not `~0 tok`; `--price NaN` is told it is not a number.
-- `reap delete` says in its question that a skill's whole folder goes, and
-  how many files are in it; a file put in that folder after reap read it
-  stops the delete, as a changed `SKILL.md` does.
-- What the report says can be done about a MUTE row is what reap does:
-  `reap why` no longer sends you to `reap mute` for a skill reached through
-  a link outside the folders reap edits, which `reap mute` refuses; and the
-  line of `reap gap` for skills a bulk `reap mute` leaves alone points at
-  `reap why` instead of saying reap cannot mute them.
-- The report's DO block and the plan of `reap prune` give a server's
-  measured weight, and say `weight not measured` or `at least` where it
-  was not: the DO block said `~0 tok/session reclaimed`, the plan `?` for
-  every server. `reap why --json` marks such a weight (`weight_unknown`).
-- Every reader of a skill's header ends it at the same line. A key written
-  after an indented `---` in the description was missed by one of them, so
-  a manual-only skill was weighed as if Claude loaded it. A value that is
-  only a comment (`allowed-tools: # none yet`) is no value.
-- A hook's Windows path keeps its backslashes; `reap keep --list` prints
-  names without control characters; `reap route --md` escapes names; the
-  warnings count `1 day`; the line on weight never measured names MCP
-  servers alone, since hooks are not judged; `reap why` on a prose file
-  gives the file's size, not a `description`.
-- The line asking for a star after a report says what reap `can save you`:
-  it said `saved you` before anything was pruned. After a prune it says
-  what that prune saved.
-- `reap prune --quiet` and `reap mute --quiet` without `--yes`, with
-  something to do, exit 3 and say `nothing done: --quiet needs --yes` on
-  stderr. They exited 0 in silence, and a script took that for done.
-- A skill whose name is one plain word is protected by your CLAUDE.md only
-  where the word is written as a name: `/review`, between backticks,
-  asterisks, quotes or as a link's text, beside the word "skill", in a
-  list item that begins with names (`- review: …`, `- review, deploy`) or
-  a heading of its own, or alone in a table cell. "always review the
-  diff" protected a skill named `review` that nothing used; so did
-  "docs/review" and "review skills". A word is one in any alphabet, and a
-  longer word is not the name it begins with (`обзорный` for `обзор`). A
-  name with a dash, a colon, an underscore or a digit counts wherever it
-  stands, as before. `reap why` says when a name is in your CLAUDE.md as a
-  plain word that protects nothing, and speaks of CLAUDE.md for skills
-  only: a server of a name written there read "referenced" under REAP.
-- A description that begins on the line after `description:` is weighed:
-  it read as empty, a few tokens for 600 characters, while `reap mute`
-  took all of it. `allowed-tools` written one per line is that many
-  tools, not `all`.
-- `reap why` does not send a skill to `reap prune` when its whole skills
-  folder is a link, which prune refuses; `reap prune`, `reap delete` and a
-  named `reap mute` refuse such a case before any note, plan or question.
-- `reap --agent` names `reap prune` only when it would take something,
-  and says that its dead-token figure is a floor when some unused items
-  were never measured; the headline does not say `~0 removable` for items
-  that are removable and unmeasured; with sessions of two tools the
-  dead-token figure says it is an average over both; `reap gap` counts
-  the MUTE rows a bulk mute leaves alone beside the ones it takes.
-- A skill in `~/.claude/skills` is held at REVIEW when another tool that
-  loads that folder could not be read (OpenCode's history without the
-  `sqlite3` CLI): it may be in use there, unseen. It came out REAP and went
-  into the prune plan. The warning about that tool says so.
-- A CLAUDE.md saved with a byte order mark is read from its first line: a
-  list of skills that began there protected nothing. One long line that
-  repeats a skill's name no longer takes seconds to read.
-- "Monthly figures are extrapolated from N days of history" takes N from
-  the tools the figures come from, not from one with nothing unused in it.
-- The undo printed after a mute names the file when another tool has an
-  item of that name: `reap unmute <name>` brought back every copy. A named
-  mute of a description that is empty, or no longer than the name, is
-  refused: it rewrote the file to save nothing.
-- With two tools, `reap --agent` and `--md` say that the dead-token figure
-  is an average over all their sessions, as the report does: the rows under
-  it did not add up to it. `reap gap --agent` has no row for a kind of item
-  there is none of, and `reap route` tells apart two tools' skills of one
-  name (`shared (codex)`, and `platform` in its JSON).
-- A key of a nested map in a skill's header (`metadata:` then an indented
-  `allowed-tools:`) is not the skill's own: it counted as its tools, or
-  made it run only by hand.
-- A skill that runs only by hand is not reap's to mute: nothing of it is
-  in the context, and the mute took the text its slash menu shows. A named
-  `reap mute` that cannot be done (already muted, no description, only by
-  hand) says so before it asks, where the answer to a yes was an error.
-- A bulk `reap prune` no longer says "pruned only by name" of a skill whose
-  whole skills folder is a link: by name it is refused too. The note and
-  `--json` say to remove it by hand, as `reap why` does.
-- The first weekly reminder does not say "more than at the last check",
-  and a later one names only what rose.
-- A clock pinned by `SOURCE_DATE_EPOCH` is said when it cannot be right for
-  this stack: a transcript is newer than it, or it lies in the future. A
-  shell that exports the variable for its own reasons (nix) had every age
-  and window measured against a date decades back, with no word of it.
-- `reap why` on a skill that runs only by hand
-  (`disable-model-invocation: true`) says it weighs `0 tok`, and why: it
-  said `weight unknown` of a weight that is known.
-- `reap prune --json` after an apply counts `unmeasured` among what was
-  moved; `reap keep --remove` and `reap apm` print names without control
-  characters; INSTALL.md says what to do with the Windows archive.
-
-### Behaviour changes on the command line
-
-- `reap prune <name>` prunes that one item. In 0.8 the name was ignored and
-  the whole plan was queued.
-- A muted item is no longer REAP: its verdict is `-` with the reason `muted`,
-  so the counts of the report and the rows of `--json` change for anyone who
-  had muted something. `--json` also gained `MutedCount`, `Platforms`,
-  `PriceBasis`, `PricePerToken`, `MonthlyBasisDays`, `PlatformSessions` and
-  `PlatformSessionsPerMonth`.
-- The session count and the measured tokens are lower than 0.8 printed for
-  the same folder: a session counts by when it happened, and a message is
-  measured once.
-- `echo y | reap prune` is refused, and a declined prompt exits 3.
-- `--dry-run` on `prune` and `mute` exits 2: they show their plan and ask
-  already.
 
 ### reap reinvest (experimental)
 
@@ -682,6 +133,589 @@ the same cache files and the same checks. What to know before running it:
   stand-ins only, so try it with `--dry-run` first.
 - Before the question that installs a skill, its whole text is on the
   screen: it is loaded in every session from then on.
+
+It is not in the menu yet.
+
+### Every fix, by area
+
+The 262 fixes of this release, most of them found by reviewing it before
+it went out. Each says what was wrong where that is not plain.
+
+<details>
+<summary>Open the list</summary>
+
+#### Verdicts and numbers
+
+- A YAML description block whose line is indented less than the rest keeps
+  that line's text; its first letters, or half an accented one, were cut.
+- A skill or agent of your own is dated by its file, so one written or edited
+  in the last `--grace-days` is REVIEW(grace), not REAP: it had no date at all,
+  and a skill made today was offered as safe to prune.
+- The report's `DO` line for `reap prune` counts what a bare `reap prune`
+  takes, not every unused item.
+- Model ids with a release date (`claude-haiku-4-5-20251001`) get their
+  model's price: they were left out of the blended `$/month`.
+- MCP servers of one name in several projects are each listed; one of them,
+  picked at random, used to stand for all.
+- A skill named in a heading of your CLAUDE.md is protected like one named in
+  its text. Lines starting with `#` were skipped as comments; they are
+  headings, and a session loads them.
+- A skill used under another letter case than its folder's is found in the
+  record of past uses. It read as never used and could come out REAP.
+- A project folder linked to another one in the same `projects` folder is
+  counted once, and the measured token totals count only the window.
+- A parse is counted from the start of the day the window opens on (UTC), so
+  a cached parse and a fresh one agree at the window's edge.
+- An MCP server whose name holds `__` is found in the record of past uses.
+  Its calls were filed under the part before the first `__`, so once its
+  transcripts aged out it came out REAP and a bulk prune took it.
+- `reap share` counts nothing for an item put back by hand, and `reap restore
+  001` means the item named 001 when the entry 001 is already back.
+- `reap why`, `reap manifest` and `reap route` count an item against the
+  sessions of its own tool, as its verdict does. `reap why` says when a
+  skill's weight is what the last session's listing kept of its description.
+- An MCP server whose name ends in a character tool names drop (`docs.`, a
+  lone `é`) is seen as used: its calls were credited to another name, and it
+  came out REAP. So is a server named with `__` that was only reached
+  through the resource tools, once its transcripts are gone.
+- A session counts in the window when one of its turns happened in it. The
+  file's date counted it before: a folder restored from a backup, or copied
+  to a new machine, made every old session a recent one with no use in it.
+- A skill an agent names under `skills:` in its frontmatter is held at KEEP
+  (`agent-loaded`). Claude Code loads it into the agent when the agent
+  starts, no transcript records that, and it came out REAP.
+- An MCP server used through its prompts (`/mcp__server__prompt`) is seen as
+  used. The prompt was filed as a skill of that name and the server came
+  out REAP.
+- The measured token totals count a message once. Claude Code writes one
+  line per content block, each with the message's whole usage, and every
+  line was counted.
+- CLAUDE.md protects a skill named in any letter case, and `CLAUDE.local.md`
+  is read like `CLAUDE.md`.
+- A server is not kept by the calls of another whose name begins with its
+  own (`a` and `a__b`, `docs` and `docs.`): in the record of past uses a
+  call goes to the longest configured name that begins it.
+- More things at work with no use of their own on record are held, each with
+  its reason: the agent `settings.json` runs the session as (`main-agent`),
+  the agent a skill names under `agent:` (`skill-agent`), a skill one of your
+  own SessionStart hooks reads (`hook-loaded`), and a skill in
+  `~/.claude/skills` that OpenCode used from there (REVIEW,
+  `used-elsewhere`). An agent's `skills:` list is read however YAML writes
+  it, and names a skill by its frontmatter name too.
+- A transcript that cannot be opened makes the evidence incomplete: nothing
+  is REAP or MUTE on it, as the README says.
+- A server whose name ends in a character tool names drop no longer shows a
+  second, transcript-only row; a server's prompt counts with a note after
+  its name.
+- The headline's numbers add up when a muted skill has fired: it was taken
+  off the never-fired, among which it never was, and "held back" came out
+  one short for each.
+- An agent that a plugin's own `settings.json` runs the session as is KEEP
+  (`main-agent`), and `settings.local.json` has the last word on which
+  agent that is.
+- A SessionStart hook of yours is followed into the scripts beside the one
+  it names, and through `$CLAUDE_CONFIG_DIR`; a hook path that is relative
+  is the project's and is not read against the folder reap runs in.
+- Three things no longer protect a skill or an agent that nothing uses: a
+  README at a plugin's root that lists the plugin's skills, the word
+  `agent:` inside a skill's description, and `skills: null` in an agent.
+- An item whose name holds a character reap rewrites to print it (a
+  direction mark, a control character) is found under the name its uses
+  are filed under. It read as never used, and came out REAP.
+- A hook's script is followed when punctuation is glued to its path
+  (`start.sh;`, `start.sh&`), when a quote stands between the variable and
+  the rest (`"$HOME"/.claude/hooks/x.sh`), and when the script beside it
+  is a link to a file. The skill each of them loads was REAP.
+- The money after `reap prune` and `reap mute` is priced with the sessions
+  of each moved item's own tool. An item of a tool with no session on
+  record claimed a monthly saving from Claude Code's.
+- `--model` takes an id with a date or `[1m]` after it for the weight and
+  for the price alike; `--mute-min-tokens 0` turns MUTE off, and the help
+  says so; `agent:` and list items in a header take a comment after a tab.
+- A quoted description that runs over several lines is weighed whole, as
+  `reap mute` strips it whole. Weighed as its first line, a heavy skill
+  came out a few tokens, never MUTE, and the saving claimed for muting it
+  was a hundredth of the real one.
+- A hook script whose path is in quotes is followed whatever the path
+  holds (a space, a bracket, an `&`).
+- `reap apm`, `reap manifest` and `reap route` find where a skill fired
+  the way its uses are counted: whatever case the transcript wrote, and
+  under the name in its header. `apm --diff` told you to drop a skill that
+  had fired in the repo.
+- `reap share` counts as dead what the report counts as dead: the weight
+  of skills that fired and are only heavy was in its `dead context`.
+- `reap gap` and the weekly reminder count as mutable what `reap mute`
+  takes: a heavy, rarely used skill inside a plugin was promised as
+  `recoverable with reap mute`, which then found nothing to mute.
+- Only a `---` at the start of a line closes a skill's header, for the
+  weight as for `reap mute`: an indented one inside a description is
+  text. The header ended there, and the description weighed a fraction of
+  what mute then took out.
+- A comment after a value in a header (`description: "x" # note`) is not
+  part of it, and `''` inside single quotes is one quote: both were
+  weighed and shown as written. The body of a file with CRLF line ends
+  is counted exactly.
+- A hook path with a space written `\ ` is followed.
+- The report's DO block and the plan of `reap prune` give a server's
+  measured weight, and say `weight not measured` or `at least` where it
+  was not: the DO block said `~0 tok/session reclaimed`, the plan `?` for
+  every server. `reap why --json` marks such a weight (`weight_unknown`).
+- Every reader of a skill's header ends it at the same line. A key written
+  after an indented `---` in the description was missed by one of them, so
+  a manual-only skill was weighed as if Claude loaded it. A value that is
+  only a comment (`allowed-tools: # none yet`) is no value.
+- A skill whose name is one plain word is protected by your CLAUDE.md only
+  where the word is written as a name: `/review`, between backticks,
+  asterisks, quotes or as a link's text, beside the word "skill", in a
+  list item that begins with names (`- review: …`, `- review, deploy`) or
+  a heading of its own, or alone in a table cell. "always review the
+  diff" protected a skill named `review` that nothing used; so did
+  "docs/review" and "review skills". A word is one in any alphabet, and a
+  longer word is not the name it begins with (`обзорный` for `обзор`). A
+  name with a dash, a colon, an underscore or a digit counts wherever it
+  stands, as before. `reap why` says when a name is in your CLAUDE.md as a
+  plain word that protects nothing, and speaks of CLAUDE.md for skills
+  only: a server of a name written there read "referenced" under REAP.
+- A description that begins on the line after `description:` is weighed:
+  it read as empty, a few tokens for 600 characters, while `reap mute`
+  took all of it. `allowed-tools` written one per line is that many
+  tools, not `all`.
+- A skill in `~/.claude/skills` is held at REVIEW when another tool that
+  loads that folder could not be read (OpenCode's history without the
+  `sqlite3` CLI): it may be in use there, unseen. It came out REAP and went
+  into the prune plan. The warning about that tool says so.
+- A CLAUDE.md saved with a byte order mark is read from its first line: a
+  list of skills that began there protected nothing. One long line that
+  repeats a skill's name no longer takes seconds to read.
+- "Monthly figures are extrapolated from N days of history" takes N from
+  the tools the figures come from, not from one with nothing unused in it.
+- With two tools, `reap --agent` and `--md` say that the dead-token figure
+  is an average over all their sessions, as the report does: the rows under
+  it did not add up to it. `reap gap --agent` has no row for a kind of item
+  there is none of, and `reap route` tells apart two tools' skills of one
+  name (`shared (codex)`, and `platform` in its JSON).
+- A key of a nested map in a skill's header (`metadata:` then an indented
+  `allowed-tools:`) is not the skill's own: it counted as its tools, or
+  made it run only by hand.
+- `reap why` on a skill that runs only by hand
+  (`disable-model-invocation: true`) says it weighs `0 tok`, and why: it
+  said `weight unknown` of a weight that is known.
+- A history read only in part counts as not read: a database too large for
+  one query, or one record over the limit, left sessions behind, and a skill
+  used in the part that was lost came out REAP. A long list of names after
+  `Skills:` protects its last name as it does its first.
+
+#### Prune, mute, restore, delete and keep
+
+- Quarantine paths are unique. Two items with the same name used to overwrite
+  each other there, and `restore` could not bring both back.
+- A name two items share is refused rather than guessed: select with
+  `codex:skill:x` or a path.
+- Named prune and delete reach a plugin's item or a link, and a named mute a
+  plugin's item; a bulk prune or mute never does. A named mute of a skill
+  reached through a link outside the folders reap edits is refused before
+  any question.
+- `reap restore` with no arguments lists what is pruned, with ids.
+- A kept item refuses a named prune or mute until `reap keep --remove`.
+- Removing, deleting or restoring an MCP server checks `~/.claude.json` again
+  just before writing it: if Claude Code changed it meanwhile, nothing is
+  written and the command says to run again, instead of losing that change.
+- On macOS and Linux the prune lock is the system's own (flock): a run that
+  dies drops it, and two runs finding a lock left by a dead one can no longer
+  both get in.
+- `reap unmute <path>` undoes that one copy and leaves a namesake muted in
+  another tool as it is.
+- `reap mute` works on a SKILL.md saved with a byte-order mark, and keeps the
+  mark.
+- `reap mute` skips an item another prune moved meanwhile, as prune does,
+  instead of failing on it.
+- Pruning an agent whose file is named `SKILL.md` moves that file, not the
+  whole agents folder.
+- `reap mute` and `reap unmute` leave the file's date as it was. A personal
+  skill is dated by its file, so one muted and unmuted read as installed
+  today and sat in the grace period again.
+- `reap keep` and `reap keep --remove` take the lock the other commands
+  share: two run at once used to lose one of the two entries.
+- `reap restore` takes an id typed without its zeros (`reap restore 1`), and
+  its listing prints a server's name with no control characters.
+- `reap unmute <path>` takes a relative path.
+- `--claude-json` given without `--claude-dir` is the file read and edited.
+  It was dropped without a word, and `reap prune <server>` edited the usual
+  file.
+- A server defined for every project and again for one project, in one file,
+  is not guessed at by name: `reap prune` and `reap delete` took the first.
+- `reap restore 7` brings back the item named 7 when there is one, never an
+  entry already restored, and says what it restored (`restored 002 (name)`).
+- `--claude-dir` on a folder with no `.claude.json` of its own takes no other
+  profile's: the file next to the folder is read only for a folder named
+  `.claude`. `reap prune --claude-dir ~/.claude-work` edited `~/.claude.json`.
+- A name that begins like a selector (`codex:foo`, `agent:bar`) is found by
+  prune, mute and delete; the way out of a kept item whose name begins with
+  a dash is printed by its key (`reap keep --remove skill:-name`).
+- A mute or unmute keeps the file's date with no gap: a run killed right
+  after the write left today's date, and the skill read as newly installed.
+- Pruning a server whose key is written twice in the config takes every
+  spelling; the earlier one used to become the live definition.
+- A typed name that is one item's whole name and, read as
+  `platform:category:name`, another item, is not guessed: reap lists both
+  forms, each quoted as one word. It took the other item, `--yes` included.
+- The keep list is read again after the question is answered. An item kept
+  from another terminal while `Prune…? [y/N]` was open is left alone by
+  prune, mute and delete.
+- `reap mute` waiting behind another run stops at once on Ctrl-C; `reap mute
+  mcp:<name>` says the item is a server; the `reap unmute` command inside an
+  error works for a name that begins with a dash.
+- A delete that fails on the way says that part of the item is already gone.
+- `reap keep` writes the key by the item's name on disk, and takes the name
+  as the report shows it or ending in a space. For a name the report shows
+  cleaned it said `excluded from prune` and protected nothing.
+- The path of a config file is not the name of a server in it: typed where a
+  name goes it took the first server of the file, `--yes` and `delete`
+  included. The list of a shared name offers a quoted path for a skill or
+  an agent and none for a server.
+- `reap mute` leaves a file whose `---` header never closes as it is: it has
+  no frontmatter, as the scanner reads it.
+- `reap unmute` after one that was cut short finds the description back
+  and clears the entry. It failed on the missing copy at every run, and
+  `unmute --all` could not finish.
+- `reap mute` takes all of a quoted description whose lines are not
+  indented; the first line alone left a header that no longer parsed.
+  A file that begins with a byte order mark and was edited while muted
+  gets its description back.
+- `reap restore` of a server into a config whose `mcpServers` is `null` or
+  a list says so, where it said `not found`; `reap prune` and `reap mute`
+  with nothing to do say when the report has warnings.
+- `reap mute` reads a quote that closes on the description's own line as
+  the end of the value: an apostrophe inside single quotes, or a comment
+  holding a quote, made it say the file had no description, or take the
+  next key along.
+- `reap unmute` with its copy of the description gone says what to do
+  (write one back, run it again) in place of the system's `no such file`.
+- `reap delete`, from the command line and from the menu, leaves an item
+  whose file is another one, or was written, since reap read it: a pull or
+  a reinstall can put a different skill under the same name while the
+  question waits, and a delete cannot be undone.
+- A mute list that cannot be read is named, once, with what to do, before
+  any plan or question; the report warns that it cannot tell what is
+  muted. `reap mute` printed the JSON reader's error once per item.
+- The check before a delete is on what the delete takes, the skill's
+  folder, and not only on the file reap read in it: another folder of
+  that name with no `SKILL.md` read as `gone`, and was deleted.
+- `reap delete` says in its question that a skill's whole folder goes, and
+  how many files are in it; a file put in that folder after reap read it
+  stops the delete, as a changed `SKILL.md` does.
+- `reap prune --quiet` and `reap mute --quiet` without `--yes`, with
+  something to do, exit 3 and say `nothing done: --quiet needs --yes` on
+  stderr. They exited 0 in silence, and a script took that for done.
+- The undo printed after a mute names the file when another tool has an
+  item of that name: `reap unmute <name>` brought back every copy. A named
+  mute that would save no token (a description that is empty, or weighs no
+  more than the name) is refused: it rewrote the file to save nothing.
+- A skill that runs only by hand is not reap's to mute: nothing of it is
+  in the context, and the mute took the text its slash menu shows. A named
+  `reap mute` that cannot be done (already muted, no description, only by
+  hand) says so before it asks, where the answer to a yes was an error.
+- A bulk `reap prune` no longer says "pruned only by name" of a skill whose
+  whole skills folder is a link: by name it is refused too. The note and
+  `--json` say to remove it by hand, as `reap why` does.
+- `reap restore` tells apart two projects' servers of one name, in its list
+  and when it asks for an id. A bulk mute leaves out an item whose mute
+  would save nothing, as a mute by name refuses it. The undo line of a mute
+  never prints a control character from a path.
+
+#### What reap accepts and prints
+
+- `--days` and `--grace-days` above 36500 are refused: past a century the date
+  arithmetic wrapped and the window came out wrong. `--price` must be finite.
+- A relative `--claude-dir` or `--claude-json` is made absolute first: mute
+  refused it, and what prune and mute recorded named nothing from another
+  folder.
+- Under the `skillreaper` name, `help` keeps its columns.
+- Restore, unmute and `keep --list` on a `--claude-dir` that is not there say
+  so, instead of "Nothing to restore."
+- `--claude-dir` alone finds the `.claude.json` inside or beside it: every MCP
+  server used to drop out.
+- `--source own` and `--source usr` work, as the report labels those sources;
+  a mute with no match lists the sources there are.
+- `--agent` says items were held back from REAP only when some were.
+- `--mute-threshold` is described as what it counts: uses ÷ sessions.
+- Paths reap prints (delete's confirmation among them) carry no control
+  characters from a folder's name.
+- `reap <flag> reinvest` says reinvest comes first, instead of calling it
+  unknown.
+- `reap --agent` and `reap gap --agent` say `n/a`, not `0%`, when the window
+  holds no session, and the gap view says so in a line: nothing was read, so
+  nothing is measured.
+- `reap why` on an item held for a use before the window says so, and how to
+  overrule it, instead of asking for more sessions that change nothing.
+- A command reap prints to be pasted (`reap unmute`, `reap keep --remove`,
+  the hints of `reap why`) carries a name or a path with a space as one
+  quoted word.
+- Paths printed by `reap unmute` and `reap restore`, in their listings and
+  their refusals, carry no control characters from a folder's name.
+- The refusal for a kept item gives a `reap keep --remove` that can be pasted
+  for a name with a space.
+- `reap snapshot --list --json` prints JSON.
+- An integer flag written in another base (`--days 010`, `0x10`, `1_000`) is
+  refused. `010` used to be read as octal: eight days, without a word.
+- `reap why` counts the days left in the grace period to the date the verdict
+  uses, and its rate line reads `uses/session 2%` instead of running the
+  label into the figure.
+- `reap gap` in a narrow window gives up the bar and the token columns
+  before its category names, which were cut to `…` on every row.
+- `CLAUDE_CONFIG_DIR` written with a trailing slash or as a relative path is
+  the same folder: it used to open a second, empty record of past uses.
+- A command printed to be pasted (`reap restore 001`, `reap unmute`, `reap
+  keep --remove`) repeats `--claude-dir` when the run was given one. Ids
+  start at 001 in every folder, so the pasted undo acted on another folder.
+- `reap mute <server>` says mute is for skills and agents and points to
+  `reap prune`, instead of saying to edit the config by hand.
+- `reap <flags> reinvest` gives a command that keeps the reinvest flags that
+  were typed; it used to drop them, so the pasted line was not a dry run.
+- A warning about the plugin registry is printed once, not three times.
+- With `--claude-dir` and no session in the window, the report says none was
+  found, not that Claude Code keeps no transcripts.
+- `reap why` counts the sessions still needed against the minimum the verdict
+  uses for an item installed inside the window.
+- A printed command for a name that starts with a dash puts it after `--`;
+  the undo of `install-hook` and delete's restore hint repeat `--claude-dir`.
+- Run as `skillreaper`, every hint says `skillreaper`: the weekly nudge said
+  ``Run `reap` ``, a command an npm install does not have.
+- A command inside an error (`reap restore 001`, `reap unmute <name>`,
+  `reap prune <server>`) repeats `--claude-dir` when the run named a folder.
+- A mistyped `--claude-json`, `--claude-dir` on a file and `snapshot --list`
+  on a missing folder are errors, not an empty stack.
+- A scan that could read nothing is said as a failed scan by `snapshot`,
+  `share`, `gap` and `prune` too, and no snapshot of it is stored.
+- `reap why` takes a whole name before a namespaced one, finds a name with a
+  control character by what it is on disk, and for an item with a use on
+  record no longer asks for more sessions that change nothing.
+- `--claude-json` is checked by the commands that read it, not by `version`
+  or `install-hook`; the answer to a misplaced `reinvest` is no longer under
+  a page of usage; a name in the Markdown report cannot read as a tag or a
+  link.
+- `--claude-dir ""` and `--claude-json ""` are refused: read as not
+  given, the command ran on the usual folder.
+- A mute stopped because the item was kept meanwhile says so; the menu lets
+  no C1 control character through; a backslash in a name no longer breaks a
+  cell of the Markdown report.
+- A failed scan is said by `route`, `by-project`, `apm` and `mute` too;
+  `reap manifest ""` is refused; a prune that leaves an item alone because
+  it was kept meanwhile names it.
+- A `platform:category:name` that matches nothing is `not found`; it was
+  answered with a line about another tool's item of that name. A name not
+  found beside a report with warnings points at them: a file reap could
+  not read holds items it cannot find.
+- One day is `1 day` and one session `1 session` in every view; a few
+  items fired among very many is `<1%` in every view, not `0%` in some;
+  the muted line says how many of the muted never fired, so that the
+  headline's figures close; the masthead puts what does not fit on a
+  second line, where it was cut before the words `warnings below`.
+- `reap why` has a sentence for `rare`; `reap apm` says its session count
+  is of all projects; `--json` leaves out the date of an item never used
+  or with no install date, where it wrote year 1.
+- Run through `npx`, a printed hint names `npx skillreaper`: neither
+  `reap` nor `skillreaper` is on the PATH there.
+- After a prune of MCP servers alone the line says `weight not measured`,
+  not `saving ~0 tok/session`; with a measured item among them it says
+  `at least`.
+- `reap prune --json` marks a weight that was never measured
+  (`weight_unknown`, `unmeasured`), and the plan's table by source prints
+  `?` for it, not `~0 tok`; `--price NaN` is told it is not a number.
+- What the report says can be done about a MUTE row is what reap does:
+  `reap why` no longer sends you to `reap mute` for a skill reached through
+  a link outside the folders reap edits, which `reap mute` refuses; and the
+  line of `reap gap` for skills a bulk `reap mute` leaves alone points at
+  `reap why` instead of saying reap cannot mute them.
+- A hook's Windows path keeps its backslashes; `reap keep --list` prints
+  names without control characters; `reap route --md` escapes names; the
+  warnings count `1 day`; the line on weight never measured names MCP
+  servers alone, since hooks are not judged; `reap why` on a prose file
+  gives the file's size, not a `description`.
+- The line asking for a star after a report says what reap `can save you`:
+  it said `saved you` before anything was pruned. After a prune it says
+  what that prune saved.
+- `reap why` does not send a skill to `reap prune` when its whole skills
+  folder is a link, which prune refuses; `reap prune`, `reap delete` and a
+  named `reap mute` refuse such a case before any note, plan or question.
+- `reap --agent` names `reap prune` only when it would take something,
+  and says that its dead-token figure is a floor when some unused items
+  were never measured; the headline does not say `~0 removable` for items
+  that are removable and unmeasured; with sessions of two tools the
+  dead-token figure says it is an average over both; `reap gap` counts
+  the MUTE rows a bulk mute leaves alone beside the ones it takes.
+- A clock pinned by `SOURCE_DATE_EPOCH` is said when it cannot be right for
+  this stack: a transcript is newer than it, or it lies in the future. A
+  shell that exports the variable for its own reasons (nix) had every age
+  and window measured against a date decades back, with no word of it.
+- `reap prune --json` after an apply counts `unmeasured` among what was
+  moved; `reap keep --remove` and `reap apm` print names without control
+  characters; INSTALL.md says what to do with the Windows archive.
+- `reap why` on a skill held because another tool's history could not be
+  read says whose history is missing: it said reap had no record of its use,
+  above `uses 2`. Its advice for a name that is a plain word in CLAUDE.md
+  gives the full key (`reap keep skill:<name>`), and is not given for an
+  item that is kept.
+
+#### The menu
+
+- A key or a mouse report that arrives in two pieces on a slow link is read
+  whole: its tail could read as a key, and the letter that ends an arrow
+  marked the row to delete.
+- Keys pressed while an apply is at work are dropped: a `q` pressed during a
+  slow one left the menu before its failures could be read.
+- On a narrow window the receipt's big figure gives way to a short one, as
+  the header's does, so that the words beside it stay whole.
+- A stray `ESC [` (Alt+[) ends at the next Esc or Enter, where it swallowed
+  the arrow after it and let its last letter through as a key.
+- A name made of accents alone is shown as `(no name)`.
+- A choice that could not be carried out stays chosen, so that the same key
+  applies it again once its cause is put right.
+- An apply started from the screen after the last row shows what came of it,
+  where it showed nothing, and that screen counts what was just applied.
+- A delete of a row whose file the menu itself changed through another row
+  is not refused.
+- The header says `you saved` for what was applied and `would save` for what
+  is chosen or could not be done, each with its own figure, and the question
+  before an apply says `to save`.
+- A sum under one unit of the currency is `<$1` in the short figure, where
+  it was `$0`.
+- A lock applied from the screen between lists is counted there.
+- After the menu's own mute of a file, every row that is that file can still
+  be deleted, unless somebody else changed it in the meantime: that change
+  is still refused.
+- The Linux console's F1 to F5 type nothing, where they chose or marked a
+  row.
+- In plain text a title is cut at the window only.
+- Where the locale cannot draw a currency's symbol the amount carries the
+  currency's code, where a sum in yuan read `JPY`.
+- The green line and the question's words are said in fewer words before
+  they are cut by a narrow window.
+- An agent the menu muted can be deleted, through a link to it too.
+- Where the locale cannot draw the big font (`LC_ALL=C`), figures and titles
+  are plain text, where they were blocks of `#`.
+- A name cut in its middle no longer leaves an accent on the `…`.
+- Where the locale cannot draw a wide character, the columns after it stay
+  in line.
+- The screen with no rows says `q quit`.
+- A menu apply that partly failed shows what went well first, then the
+  failure's cause without the paths that pushed it off the screen.
+- A joined emoji in a name shows as its emoji in the menu, not with
+  replacement marks.
+- In the menu, Option+arrow (Option as Meta) is no key, as other Alt keys
+  are; its tail no longer arrived as `[` and `a`, which chose every
+  suggestion. Esc pressed twice quickly is one Esc, not nothing.
+- Ctrl-C pressed while the menu waits behind another run's lock stops the
+  apply. It used to be lost, and everything went through once the lock came
+  free.
+- Two projects whose folders share a name are two groups in the menu, each
+  named by its whole path; they used to share one name and open together.
+- In a narrow window the menu's legend keeps `q quit`: it takes the place of
+  the last keys shown instead of being the one cut.
+- In the menu: a selection's footer says `space chooses` (it never only
+  pruned); the question before a plugin is turned off reads `[y/n]`, since
+  Enter does not answer it; a shared folder named on the receipt is cleaned
+  of control characters; counts stand clear of the names before them in the
+  narrowest window; the card at its smallest keeps the line that explains
+  the choice; on a flat plan the saved line reads as a sentence.
+- In the menu: Ctrl-C while another run holds the lock ends the wait at
+  once; the other rows of a plugin already switched off are not reported as
+  interrupted; a selection's footer counts what space will choose; two rows
+  of one name from two marketplaces say which plugin each is; in the
+  narrowest window the status and a group's name are cut short of the apply
+  label and of the count, and the column title is not cut mid-word.
+- In the menu: with nothing chosen the status has the whole row (a failure's
+  reason was cut off); unlocking two rows that share a lock is no failure; a
+  stray byte no longer eats the keys typed after it; a skill and an agent of
+  one name say which is which; a narrow receipt keeps a gap before the
+  amount; rows and groups of equal weight keep one order at every launch.
+- A lock from the menu is written by the item's name on disk. For a name with
+  a control character in it the menu said locked and nothing was protected.
+- In the menu, a lock is every copy's lock (the keep list goes by category
+  and name): the other copies show locked at once and the receipt says so.
+  Two rows in quarantine under one name say where each was and its id; the
+  card names the marketplace when two plugins share a name; a receipt line
+  keeps the name beside an amount too wide for the window.
+- In the menu: a lock on a name that ends in a space comes off again; a
+  paste that pauses is still swallowed whole; a lock is applied before the
+  rest, so a prune of another copy in the same apply is always the one
+  refused; twins of one name and weight keep one order at every launch.
+- In the menu, `q` on the screen of a platform with nothing left asks before
+  it drops choices made on another platform.
+- Where the locale cannot draw them, the marks inside a figure are plain
+  too: a no-break space between thousands came out `1?344`. The green line
+  never shows part of a figure (`you would save US$1` stood for
+  US$1,200.00): it takes a short figure, and where that has no room either,
+  it is left out. On the narrowest receipt what comes back heavier is said
+  whole.
+
+#### Secrets in the report
+
+- A credential after `Authorization: Basic` or `Token`, after `curl -u`, or in
+  a `Cookie:` header is masked in the report, `--json` and `--md`. Only the
+  scheme was masked before, and the credential was printed.
+- A secret in a hook or server command is masked in more shapes: in quotes
+  (`--token "…"`, `TOKEN="…"`, `{"api_key":"…"}`), after `=` when it
+  begins with a dash, as the user part of a URL, after `--user` or glued to
+  `-u`, with a space in it, and in a Digest `Authorization` header. A server's
+  argument with a space in it stays one word, so all of it is masked.
+- The masking also finds a secret's name behind another flag's `=`
+  (`--env=TOKEN=…`), after what joins commands (`;`, `|`), in a connection
+  string, and under more names (cookie, session, passphrase, `--pass`,
+  `--pwd`, `--sig`, `--jwt`); the value is masked whole, whatever characters
+  it holds. SECURITY.md says what the masking reads and what it cannot.
+- The masking takes a password with no user in a URL (`redis://:…@host`), a
+  value with an escaped space, text glued after a closing quote, and a
+  connection string's value with a space in it.
+
+#### Hook, weekly reminder, npm and plugin
+
+- `reap uninstall-hook` says when there was no hook to remove, and
+  `reap install-hook` repairs a hook that names a reap binary which moved,
+  and says when there was nothing to change.
+- `reap uninstall-hook` leaves a hook group that is someone else's alone, even
+  an empty one; `"hooks": null` or `[]` in settings.json counts as no hooks.
+- The weekly nudge says what grew, items to prune or to mute; `reap diff`
+  counts the snapshots still missing; naming a muted item in `reap prune`
+  says it is muted.
+- After a cleanup the weekly nudge's baseline follows the counts down, so it
+  speaks again when new unused items appear.
+- `install-hook` repairs every stale hook of ours, not the last one.
+- The plugin's `reap` skill no longer says a piped word answers the prune
+  question: without a terminal prune and mute stop and ask for `--yes`.
+- The weekly nudge stays quiet where it cannot write down that it spoke; it
+  used to speak at the start of every session.
+- `docs/tapes/README.md` and `hero-fixture.sh` give a rebuild command that
+  sets `SOURCE_DATE_EPOCH`; CONTRIBUTING and `docs/decisions.md` say the
+  plugin's version is set to the tag before a release; the plugin's skills
+  pass a flag together with its value.
+- `install-hook` on a settings file whose `hooks.SessionStart` is not a list
+  says so and names the file.
+- `install-hook` reads `"SessionStart": null` as an empty list, and a run
+  stopped by SIGTERM exits 143, not Ctrl-C's 130.
+- The plugin's skill prunes the one item that was named, not everything;
+  INSTALL.md checks the downloaded archive against `checksums.txt`.
+- Two first runs of the npm package at once both succeed: each downloads
+  into a folder of its own and moves the binary into place whole.
+- The npm package passes on an interrupt sent to it alone, clears a download
+  folder a killed run left, names the URL that failed, and ships only what
+  it runs.
+- The npm wrapper gives up on a download only when it stops arriving, not
+  after 30 seconds of a slow one.
+- Installed with npm into a folder you cannot write (`sudo npm i -g`), the
+  binary goes to `~/.cache/skillreaper/<version>/` instead of failing.
+- The weekly reminder counts what `reap prune` would take: unused items
+  inside a plugin were counted as `to prune`.
+- `install-hook --dry-run` on a `settings.json` that is a link leading
+  nowhere says so, as the real run does; the counts that still stood in a
+  fixed plural (`1 items never fired`, `1 uses`, `1 days ago`) agree in
+  number; under `npx` the agent view's `run reap for details` names
+  `npx skillreaper` too.
+- The first weekly reminder does not say "more than at the last check",
+  and a later one names only what rose.
+
+#### reap reinvest
+
 - Mutes and their roll back name each file by its path, so undoing a failed
   swap never unmutes a copy you muted yourself in another tool.
 - Keys removed before anything is sent or kept: Anthropic, OpenAI (project and
@@ -835,8 +869,15 @@ the same cache files and the same checks. What to know before running it:
   and made private); a refusal names a few of a folder's files and counts
   the rest; a `.DS_Store` that is a folder or a link is not Finder's.
 - It has run on macOS. On Linux it builds and has not been run.
+- A kind of work or a skills.sh result with no name goes by its first words
+  or by its slug: the screen and the report had a blank there. With `--mcp`,
+  a README or a package's metadata that could not be fetched is counted with
+  the searches that failed; the reason printed is cut short, and says when
+  the answer was a web page. A request to end (SIGTERM) that came while the
+  pager was open is obeyed. A folder of sessions that cannot be read is
+  said: the count was merely low.
 
-It is not in the menu yet.
+</details>
 
 ## 0.8.0
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/thousandflowers/skillreaper/internal/mute"
 	"github.com/thousandflowers/skillreaper/internal/report"
@@ -71,8 +72,8 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		case !mute.Strippable(rows[0].Path):
 			fmt.Fprintf(stderr, "error: no description to strip in %s\n", shown(rows[0].Path))
 			return 1
-		case report.MuteSaving(rows[0]) == 0:
-			fmt.Fprintf(stderr, "error: a mute of %s would save nothing: its description is empty, or no longer than its name\n", rows[0].Name)
+		case report.MuteSaving(rows[0]) == 0: // the bulk mute leaves it out for the same reason
+			fmt.Fprintf(stderr, "error: a mute of %s would save nothing: its description weighs no more than the name, which stays\n", rows[0].Name)
 			return 1
 		}
 		candidates = rows
@@ -257,6 +258,9 @@ func (o muteOutcome) printSummary(opts options, stdout, stderr io.Writer, r *rep
 			if other.Name == row.Name && other.Path != row.Path && (other.Category == scan.CatSkill || other.Category == scan.CatAgent) {
 				undo = row.Path
 			}
+		}
+		if strings.ContainsFunc(undo, unicode.IsControl) {
+			undo = row.Name // never raw: it is pasted, and can colour the terminal or split the command
 		}
 		fmt.Fprintf(stdout, "Undo: reap unmute%s\n", pasteTail(opts, undo))
 		if report.IsPluginSource(row.Source) {

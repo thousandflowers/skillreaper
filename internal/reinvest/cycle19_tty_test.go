@@ -3,8 +3,10 @@
 package reinvest
 
 import (
+	"errors"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -45,5 +47,26 @@ func TestCycle25_an_interrupt_during_the_pager_is_not_the_pickers(t *testing.T) 
 	pt.typeKeys(t, "p")
 	if _, err := a.pickLoop(scr, ttyCovSwaps(), interrupts, resizes); err != nil {
 		t.Errorf("p, Ctrl-C in the pager, q: %v", err)
+	}
+}
+
+// Only Ctrl-C is the pager's. A request to end (SIGTERM, a hang-up) that
+// came while the pager was open is still obeyed when it closes.
+func TestCycle26_a_request_to_end_during_the_pager_is_obeyed(t *testing.T) {
+	pt := ttyCovOpen(t, 30, 160)
+	a := fakeApp(t)
+	scr, err := openScreen(pt.slave, pt.slave)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer scr.giveBack()
+	interrupts, resizes := make(chan os.Signal, 1), make(chan os.Signal, 1)
+	a.runPager = func([]string, string) error {
+		interrupts <- syscall.SIGTERM
+		return nil
+	}
+	pt.typeKeys(t, "p")
+	if _, err := a.pickLoop(scr, ttyCovSwaps(), interrupts, resizes); !errors.Is(err, errInterrupted) {
+		t.Errorf("SIGTERM during the pager: %v", err)
 	}
 }

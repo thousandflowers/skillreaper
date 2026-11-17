@@ -3,6 +3,7 @@ package reinvest
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -114,8 +115,8 @@ func skillItem(v any) (candidate, bool) {
 		return candidate{}, false
 	}
 	name := slug
-	if truthy(sk.val("name")) {
-		name = pyStr(sk.val("name"))
+	if said := oneLine(pyStr(sk.val("name"))); truthy(sk.val("name")) && said != "" {
+		name = said // a name of spaces only is none: the slug, or it is shown as a blank
 	}
 	return candidate{ID: printable(id), Kind: kindSkill, Source: source, Slug: slug, Name: oneLine(name),
 		Installs: installs, Hits: map[string]int{}}, true
@@ -136,6 +137,16 @@ func (a *app) lookupFailed(what string, err error) {
 	a.lookupWhy = err.Error()
 }
 
+// longestWhy is how much of an error the screen shows: an address can run long.
+const longestWhy = 200
+
+// notThere reports whether a request failed because the page does not exist:
+// that is an answer, not a request that could not be made.
+func notThere(err error) bool {
+	var status *httpError
+	return errors.As(err, &status) && status.code == 404
+}
+
 // sayLookups says how many requests failed since it last spoke, if any did.
 func (a *app) sayLookups() {
 	a.logMu.Lock()
@@ -143,7 +154,7 @@ func (a *app) sayLookups() {
 	a.lookups, a.lookupWhy = 0, ""
 	a.logMu.Unlock()
 	if n > 0 {
-		a.failed(fmt.Sprintf("%s to skills.sh or the MCP registry could not be made (the last: %s) · log: %s", counted(n, "request"), printable(why), a.cachePath(logFile)))
+		a.failed(fmt.Sprintf("%s could not be made (the last: %s) · log: %s", counted(n, "request"), firstRunes(printable(why), longestWhy), a.cachePath(logFile)))
 	}
 }
 

@@ -80,3 +80,13 @@ func TestALongLineOfOneNameIsReadInLinearTime(t *testing.T) {
 		t.Errorf("4000 repeats took %v, 16000 took %v", short, long)
 	}
 }
+
+// A list of skills after "Skills:" protects the last of its names as it does
+// the first: past 64 bytes of names the word "Skills" was out of reach, while
+// the same list under "- " held to 256.
+func TestALongListAfterSkillsProtectsItsLastName(t *testing.T) {
+	line := "Skills: brainstorming, debugging, planning, refactoring, security-audit, review"
+	if !ClaudeMDReferences([]string{line}, "review") {
+		t.Errorf("%q", line)
+	}
+}

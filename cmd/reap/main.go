@@ -833,12 +833,15 @@ func gather(opts options) (*report.Report, error) {
 			if p.ID == platform.ClaudeCode {
 				claudeCorpus.ObserveCorpus(parsed.OldestTranscript, parsed.NewestTranscript)
 			}
+			if why, unread := unreadHistory(parsed, nil); unread {
+				historyUnread[pid] = why // a use may be in the part that was lost
+			}
 			if parsed.IncompleteEvidence && !evidenceBlind[pid] {
 				evidenceBlind[pid] = true
 				blindReason[pid] = "at least one transcript record exceeded the parser limit or could not be read"
 				warns = append(warns, scan.Warning{
 					Path:     p.ConfigDirAbs,
-					Msg:      fmt.Sprintf("%s usage evidence is incomplete because at least one transcript record exceeded the parser limit or could not be read; its items are shown as REVIEW, not REAP/MUTE.", p.Name),
+					Msg:      fmt.Sprintf("%s usage evidence is incomplete because at least one transcript record exceeded the parser limit or could not be read; %s as REVIEW, not REAP/MUTE.", p.Name, heldAsReview(p, true)),
 					Advisory: true,
 				})
 			}
@@ -925,12 +928,12 @@ func gather(opts options) (*report.Report, error) {
 				if parsed != nil {
 					mergeParsed(parsed)
 				}
-				switch {
-				case err == nil:
-				case errors.Is(err, usage.ErrNoSQLite):
-					// CLI missing — handled by the evidence-blind block below.
-				default:
-					// A genuine parse failure: surface it but stay evidence-blind.
+				if why, unread := unreadHistory(parsed, err); unread {
+					historyUnread[pid] = why
+				}
+				// A read that failed with sessions in hand is said here. With
+				// none, the block below says it: once, not twice.
+				if err != nil && !errors.Is(err, usage.ErrNoSQLite) && parsed != nil && parsed.Sessions > 0 {
 					warns = append(warns, scan.Warning{Path: p.TranscriptDB,
 						Msg: fmt.Sprintf("%s SQLite evidence could not be read: %v", p.Name, err)})
 				}
@@ -949,12 +952,8 @@ func gather(opts options) (*report.Report, error) {
 			case !p.HasTranscripts:
 				reason = "it exposes no session transcripts at all, so nothing can be observed about its items"
 			case p.TranscriptType == "sqlite":
-				if errors.Is(sqliteErr, usage.ErrNoSQLite) {
-					reason = "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH"
-					historyUnread[pid] = reason
-				} else if sqliteErr != nil {
-					reason = fmt.Sprintf("its SQLite history could not be read: %v", sqliteErr)
-					historyUnread[pid] = reason
+				if why, unread := unreadHistory(nil, sqliteErr); unread {
+					reason = why
 				} else {
 					reason = fmt.Sprintf("no session history was found (looked in %s)", p.TranscriptDBTried)
 				}
@@ -964,14 +963,10 @@ func gather(opts options) (*report.Report, error) {
 			}
 			evidenceBlind[pid] = true
 			blindReason[pid] = reason
-			shown := "its items are shown"
-			if _, unread := historyUnread[pid]; unread && p.ReadsClaudeSkills {
-				// It loads Claude Code's skills folder too: a skill there may be in use here, unseen.
-				shown = "its items, and the skills of Claude Code's own folder that it loads too, are shown"
-			}
+			_, unread := historyUnread[pid]
 			warns = append(warns, scan.Warning{
 				Path:     p.ConfigDirAbs,
-				Msg:      fmt.Sprintf("%s usage is not counted because %s; %s as REVIEW, not REAP/MUTE.", p.Name, reason, shown),
+				Msg:      fmt.Sprintf("%s usage is not counted because %s; %s as REVIEW, not REAP/MUTE.", p.Name, reason, heldAsReview(p, unread)),
 				Advisory: true,
 			})
 		}
@@ -1206,6 +1201,32 @@ const corpusReachesHorizon = 0.9
 // satisfied), and a corpus that already reaches the horizon (the sweep is
 // deleting evidence now). A corpus far shorter than the horizon is just a
 // young installation and stays silent.
+// unreadHistory says whether a platform's history counts as not read, and
+// why: the tool to read it with is missing, the read failed, or part of it
+// was lost (a record over the limit, a database too large for one query).
+// Sessions in hand do not make it read: a use may be in what was lost.
+func unreadHistory(parsed *usage.Stats, err error) (string, bool) {
+	switch {
+	case errors.Is(err, usage.ErrNoSQLite):
+		return "reading its SQLite history needs the sqlite3 CLI, which was not found in PATH", true
+	case err != nil:
+		return fmt.Sprintf("its SQLite history could not be read: %v", err), true
+	case parsed != nil && parsed.IncompleteEvidence:
+		return "at least one transcript record exceeded the parser limit or could not be read", true
+	}
+	return "", false
+}
+
+// heldAsReview is the subject of a warning's "… as REVIEW": the tool's own
+// items and, when its history could not be read and it loads Claude Code's
+// skills folder too, the skills there: one may be in use here, unseen.
+func heldAsReview(p platform.Info, unread bool) string {
+	if unread && p.ReadsClaudeSkills {
+		return "its items, and the skills of Claude Code's own folder that it loads too, are shown"
+	}
+	return "its items are shown"
+}
+
 // pinnedClockWarning says that SOURCE_DATE_EPOCH pins reap's clock, when the
 // pin cannot be right for this stack: a transcript is more than a day newer
 // than it, or it lies more than a day ahead of the real clock. A capture made

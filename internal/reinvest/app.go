@@ -29,6 +29,8 @@ type app struct {
 	// last said so, lookupWhy the last one's error; both under logMu.
 	lookups   int
 	lookupWhy string
+	// unread is what the last walk of the transcripts could not read.
+	unread []string
 
 	cacheDir    string // searches, documents, verdicts, the report: all can be fetched or asked again
 	stateDir    string // what cannot: the memory of sessions Claude Code has since deleted

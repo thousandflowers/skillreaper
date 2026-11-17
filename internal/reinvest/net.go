@@ -108,7 +108,11 @@ func (a *app) getJSON(url string, policy retryPolicy) (any, error) {
 			if !utf8.Valid(raw) {
 				return nil, errors.New("the answer is not UTF-8 text")
 			}
-			return parseJSON(string(raw))
+			v, err := parseJSON(string(raw))
+			if err != nil { // a sign-in page, a proxy's notice
+				return nil, fmt.Errorf("the answer was not JSON: %w", err)
+			}
+			return v, nil
 		}
 		var status *httpError
 		if !errors.As(err, &status) || !containsInt(policy.retryOn, status.code) || attempt == policy.tries-1 {

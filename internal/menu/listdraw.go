@@ -156,7 +156,10 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 			pending = m.money((l.targetPriced - l.donePriced) * eased)
 		}
 		if applied+pending != "" {
-			m.put(3, end+2, firstFitting(wd-end-3, m.savedMoney(applied, pending)...), green)
+			inMoney := m.price * m.cur.Rate
+			variants := m.savedMoney(applied, pending, briefOf(applied, m.shortMoney(l.donePriced*inMoney)),
+				briefOf(pending, m.shortMoney((l.targetPriced-l.donePriced)*eased*inMoney)))
+			m.put(3, end+2, firstFitting(wd-end-3, variants...), green)
 		}
 	default:
 		words := "tokens wasted every session"
@@ -181,7 +184,8 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 			pending = "~" + m.tokens(chosen)
 		}
 		if applied+pending != "" {
-			m.put(3, end+2, firstFitting(wd-end-3, savedTokens(applied, pending)...), green)
+			variants := savedTokens(applied, pending, briefOf(applied, "~"+m.shortCount(l.done)), briefOf(pending, "~"+m.shortCount(chosen)))
+			m.put(3, end+2, firstFitting(wd-end-3, variants...), green)
 		}
 	}
 	moneyTab, tokenTab := " "+m.cur.Sym+" money ", " tokens "

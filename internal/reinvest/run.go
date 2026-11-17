@@ -19,7 +19,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"sort"
 	"strings"
@@ -197,9 +196,13 @@ func (a *app) pipeline(opts options) (outcome, error) {
 	if err != nil {
 		return outcome{}, err
 	}
-	// Missing is no Claude Code here, and says nothing. Unreadable is not "0 sessions".
-	if _, err := os.ReadDir(a.projectsDir); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		a.failed("your sessions could not be read: " + printable(err.Error()))
+	// What could not be read is not "0 sessions", nor a count that is merely low.
+	if len(a.unread) > 0 {
+		more := ""
+		if n := len(a.unread) - 1; n > 0 {
+			more = fmt.Sprintf(", and %d more: see %s", n, a.cachePath(logFile))
+		}
+		a.failed("some of your sessions could not be read: " + firstRunes(printable(a.unread[0]), longestWhy) + more)
 	}
 	a.step(counted(len(sessions), "session")+" read", true)
 

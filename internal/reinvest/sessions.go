@@ -1,6 +1,7 @@
 package reinvest
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -131,11 +132,15 @@ func lessByParts(a, b string) bool {
 // "subagents" folder (subagent transcripts hold no user prompts).
 func (a *app) transcriptPaths() []string {
 	var paths []string
+	a.unread = nil
 	root := a.projectsDir + string(filepath.Separator) // a linked projects folder is followed, as rglob does
 	// The walk itself has no error to give: the callback logs each one and goes on.
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			a.logf("transcripts: %v", err)
+			if !errors.Is(err, fs.ErrNotExist) { // missing is no Claude Code here
+				a.unread = append(a.unread, err.Error())
+			}
 			if d != nil && d.IsDir() {
 				return fs.SkipDir
 			}

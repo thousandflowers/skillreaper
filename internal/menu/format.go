@@ -87,9 +87,10 @@ func (m *Menu) worth(text string) string {
 }
 
 // savedMoney is the same line in money a month, from the whole sentence to
-// the fewest words that still carry both figures. An empty figure is a part
+// the fewest words, then to short figures, and last to nothing: a figure cut
+// by the window's edge reads as a smaller one. An empty figure is a part
 // there is nothing of.
-func (m *Menu) savedMoney(applied, pending string) []string {
+func (m *Menu) savedMoney(applied, pending, briefApplied, briefPending string) []string {
 	figure := func(text string) string {
 		if text == "" || m.subscriber {
 			return text
@@ -100,12 +101,22 @@ func (m *Menu) savedMoney(applied, pending string) []string {
 	if m.subscriber {
 		tail += ", at API prices"
 	}
-	return []string{saved(figure(applied), figure(pending), tail), saved(applied, pending, " a month"), saved(applied, pending, ""), chosenOnly(applied, pending)}
+	return []string{saved(figure(applied), figure(pending), tail), saved(applied, pending, " a month"), saved(applied, pending, ""),
+		chosenOnly(applied, pending), chosenOnly(briefApplied, briefPending), ""}
 }
 
 // savedTokens is the line in tokens a session, in the same three lengths.
-func savedTokens(applied, pending string) []string {
-	return []string{saved(applied, pending, " tokens per session"), saved(applied, pending, " tok/session"), saved(applied, pending, ""), chosenOnly(applied, pending)}
+func savedTokens(applied, pending, briefApplied, briefPending string) []string {
+	return []string{saved(applied, pending, " tokens per session"), saved(applied, pending, " tok/session"), saved(applied, pending, ""),
+		chosenOnly(applied, pending), chosenOnly(briefApplied, briefPending), ""}
+}
+
+// briefOf is a figure's short form, or nothing where there is no figure.
+func briefOf(figure, short string) string {
+	if figure == "" {
+		return ""
+	}
+	return short
 }
 
 // chosenOnly is the line where there is room for one figure: what the choice
@@ -226,9 +237,22 @@ func (m *Menu) fitTitle(name string, width int) string {
 // the symbol cannot be drawn. A stand-in for the symbol named another
 // currency ("¥" read JPY for a sum in yuan), or was a "?".
 func inLocale(c Currency, plain bool) Currency {
-	drawn := strings.IndexFunc(c.Sym, func(r rune) bool { return r >= utf8.RuneSelf }) < 0
-	if plain && !drawn && c.Code != "" {
+	if !plain {
+		return c
+	}
+	drawn := func(s string) bool {
+		return strings.IndexFunc(s, func(r rune) bool { return r >= utf8.RuneSelf }) < 0
+	}
+	if !drawn(c.Sym) && c.Code != "" {
 		c.Sym = c.Code
+	}
+	// The marks inside a figure too: a no-break space between thousands
+	// came out "1?344".
+	if !drawn(c.Group) {
+		c.Group = " "
+	}
+	if !drawn(c.Decimal) {
+		c.Decimal = "."
 	}
 	return c
 }

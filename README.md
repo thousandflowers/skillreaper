@@ -774,8 +774,11 @@ in a SQLite database. skillreaper reads it through the system `sqlite3` binary
 in read-only mode - the real engine, so WAL-mode databases and overflow pages
 are handled correctly (a hand-rolled parser would not). No Go dependency is
 added. When `sqlite3` is **not** on `PATH`, OpenCode items have no usage
-evidence: they stay **REVIEW (never REAP)** with a warning at scan time. The
-same safety net applies to any platform with no readable session transcripts.
+evidence: they stay **REVIEW (never REAP)** with a warning at scan time. So do
+the skills in `~/.claude/skills`, which OpenCode loads too: one of them may be
+in use there, unseen. A history read only in part (a database too large for
+one query) counts as not read. The same safety net applies to any platform
+with no readable session transcripts.
 
 **Incomplete evidence never flags an item.** The scanner caps how much it
 reads per transcript record. If a record is oversized or unreadable, that
@@ -789,15 +792,23 @@ written as a name.** A skill named in your CLAUDE.md or rules is kept
 it (`code-review`, `ecc:plan`) counts wherever it stands. A one-word name
 (`review`) is also a word of the language, so it counts only where it is
 written as a name: `/review`, between backticks, asterisks or quotes, as a
-link's text, beside the word "skill", in a list item that begins with names
-(`- review: …`, `- review, deploy`) or a heading of its own, or alone in a
-table cell. "always review the diff" protects nothing, and `reap why review`
+link's text, beside the word "skill", in a list item or a quoted line that
+begins with names (`- review: …`, `- review, deploy`, `> review`) or a heading
+of its own, or alone in a table cell. "always review the diff" protects nothing, and `reap why review`
 then says so.
 
 **A built-in command can count as a skill's use.** A transcript records
 `/plan` the same way whether it ran Claude Code's own command or a skill of
 yours named `plan`. reap counts it as a use of the skill, so such a skill is
 kept: when it cannot tell, it errs towards keeping.
+
+**One folder under two paths has two records.** What reap remembers about a
+config folder (uses seen before their transcripts were deleted, snapshots) is
+kept under the path you gave it. The same folder reached by two paths, through
+a link or as `/tmp/x` and `/private/tmp/x` on macOS, has two records: a run
+under one path does not see what a run under the other remembered, and `reap
+diff` does not find its snapshots. With the default `~/.claude` this never
+happens; with `--claude-dir`, write the folder one way.
 
 **Not a tool declaration fix.** Claude Code's deferred tools reduce the
 *init-time tool declaration* overhead. Skillreaper addresses a different
@@ -850,7 +861,9 @@ Tracked as issues, grouped by the problem they solve.
   ([#55](https://github.com/thousandflowers/skillreaper/issues/55)); two
   counters for a use, the ones you made and the automatic ones (a subagent's,
   or a line Claude Code adds by itself), so that a skill kept only by the
-  second kind shows as such. Today both count as one.
+  second kind shows as such. Today both count as one. One record for a
+  config folder reached by two paths (a link, `/tmp` and `/private/tmp`),
+  with what both had remembered brought together.
 - **Act on more than one stack shape** - group skills by domain and language,
   then act on a group
   ([#101](https://github.com/thousandflowers/skillreaper/issues/101)); move a

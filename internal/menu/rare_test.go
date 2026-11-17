@@ -860,10 +860,10 @@ func TestTheHeaderNeverCallsSavedWhatWasNot(t *testing.T) {
 	mustNotShow(t, locked.final(), "would save")
 
 	m := open(t, pricedData()).m
-	mustEqual(t, "money", m.savedMoney("$1", "$5")[0], "you saved at least $1, would save at least $5 more a month")
+	mustEqual(t, "money", m.savedMoney("$1", "$5", "", "")[0], "you saved at least $1, would save at least $5 more a month")
 	m.subscriber = true
-	mustEqual(t, "flat plan", m.savedMoney("$1", "$5")[0], "you saved $1, would save $5 more a month, at API prices")
-	mustEqual(t, "flat plan, applied", m.savedMoney("$1", "")[0], "you saved $1 a month, at API prices")
+	mustEqual(t, "flat plan", m.savedMoney("$1", "$5", "", "")[0], "you saved $1, would save $5 more a month, at API prices")
+	mustEqual(t, "flat plan, applied", m.savedMoney("$1", "", "", "")[0], "you saved $1 a month, at API prices")
 }
 
 // A sum under one unit of the currency is not "0" in the short figure: the
@@ -1008,5 +1008,62 @@ func TestTheReceiptsWordsFitANarrowWindow(t *testing.T) {
 		if line := strings.TrimRight(lineWith(shown, "lighter"), " "); !strings.HasSuffix(line, "session") && !strings.HasSuffix(line, "lighter") {
 			t.Errorf("40 columns, the summary: %q", line)
 		}
+	}
+}
+
+// Where the locale cannot draw them, the marks between a figure's digits are
+// plain too: a no-break space between thousands came out "1?344".
+func TestAPlainLocaleWritesFiguresWithPlainMarks(t *testing.T) {
+	czech := Currency{Code: "CZK", Sym: "Kč", Rate: 25, Decimal: ",", Group: " ", Digits: 2}
+	plain := inLocale(czech, true)
+	if plain.Group != " " || plain.Decimal != "," || plain.Sym != "CZK" {
+		t.Errorf("plain: %+v", plain)
+	}
+	arabic := inLocale(Currency{Code: "SAR", Sym: "SAR", Rate: 4, Decimal: "٫", Group: "٬", Digits: 2}, true)
+	if arabic.Group != " " || arabic.Decimal != "." {
+		t.Errorf("plain, marks of another script: %+v", arabic)
+	}
+	if kept := inLocale(czech, false); kept.Group != " " {
+		t.Errorf("where it can be drawn: %+v", kept)
+	}
+}
+
+// The green line never shows part of a figure: "you would save US$1" stood
+// for US$1,200.00 where the window had no room for the rest.
+func TestTheSavedLineNeverCutsAFigure(t *testing.T) {
+	for cols := 58; cols <= 90; cols++ {
+		d := pricedData()
+		d.Report.MoneyPerMonth *= 100
+		x := openSized(t, 24, cols, d)
+		x.m.now = clockAt(0, 0, time.Second)
+		x.press(space).wait().run()
+		line := strings.TrimRight(lineWith(x.final(), "would save"), " ")
+		if line == "" {
+			continue // no room: nothing is better than a wrong figure
+		}
+		said := line[strings.Index(line, "would save"):]
+		if !strings.Contains(said, "1,200.00") && !strings.Contains(said, "1.2k") {
+			t.Errorf("%d columns: %q", cols, said)
+		}
+	}
+}
+
+// What comes back heavier is said whole on the narrowest receipt: "2 com".
+func TestTheReceiptSummaryKeepsWhatComesBackWhole(t *testing.T) {
+	m := open(t, flowData()).m
+	v := &receiptView{m: m, picks: make([]Pick, 3), tok: 100, back: 2}
+	for pw := 30; pw <= 70; pw++ {
+		got := v.summary(pw)
+		if cells(got) > pw || !strings.HasSuffix(got, "heavier") || !strings.Contains(got, "~100") {
+			t.Errorf("%d cells: %q", pw, got)
+		}
+	}
+	v.back = 1
+	if got := v.summary(80); got != "3 items · ~100 tokens lighter every session · 1 comes back heavier" {
+		t.Errorf("wide: %q", got)
+	}
+	v.back, v.tok = 0, 0
+	if got := v.summary(80); got != "3 items" {
+		t.Errorf("nothing lighter: %q", got)
 	}
 }

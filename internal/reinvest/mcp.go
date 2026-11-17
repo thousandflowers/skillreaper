@@ -163,7 +163,11 @@ func (a *app) readme(repoURL, subfolder string) string {
 		}
 		raw, err := a.httpGet(rawGitHub+m[1]+"/HEAD/"+path, readmeTimeout)
 		if err != nil {
-			a.logf("readme %s: %v", path, err)
+			if notThere(err) { // tried under each name a README goes by
+				a.logf("readme %s: %v", path, err)
+			} else {
+				a.lookupFailed("readme "+path, err)
+			}
 			continue
 		}
 		return decodeUTF8Replace(raw)
@@ -205,7 +209,11 @@ func (a *app) packageMatchesRepo(server *obj) bool {
 	}
 	meta, err := a.httpJSON(packageSpecs[kind].meta(id, version), onceMore)
 	if err != nil { // not confirmed is not a match
-		a.logf("package metadata %s: %v", id, err)
+		if notThere(err) {
+			a.logf("package metadata %s: %v", id, err)
+		} else {
+			a.lookupFailed("package metadata "+id, err)
+		}
 		return false
 	}
 	return repo != "" && namesRepo(pyLower(dumpJSON(meta)), repo)

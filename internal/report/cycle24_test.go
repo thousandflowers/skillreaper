@@ -33,7 +33,7 @@ func TestTheAverageOverToolsIsSaidInEveryFormat(t *testing.T) {
 // A skill that runs only by hand has no description in the context: a mute
 // of it saves nothing and takes the text its slash menu shows.
 func TestAManualOnlySkillIsNotReapsToMute(t *testing.T) {
-	row := Row{Item: scan.Item{Category: scan.CatSkill, Name: "byhand", Path: "/s/byhand/SKILL.md", Removable: true, ManualOnly: true}, Verdict: VerdictReap}
+	row := Row{Item: scan.Item{Category: scan.CatSkill, Name: "byhand", Path: "/s/byhand/SKILL.md", Removable: true, ManualOnly: true}, Verdict: VerdictReap, Tokens: 40}
 	if MuteEligible(row) {
 		t.Error("eligible to mute")
 	}

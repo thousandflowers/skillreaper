@@ -415,3 +415,19 @@ func TestMuteOfALinkedSkillIsRefusedBeforeTheQuestion(t *testing.T) {
 		t.Errorf("exit %d:\n%s", code, said)
 	}
 }
+
+// The other way round too: the menu mutes through the link, then the row of
+// the real folder is deleted. The folder's listing changed, by the menu's hand.
+func TestMenuDeleteOfTheRealFolderAfterAMuteThroughItsLink(t *testing.T) {
+	home := deleteHome(t)
+	dir := filepath.Join(home, ".claude")
+	rows := reportRows(t)
+	applier := &menuApplier{dir: dir, seen: stampsOf(rows)}
+
+	if out := applier.Apply([]menu.Pick{{Row: rowOf(t, rows, "claude-code", "skill", "shared"), Verb: menu.Mute}}); out[0].Err != nil {
+		t.Fatalf("mute through the link: %v", out[0].Err)
+	}
+	if out := applier.Apply([]menu.Pick{{Row: rowOf(t, rows, "codex", "skill", "shared"), Verb: menu.Delete}}); out[0].Err != nil {
+		t.Errorf("delete of the real folder after the menu's own mute: %v", out[0].Err)
+	}
+}

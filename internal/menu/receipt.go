@@ -84,6 +84,9 @@ func (m *Menu) sectionEnd(name string, items []*Row, nextName string, following 
 			if verb := p.get(r); verb != "" {
 				return verb
 			}
+			if m.lockedNow[r] {
+				return vLock
+			}
 			return m.applied[r]
 		}
 		var done []*Row

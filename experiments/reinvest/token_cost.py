@@ -32,7 +32,7 @@ def main():
         sys.exit("no cached groups: run reinvest.py first")
     state = reap_state()
     by_id = {s["id"]: s for s in read_sessions(120, {canon(s["name"]) for s in state["installed"]})}
-    for g in sorted(json.loads(cache.read_text()), key=lambda g: -len(g["session_ids"])):
+    for g in sorted(json.loads(cache.read_text())["groups"], key=lambda g: -len(g["session_ids"])):
         ss = [by_id[i] for i in g["session_ids"] if i in by_id]
         if len(ss) < 3:
             continue

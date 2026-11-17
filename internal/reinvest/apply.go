@@ -116,7 +116,8 @@ func create(c candidate) error {
 		var others []string // beside the skill, and not what Finder leaves in a folder it was shown
 		entries, _ := os.ReadDir(home)
 		for _, e := range entries {
-			if e.Name() != skillFile && e.Name() != ".DS_Store" {
+			finders := e.Name() == ".DS_Store" && e.Type().IsRegular() // a file of that name, not a folder or a link
+			if e.Name() != skillFile && !finders {
 				others = append(others, e.Name())
 			}
 		}
@@ -126,7 +127,7 @@ func create(c candidate) error {
 		case string(was) != c.Doc:
 			return fmt.Errorf("%s is left from an earlier run, with another text: move it away and run reinvest again", home)
 		case len(others) > 0: // loaded with the skill, and never shown
-			return fmt.Errorf("%s is left from an earlier run, with other files beside SKILL.md (%s): move it away and run reinvest again", home, printable(strings.Join(others, ", ")))
+			return fmt.Errorf("%s is left from an earlier run, with other files beside SKILL.md (%s): move it away and run reinvest again", home, printable(fewOf(others)))
 		}
 	} else {
 		if err := os.MkdirAll(writtenDir(), sharedDir); err != nil {
@@ -461,7 +462,7 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 	}
 	installing = false
 	for _, x := range s.Mute {
-		inHand = x.Name
+		inHand = x.target() // the skill, not its name: two of one name are two
 		// --yes: the swap was accepted in reinvest's own question, with this mute
 		// listed in it. reap would otherwise ask again on a terminal nobody sees.
 		err := a.runStep([]string{reapName, "--yes", "mute", x.target()})
@@ -505,18 +506,24 @@ func stoppedHalfway(c candidate, installing bool, log []string, muted []skill, i
 		lines = append(lines, "  ?  "+c.Name+": its install was cut short (it may be half there)")
 	}
 	lines = append(lines, log...)
-	done := map[string]bool{} // by path: two skills can share a name
-	for _, x := range all {
-		if x.Name == inHand && inHand != "" {
-			done[x.target()] = true
-		}
+	// By path throughout: two skills can share a name. inHand is the path of
+	// the one whose mute was running when the stop came.
+	done := map[string]bool{}
+	if inHand != "" {
+		done[inHand] = true
 	}
 	for _, x := range muted {
 		done[x.target()] = true
 		lines = append(lines, "  ✓  muted "+x.Name+" ("+undoMute(x)+" undoes)")
 	}
-	if inHand != "" && (len(muted) == 0 || muted[len(muted)-1].Name != inHand) {
-		lines = append(lines, "  ?  "+inHand+": its mute was cut short (reap unmute lists what is muted)")
+	if inHand != "" && (len(muted) == 0 || muted[len(muted)-1].target() != inHand) {
+		name := inHand
+		for _, x := range all {
+			if x.target() == inHand {
+				name = x.Name
+			}
+		}
+		lines = append(lines, "  ?  "+name+": its mute was cut short (reap unmute lists what is muted)")
 	}
 	var rest, finish []string
 	for _, x := range all {
@@ -608,4 +615,13 @@ func reapLine(verb string, x skill) string {
 // that was being undone is not to be finished.
 func withoutFinish(lines []string) []string {
 	return slices.DeleteFunc(lines, func(line string) bool { return strings.HasPrefix(line, "  →  to finish") })
+}
+
+// fewOf names the first few of a list and counts the rest: a folder can hold
+// thousands of files, and the line is for a person.
+func fewOf(names []string) string {
+	if len(names) <= changedShown {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(names[:changedShown], ", "), len(names)-changedShown)
 }

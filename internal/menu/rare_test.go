@@ -882,3 +882,15 @@ func TestWithoutBlockCharactersTheBigFontIsPlainText(t *testing.T) {
 	between.press(right, down, enter, down, down).run()
 	noBlocks(between.final())
 }
+
+// A lock applied from the screen between lists is counted there like every
+// other apply: it said "nothing chosen" beside "✓ 1 locked".
+func TestTheScreenBetweenListsCountsALock(t *testing.T) {
+	x := openSized(t, 26, 90, flowData())
+
+	x.press(on(dailyCard, 'l', down, applyKey, 'y')...).run()
+
+	shown := x.frame("✓ 1 locked")
+	mustShow(t, shown, "1 of 1 chosen")
+	mustNotShow(t, shown, "nothing chosen")
+}

@@ -426,7 +426,13 @@ func (a *app) assignSessions(groups []*obj, fresh []session) (placed []*obj, ans
 		return nil, false, err
 	}
 	answer, ok := out.(*obj)
-	if !ok {
+	if !ok || (answer.val("assign") == nil && answer.val("new") == nil) {
+		// Not the object that was asked for, or one that places nothing and
+		// names nothing new ({"error": …}): saved as an answer, the new
+		// sessions were marked as placed.
+		if out != nil {
+			a.noteAsk("an answer that places no session")
+		}
 		return nil, false, nil
 	}
 	ids := make([][]any, len(groups))

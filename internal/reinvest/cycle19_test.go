@@ -2,6 +2,7 @@ package reinvest
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -361,5 +362,102 @@ func TestCycle22_a_grouping_that_places_nothing_is_no_answer(t *testing.T) {
 	a.failed("grouping your work got no answer")
 	if said := termText(a); !strings.Contains(said, "claude -p: ") {
 		t.Errorf("no reason for an answer of the wrong shape:\n%s", said)
+	}
+}
+
+// The mute in hand is one skill, by its path: two of one name are two, and a
+// stop inside the first leaves the second to be finished, in so many words.
+func TestCycle23_the_mute_in_hand_is_a_path_not_a_name(t *testing.T) {
+	c := candidate{Kind: kindSkill, Name: "new", Slug: "new", Created: true}
+	a, b := skill{Name: "dup", Path: "/p/dup/SKILL.md"}, skill{Name: "dup", Path: "/s/dup/SKILL.md"}
+
+	first := strings.Join(stoppedHalfway(c, false, nil, nil, a.target(), []skill{a, b}), "\n")
+	if !strings.Contains(first, "dup: its mute was cut short") || !strings.Contains(first, "to finish: reap mute /s/dup/SKILL.md") {
+		t.Errorf("stopped inside the first mute:\n%s", first)
+	}
+	second := strings.Join(stoppedHalfway(c, false, nil, []skill{a}, b.target(), []skill{a, b}), "\n")
+	if !strings.Contains(second, "muted dup") || !strings.Contains(second, "dup: its mute was cut short") {
+		t.Errorf("stopped inside the second mute:\n%s", second)
+	}
+}
+
+// An answer that places nothing and names nothing new is no answer for the
+// call that places new sessions, and a wrong shape is said.
+func TestCycle23_an_empty_placing_is_no_answer(t *testing.T) {
+	for _, answer := range []string{`{"error": "rate limited"}`, `{}`, `[{"name": "x", "sessions": [0]}]`} {
+		a := fakeApp(t)
+		a.runProcess = func(procSpec) procResult { return procResult{stdout: answer} }
+		_, answered, err := a.assignSessions(nil, []session{{ID: "s1", Prompts: []string{"p"}}})
+		if err != nil || answered {
+			t.Errorf("%s: answered %v, err %v", answer, answered, err)
+		}
+		a.failed("placing your new sessions got no answer")
+		if said := termText(a); !strings.Contains(said, "claude -p: ") {
+			t.Errorf("%s: no reason is given:\n%s", answer, said)
+		}
+	}
+}
+
+// The files named in a refusal are a few, and a .DS_Store that is not a file
+// is not what Finder leaves.
+func TestCycle23_a_left_folder_refusal_is_short_and_checks_ds_store(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	c := candidate{Slug: "fix-ui", Doc: "---\nname: fix-ui\ndescription: d\n---\nbody\n"}
+	home := filepath.Join(writtenDir(), c.Slug)
+	if err := os.MkdirAll(filepath.Join(home, ".DS_Store"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, skillFile), []byte(c.Doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := create(c); err == nil || !strings.Contains(err.Error(), ".DS_Store") {
+		t.Errorf("a .DS_Store that is a folder: %v", err)
+	}
+	for i := range 40 {
+		if err := os.WriteFile(filepath.Join(home, fmt.Sprintf("file-%02d.txt", i)), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := create(c)
+	if err == nil || len(err.Error()) > 600 || !strings.Contains(err.Error(), "more") {
+		t.Errorf("40 files beside the skill: %d characters: %v", len(fmt.Sprint(err)), err)
+	}
+}
+
+// run.log is a file of reinvest's own: a link there is not followed, or the
+// file it leads to would be emptied and made private.
+func TestCycle23_the_log_is_not_written_through_a_link(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "precious.txt")
+	if err := os.WriteFile(target, []byte("precious"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "run.log")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip(err)
+	}
+	if log, err := createLog(link); err == nil {
+		_ = log.Close()
+		t.Error("the log was opened through a link")
+	}
+	if b, _ := os.ReadFile(target); string(b) != "precious" {
+		t.Errorf("the file the link leads to now holds %q", b)
+	}
+}
+
+// A search answer is kept for later only when it is one: an error body is
+// asked for again.
+func TestCycle23_only_a_search_answer_is_cached(t *testing.T) {
+	a := fakeApp(t)
+	asked := 0
+	a.skillsSh = func(string) (any, error) {
+		asked++
+		return js(t, `{"error": "rate limited"}`), nil
+	}
+	a.searchPage("release notes")
+	a.searchPage("release notes")
+	if asked != 2 {
+		t.Errorf("asked %d times, want 2: an error body was cached", asked)
 	}
 }

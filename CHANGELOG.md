@@ -69,7 +69,9 @@ started from the screen after the last row shows what came of it, where it
 showed nothing, and that screen counts what was just applied; a delete of a
 row whose file the menu itself changed through another row is not refused; the
 header says `you would save` for what is chosen and `you saved` only once it
-is applied; where the locale cannot draw the big font (`LC_ALL=C`), figures
+is applied; a lock applied from the screen between lists is counted there;
+after the menu's own mute of a file, every row that is that file can still be
+deleted; where the locale cannot draw the big font (`LC_ALL=C`), figures
 and titles are plain text, where they were blocks of `#`; a name cut in its
 middle no longer leaves an accent on the `…`; where the locale cannot draw a
 wide character, the columns after it stay in line.
@@ -761,6 +763,14 @@ the same cache files and the same checks. What to know before running it:
   leaves, and any other file in it is named; the text after a stop tells
   two skills of one name apart, and gives no command to finish a swap that
   was being undone.
+- The mute in hand when a stop comes is one skill, by its path: with two
+  skills of one name in a swap, the one not reached was named nowhere.
+- An answer that places no new session is no answer, and says why: saved
+  as one, the sessions were marked as placed. A search answer that is an
+  error is asked for again, not kept for a week.
+- `run.log` is not written through a link (the file it led to was emptied
+  and made private); a refusal names a few of a folder's files and counts
+  the rest; a `.DS_Store` that is a folder or a link is not Finder's.
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

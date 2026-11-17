@@ -844,7 +844,10 @@ Tracked as issues, grouped by the problem they solve.
 - **Better verdicts** - `--since` / `--until` and a window that respects the
   corpus ([#53](https://github.com/thousandflowers/skillreaper/issues/53));
   measuring wrong-tool picks
-  ([#55](https://github.com/thousandflowers/skillreaper/issues/55)).
+  ([#55](https://github.com/thousandflowers/skillreaper/issues/55)); two
+  counters for a use, the ones you made and the automatic ones (a subagent's,
+  or a line Claude Code adds by itself), so that a skill kept only by the
+  second kind shows as such. Today both count as one.
 - **Act on more than one stack shape** - group skills by domain and language,
   then act on a group
   ([#101](https://github.com/thousandflowers/skillreaper/issues/101)); move a

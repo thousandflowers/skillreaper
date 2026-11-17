@@ -19,6 +19,8 @@ type stamp struct {
 	// inside is every file of the folder a delete takes, with its size and
 	// date: the delete takes them all, whoever put them there and when.
 	inside string
+	// takes is that folder (or the file, for an item that is one).
+	takes string
 }
 
 // insideOf lists what is in a folder, for comparing later; empty for a file or
@@ -63,9 +65,10 @@ func stampsOf(rows []report.Row) stamps {
 		if err != nil {
 			continue
 		}
-		target, _ := os.Lstat(prune.Target(row.Item))
-		inside, _ := insideOf(prune.Target(row.Item))
-		seen[row.Path] = stamp{file: file, target: target, inside: inside}
+		takes := prune.Target(row.Item)
+		target, _ := os.Lstat(takes)
+		inside, _ := insideOf(takes)
+		seen[row.Path] = stamp{file: file, target: target, inside: inside, takes: takes}
 	}
 	return seen
 }
@@ -93,8 +96,7 @@ func (s stamps) changed(row report.Row) bool {
 
 // refresh reads an item again after reap itself changed it (a mute, an
 // unmute, a prune): that change is not somebody else's.
-func (s stamps) refresh(row report.Row, rows ...report.Row) {
-	rows = append(rows, row)
+func (s stamps) refresh(row report.Row) {
 	was, known := s[row.Path]
 	if !known {
 		return
@@ -110,12 +112,9 @@ func (s stamps) refresh(row report.Row, rows ...report.Row) {
 			delete(s, path) // gone with what reap did: nothing left to compare
 			continue
 		}
+		// The listing of each row's own folder too: the file reap rewrote is in it.
 		st.file = file
-		for _, row := range rows {
-			if row.Path == path {
-				st.inside, _ = insideOf(prune.Target(row.Item))
-			}
-		}
+		st.inside, _ = insideOf(st.takes)
 		s[path] = st
 	}
 }

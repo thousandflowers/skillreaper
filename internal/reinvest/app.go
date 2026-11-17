@@ -126,6 +126,11 @@ var (
 	createLog   = func(path string) (io.WriteCloser, error) {
 		// The person's alone to read: it quotes what claude said, which can
 		// quote their sessions. Chmod too: a log from an older version was 0644.
+		// A file of reinvest's own: through a link, the file it leads to would
+		// be emptied and made private.
+		if info, statErr := os.Lstat(path); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("%s is a link: move it away and run reinvest again", path)
+		}
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 		if err == nil {
 			err = f.Chmod(0o600)

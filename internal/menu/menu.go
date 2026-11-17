@@ -51,6 +51,9 @@ type Menu struct {
 	// plain is a locale that cannot draw the big font: its blocks all come out
 	// as "#". Figures and titles are then plain text.
 	plain bool
+	// lockedNow is the rows locked in this session: a lock is not in applied,
+	// because its row stays in the list.
+	lockedNow map[*Row]bool
 	// applied is what this session already carried out: out of the list, its
 	// saving still counted.
 	applied map[*Row]string
@@ -60,7 +63,7 @@ type Menu struct {
 // New prepares a menu over a report.
 func New(s term.Screen, d Data, a Applier) *Menu {
 	m := &Menu{s: s, apply: a, now: time.Now, rep: d.Report, cur: d.Currency, billing: term.Visible(d.Billing),
-		names: map[string]int{}, applied: map[*Row]string{}}
+		names: map[string]int{}, applied: map[*Row]string{}, lockedNow: map[*Row]bool{}}
 	if m.cur.Sym == "" || m.cur.Rate <= 0 {
 		m.cur = USD
 	}
@@ -179,6 +182,7 @@ func (m *Menu) settle(outcomes []Outcome) {
 					r.Kept = true
 				}
 			}
+			m.lockedNow[o.Pick.Row] = true // it stays in the list, and still counts as done where it was applied
 			continue
 		}
 		m.applied[o.Pick.Row] = o.Pick.Verb

@@ -141,6 +141,9 @@ func (a *app) searchPage(q string) any {
 		a.logf("skills.sh search %s: %v", pyQuote(q), err)
 		return nil
 	}
+	if page, ok := data.(*obj); !ok || page.val("skills") == nil {
+		return data // not a page of results (an error body): asked for again next time
+	}
 	if err := writeShared(path, dumpJSON(data)); err != nil {
 		a.logf("skills.sh search %s: not cached: %v", pyQuote(q), err)
 	}

@@ -528,29 +528,39 @@ func ParseObserving(projectsDir string, cutoff time.Time, windowDays int, needs 
 // a linked project folder; empty means take it from the path under the root.
 type transcriptRoot struct {
 	dir, project string
+	// broken is a project folder that is a link leading nowhere (a history on
+	// a disk that is not mounted): its sessions cannot be seen.
+	broken bool
 }
 
 // transcriptRoots returns dir plus any project folder directly under it that is
 // a symlink to a directory, such as a history moved to another disk. WalkDir does
 // not descend into those, and what fired there would read as never fired.
 func transcriptRoots(dir string) []transcriptRoot {
+	seen := map[string]bool{}
+	inside := ""
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		// The folder itself may be a link: a walk does not follow one at its
+		// root, and nothing under it was read.
+		dir = real
+		seen[real] = true
+		inside = real + string(filepath.Separator)
+	}
 	roots := []transcriptRoot{{dir: dir}}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return roots
-	}
-	seen := map[string]bool{}
-	inside := ""
-	if real, err := filepath.EvalSymlinks(dir); err == nil {
-		seen[real] = true
-		inside = real + string(filepath.Separator)
 	}
 	for _, e := range entries {
 		if e.Type()&os.ModeSymlink == 0 {
 			continue
 		}
 		target, err := filepath.EvalSymlinks(filepath.Join(dir, e.Name()))
-		if err != nil || seen[target] {
+		if err != nil {
+			roots = append(roots, transcriptRoot{dir: filepath.Join(dir, e.Name()), project: e.Name(), broken: true})
+			continue
+		}
+		if seen[target] {
 			continue
 		}
 		if inside != "" && strings.HasPrefix(target, inside) {
@@ -594,6 +604,13 @@ func parseTree(dir string, cutoff time.Time, windowDays int, needs func(id strin
 	sessions := map[string]bool{}
 	var walkErr error
 	for _, root := range transcriptRoots(dir) {
+		if root.broken {
+			// What was used there cannot be known: nothing is condemned on
+			// the sessions that could be read.
+			st.IncompleteEvidence = true
+			st.UnreadableFiles++
+			continue
+		}
 		if err := walkTranscripts(root, st, sessions, cutoff, windowDays, needs, observe, parseOne); err != nil {
 			walkErr = err
 		}
@@ -1133,7 +1150,7 @@ func recordBlocks(st *Stats, blocks []contentBlock, ts time.Time, project string
 					}
 					recordMCPCall(st, call.tool, call.ts)
 					total, noise := classifyPayload(b.Content)
-					st.recordPayload(call.tool, total, noise)
+					st.recordPayload(scan.SafeText(call.tool), total, noise) // printed in the payload table
 				}
 			}
 			ps, ok := pending[b.ToolUseID]

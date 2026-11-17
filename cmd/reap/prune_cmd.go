@@ -692,7 +692,7 @@ func restoreID(claudeDir, arg string) (string, error) {
 	}
 	ids := make([]string, len(matches))
 	for i, e := range matches {
-		ids[i] = e.ID + " (" + shown(e.From+e.ConfigPath) + strings.TrimLeft(ofProject(e), " (") + ")"
+		ids[i] = quarantined(e)
 	}
 	return "", fmt.Errorf("%s is in quarantine %d times; use an id: %s", arg, len(matches), strings.Join(ids, ", "))
 }

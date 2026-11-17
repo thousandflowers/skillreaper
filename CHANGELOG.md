@@ -12,7 +12,7 @@ report, and every command still works from the command line.**
 
 ### Upgrading from 0.8
 
-Five things behave differently for someone who had 0.8:
+What behaves differently for someone who had 0.8:
 
 - `reap prune <name>` prunes that one item. In 0.8 the name was ignored and
   the whole plan was queued.
@@ -21,10 +21,20 @@ Five things behave differently for someone who had 0.8:
   had muted something. `--json` also gained `MutedCount`, `Platforms`,
   `PriceBasis`, `PricePerToken`, `MonthlyBasisDays`, `PlatformSessions` and
   `PlatformSessionsPerMonth`.
-- The session count and the measured tokens are lower than 0.8 printed for
-  the same folder: a session counts by when it happened, and a message is
-  measured once.
-- `echo y | reap prune` is refused, and a declined prompt exits 3.
+- The session count and the measured tokens can be lower than 0.8 printed
+  for the same folder: a session counts by when it happened, and a message
+  is measured once. Monthly figures are scaled from the days of history
+  there really are, so with under a month of it the money can read higher.
+- The questions default to no. 0.8 asked `[Y/n]`, and Enter went ahead; 0.9
+  asks `[y/N]`, and Enter is `aborted`.
+- `reap mute <name>` asks first, as prune does. In 0.8 it muted at once.
+- `echo y | reap prune` is refused: with no terminal to ask on, prune and
+  mute need `--yes`. A declined prompt exits 3, and so does `--quiet`
+  without `--yes` when there was something to do (it exited 0 in silence).
+- In `--json`, a row of an item never used has no `LastUsed`, `LastAttempt`
+  or `InstalledAt` where 0.8 wrote a date in year 1, and rows gained
+  `FrontmatterName`, `HookLoaded` and `LinkTarget`. Every other JSON output
+  only gained keys.
 - `--dry-run` on `prune` and `mute` exits 2: they show their plan and ask
   already.
 
@@ -138,7 +148,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 262 fixes of this release, most of them found by reviewing it before
+The 267 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -267,8 +277,9 @@ it went out. Each says what was wrong where that is not plain.
 - A skill whose name is one plain word is protected by your CLAUDE.md only
   where the word is written as a name: `/review`, between backticks,
   asterisks, quotes or as a link's text, beside the word "skill", in a
-  list item that begins with names (`- review: …`, `- review, deploy`) or
-  a heading of its own, or alone in a table cell. "always review the
+  list item or a quoted line that begins with names (`- review: …`,
+  `- review, deploy`, `> review`) or a heading of its own, or alone in a
+  table cell. "always review the
   diff" protected a skill named `review` that nothing used; so did
   "docs/review" and "review skills". A word is one in any alphabet, and a
   longer word is not the name it begins with (`обзорный` for `обзор`). A
@@ -304,6 +315,22 @@ it went out. Each says what was wrong where that is not plain.
   one query, or one record over the limit, left sessions behind, and a skill
   used in the part that was lost came out REAP. A long list of names after
   `Skills:` protects its last name as it does its first.
+- The sessions an item installed inside the window is judged on grow with
+  the time it has existed. The scale ran the other way: a skill 29 days old
+  needed one session to come out REAP, and one 31 days old ten.
+- More ways for evidence to be missing are said, and hold the verdicts
+  instead of passing for "never used": a project folder that is a link to a
+  disk that is not there (it was skipped without a word); a record of past
+  uses that cannot be read (it is set aside as `….unreadable`, never
+  written over); a CLAUDE.md that is there and cannot be read; a tool that
+  loads `~/.claude/skills` too and is not read because `--claude-dir` was
+  given. A projects folder that is itself a link is read. A parse is cached
+  only when it was whole and the record of past uses is there, so a verdict
+  no longer depends on the cache. A second config folder's skills are not
+  held on OpenCode's account: it loads `~/.claude/skills` only.
+- `reap why` on a hook or a prose file has no use lines: they read as
+  "never used". A tool's name in the payload table is printed without
+  control characters.
 
 #### Prune, mute, restore, delete and keep
 
@@ -556,6 +583,11 @@ it went out. Each says what was wrong where that is not plain.
   above `uses 2`. Its advice for a name that is a plain word in CLAUDE.md
   gives the full key (`reap keep skill:<name>`), and is not given for an
   item that is kept.
+- One cause, one warning: a history read in part was said twice, and a
+  folder whose only transcript was over the limit was also said to have no
+  transcripts. `reap restore <name>` names each entry of a shared name with
+  its project (`004 (…/.claude.json, project /work/a)`). `reap --agent` says
+  `held back from a REAP or MUTE verdict`: a used skill can be held too.
 
 #### The menu
 
@@ -876,6 +908,11 @@ it went out. Each says what was wrong where that is not plain.
   the answer was a web page. A request to end (SIGTERM) that came while the
   pager was open is obeyed. A folder of sessions that cannot be read is
   said: the count was merely low.
+- A transcript that cannot be opened is said, like a folder that cannot be:
+  the count of sessions was low without a word. Two kinds of work that
+  would go by one name are told apart: the second was written, verified,
+  and never offered. The prototype's README says it is not maintained, and
+  how it differs from `reap reinvest`.
 
 </details>
 

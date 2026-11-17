@@ -20,6 +20,16 @@ func ofProject(e prune.Entry) string {
 	return "  (project " + shown(e.JSONScope) + ")"
 }
 
+// quarantined names one entry among several of a name: its id, where it was,
+// and its project when it was a server declared for one.
+func quarantined(e prune.Entry) string {
+	where := shown(e.From + e.ConfigPath)
+	if e.JSONScope != "" {
+		where += ", project " + shown(e.JSONScope)
+	}
+	return e.ID + " (" + where + ")"
+}
+
 // showPruned prints what is still in quarantine, newest first, with the id
 // restore takes, and returns how many items that is. The id is otherwise only
 // ever shown at the moment of pruning.

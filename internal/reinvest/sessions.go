@@ -130,6 +130,17 @@ func lessByParts(a, b string) bool {
 
 // transcriptPaths lists every *.jsonl under the projects folder, outside any
 // "subagents" folder (subagent transcripts hold no user prompts).
+// cannotRead logs a folder or a transcript that could not be read and keeps
+// it for the one line the run says: the count of sessions is low without it.
+// What is not there (no Claude Code here, a file deleted meanwhile) is logged
+// only.
+func (a *app) cannotRead(what string, err error) {
+	a.logf("%s: %v", what, err)
+	if !errors.Is(err, fs.ErrNotExist) {
+		a.unread = append(a.unread, err.Error())
+	}
+}
+
 func (a *app) transcriptPaths() []string {
 	var paths []string
 	a.unread = nil
@@ -137,10 +148,7 @@ func (a *app) transcriptPaths() []string {
 	// The walk itself has no error to give: the callback logs each one and goes on.
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			a.logf("transcripts: %v", err)
-			if !errors.Is(err, fs.ErrNotExist) { // missing is no Claude Code here
-				a.unread = append(a.unread, err.Error())
-			}
+			a.cannotRead("transcripts", err)
 			if d != nil && d.IsDir() {
 				return fs.SkipDir
 			}
@@ -195,7 +203,7 @@ func (a *app) readTranscripts(days int, each func(transcript)) {
 		// ("atis-latch", "pr-link") to old transcripts in batches, so mtime says nothing about activity.
 		info, err := os.Stat(path)
 		if err != nil {
-			a.logf("transcript %s: %v", path, err)
+			a.cannotRead("transcript "+path, err)
 			continue
 		}
 		if info.ModTime().Before(oldest) {
@@ -203,7 +211,7 @@ func (a *app) readTranscripts(days int, each func(transcript)) {
 		}
 		entries, err := readEntries(path)
 		if err != nil {
-			a.logf("transcript %s: %v", path, err)
+			a.cannotRead("transcript "+path, err)
 			continue
 		}
 		last, ok := lastActivity(entries)

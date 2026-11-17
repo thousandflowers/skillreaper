@@ -277,8 +277,14 @@ func nameOr(name, task string) string {
 		return name
 	}
 	words := strings.Fields(task)
+	if len(words) == 0 {
+		return unnamedKind
+	}
 	return strings.Join(words[:min(len(words), unnamedWords)], " ")
 }
+
+// unnamedKind is a kind of work that came with neither a name nor a task.
+const unnamedKind = "unnamed work"
 
 // unnamedWords is how many words of its task stand for a kind with no name.
 const unnamedWords = 4
@@ -319,6 +325,16 @@ func kindsOfWork(groups []*obj, sessions []session) []kind {
 			k.CoveredBy = top // a skill you use in most of these sessions
 		}
 		kinds = append(kinds, k)
+	}
+	// A kind is known by its name all the way to its swap: two of one name
+	// (the model's, or the same first words of two tasks) were one there, and
+	// the second was written, verified and never offered.
+	taken := map[string]int{}
+	for i := range kinds {
+		taken[kinds[i].Name]++
+		if n := taken[kinds[i].Name]; n > 1 {
+			kinds[i].Name += " (" + strconv.Itoa(n) + ")"
+		}
 	}
 	return kinds
 }

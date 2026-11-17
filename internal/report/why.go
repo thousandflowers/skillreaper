@@ -359,14 +359,17 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 		weight = fmt.Sprintf("~%d tok  (description: %d chars)", e.TokenWeight, e.DescChars)
 	}
 	field("token weight", weight)
-	field("sessions", fmt.Sprintf("%d total in window", e.Sessions))
-	field("uses", fmt.Sprintf("%d", e.Uses))
-
-	if e.Errors > 0 {
-		field("errors", fmt.Sprintf("%d", e.Errors))
-		field("last attempt", e.LastAttempt)
+	// A hook and always-loaded prose are not used or unused: no use lines,
+	// which read as "never used".
+	if e.Category != string(scan.CatHook) && e.Category != string(scan.CatProse) {
+		field("sessions", fmt.Sprintf("%d total in window", e.Sessions))
+		field("uses", fmt.Sprintf("%d", e.Uses))
+		if e.Errors > 0 {
+			field("errors", fmt.Sprintf("%d", e.Errors))
+			field("last attempt", e.LastAttempt)
+		}
+		field("last seen", e.LastSeen)
 	}
-	field("last seen", e.LastSeen)
 
 	if e.Installed != "unknown" {
 		field("installed", fmt.Sprintf("%s (%s ago)", e.Installed, nOf(e.InstalledAgeDays, "day")))

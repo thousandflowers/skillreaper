@@ -177,10 +177,14 @@ func minSessionsFor(installedAt, windowStart time.Time, minSessions, windowDays 
 	if installedAt.IsZero() {
 		return minSessions
 	}
-	daysSinceInstall := installedAt.Sub(windowStart).Hours() / 24
-	if daysSinceInstall <= 0 || daysSinceInstall >= float64(windowDays) {
+	// The part of the window the item was there for. It was the part before
+	// the install that scaled the bar: an item 29 days old needed one session
+	// and one 31 days old ten.
+	before := installedAt.Sub(windowStart).Hours() / 24
+	if before <= 0 || before >= float64(windowDays) {
 		return minSessions
 	}
-	scaled := max(1, int(float64(minSessions)*daysSinceInstall/float64(windowDays)))
+	existed := float64(windowDays) - before
+	scaled := max(1, int(float64(minSessions)*existed/float64(windowDays)))
 	return min(scaled, minSessions)
 }

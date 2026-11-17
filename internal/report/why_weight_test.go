@@ -89,13 +89,14 @@ func TestWhyCountsGraceFromTheInstallDate(t *testing.T) {
 }
 
 // The sessions still needed are counted against the minimum the verdict uses,
-// which is scaled down for an item installed inside the window: the hint asked
-// for 48 more where 8 turned the verdict.
+// which is scaled down for an item installed inside the window, by the part
+// of the window it was there for (20 days of 30: 40 of 60 sessions): the hint
+// asked for 48 more where 28 turn the verdict.
 func TestWhyCountsSessionsAgainstTheScaledMinimum(t *testing.T) {
 	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
 	in := ExplainInput{MinSessions: 60, WindowDays: 30, Now: now}
 	inside := Row{Item: scan.Item{Name: "x", Category: scan.CatSkill, InstalledAt: now.AddDate(0, 0, -20)}, Verdict: VerdictReview, Reason: ReasonNeedsData}
-	if got := recommendationFor(inside, 12, in); !strings.Contains(got, "collect ~8 more sessions") {
+	if got := recommendationFor(inside, 12, in); !strings.Contains(got, "collect ~28 more sessions") {
 		t.Errorf("installed 20 days ago: %q", got)
 	}
 	before := Row{Item: scan.Item{Name: "x", Category: scan.CatSkill, InstalledAt: now.AddDate(0, 0, -200)}, Verdict: VerdictReview, Reason: ReasonNeedsData}

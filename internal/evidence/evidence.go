@@ -21,6 +21,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -107,16 +110,32 @@ func Path(claudeDir string) string {
 // malformed — yields an empty digest and never an error: a missing record is
 // the normal first run, and a corrupt one must not stop a report.
 func Load(path string) *Digest {
+	d, _ := LoadChecked(path)
+	return d
+}
+
+// LoadChecked is Load that tells a record that is not there (the normal first
+// run: no error) from one that is there and cannot be used: unreadable, cut
+// short, or written in another format. The digest is empty then too, and the
+// caller says so and keeps the file: read as a first run, it was written over
+// and what it knew was lost for good.
+func LoadChecked(path string) (*Digest, error) {
 	if path == "" {
-		return New()
+		return New(), nil
 	}
 	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return New(), nil
+	}
 	if err != nil {
-		return New()
+		return New(), err
 	}
 	var d Digest
-	if json.Unmarshal(b, &d) != nil || d.Format != Format {
-		return New()
+	if err := json.Unmarshal(b, &d); err != nil {
+		return New(), fmt.Errorf("it is not a record reap wrote: %w", err)
+	}
+	if d.Format != Format {
+		return New(), fmt.Errorf("it is in format %d, this reap writes %d", d.Format, Format)
 	}
 	if d.Sources == nil {
 		d.Sources = map[string]Source{}
@@ -124,7 +143,7 @@ func Load(path string) *Digest {
 	if d.Items == nil {
 		d.Items = map[string]map[string]Record{}
 	}
-	return &d
+	return &d, nil
 }
 
 // Save writes the digest atomically.

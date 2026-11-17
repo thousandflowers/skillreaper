@@ -803,7 +803,23 @@ func gather(opts options) (*report.Report, error) {
 	// The durable evidence record, loaded before any parsing so transcripts
 	// already counted are not counted twice.
 	digestPath := evidence.Path(opts.claudeDir)
-	digest := evidence.Load(digestPath)
+	digest, digestErr := evidence.LoadChecked(digestPath)
+	_, statErr := os.Stat(digestPath)
+	// The cache of a parse is only as good as the record it was folded into:
+	// with no record (a first run, one that could not be written) every
+	// transcript is read again, or a use before the window is lost with it.
+	digestThere, keepDigest, pastUsesLost := statErr == nil && digestErr == nil, false, false
+	if digestErr != nil {
+		// Set aside, never written over: what it knew may be read again by a
+		// newer reap, or by hand.
+		aside := digestPath + ".unreadable"
+		if err := os.Rename(digestPath, aside); err != nil {
+			aside, keepDigest = digestPath, true
+		}
+		pastUsesLost = true
+		warns = append(warns, scan.Warning{Path: aside, Msg: fmt.Sprintf(
+			"the record of past uses could not be read (%v) and is kept here; uses older than the transcripts on disk are not known in this run, so unused items are shown as REVIEW, not REAP/MUTE.", digestErr)})
+	}
 	digestDirty := false
 
 	evidenceBlind := map[string]bool{}
@@ -888,7 +904,7 @@ func gather(opts options) (*report.Report, error) {
 			fp := ""
 			if !opts.noCache {
 				fp = usage.Fingerprint(p.TranscriptDirs, opts.days)
-				if cached, ok := usage.LoadCache(opts.claudeDir, fp); ok {
+				if cached, ok := usage.LoadCache(opts.claudeDir, fp); ok && digestThere {
 					mergeParsed(cached)
 					break
 				}
@@ -918,7 +934,9 @@ func gather(opts options) (*report.Report, error) {
 				}
 				mergeParsed(parsed)
 			}
-			if fp != "" && forCache != nil && p.ID == platform.ClaudeCode {
+			// Not a partial read: its cause may be gone by the next run (a
+			// file made readable keeps its size and date, and its fingerprint).
+			if fp != "" && forCache != nil && !forCache.IncompleteEvidence && p.ID == platform.ClaudeCode {
 				usage.SaveCache(opts.claudeDir, fp, forCache)
 			}
 		case "sqlite":
@@ -931,9 +949,7 @@ func gather(opts options) (*report.Report, error) {
 				if why, unread := unreadHistory(parsed, err); unread {
 					historyUnread[pid] = why
 				}
-				// A read that failed with sessions in hand is said here. With
-				// none, the block below says it: once, not twice.
-				if err != nil && !errors.Is(err, usage.ErrNoSQLite) && parsed != nil && parsed.Sessions > 0 {
+				if readFailureIsNews(parsed, err) {
 					warns = append(warns, scan.Warning{Path: p.TranscriptDB,
 						Msg: fmt.Sprintf("%s SQLite evidence could not be read: %v", p.Name, err)})
 				}
@@ -946,7 +962,9 @@ func gather(opts options) (*report.Report, error) {
 		// amount of scanning will ever produce evidence about its items.
 		// Either way the items must not be REAP'd or MUTE'd against a session
 		// count that belongs to some other platform, so flag it and say why.
-		if !parsedAny {
+		// Not when it was already said that part of it could not be read:
+		// "no session transcripts were found" is then false.
+		if !parsedAny && !evidenceBlind[pid] {
 			reason := fmt.Sprintf("no session transcripts were found in the last %d %s", opts.days, report.Plural(opts.days, "day"))
 			switch {
 			case !p.HasTranscripts:
@@ -991,7 +1009,12 @@ func gather(opts options) (*report.Report, error) {
 	if digestDirty {
 		// A failure to persist is not worth interrupting a report for: the
 		// run is still correct, it simply did not extend the record.
-		_ = evidence.Save(digestPath, digest)
+		if keepDigest {
+			// the unreadable record could not be moved aside: it is not written over
+		} else if err := evidence.Save(digestPath, digest); err != nil {
+			warns = append(warns, scan.Warning{Path: digestPath, Advisory: true, Msg: fmt.Sprintf(
+				"the record of past uses could not be written (%v): a use seen today is forgotten once its transcript is deleted.", err)})
+		}
 	}
 
 	keepSet, keepErr := override.KeepSet(opts.claudeDir)
@@ -1000,7 +1023,16 @@ func gather(opts options) (*report.Report, error) {
 			Msg: fmt.Sprintf("the keep list cannot be read, so nothing is protected by it in this report: %v", keepErr)})
 	}
 	home, _ := os.UserHomeDir()
-	claudeMD := scan.LoadClaudeMD(cwd, home, opts.claudeDir)
+	claudeMD, unreadMD := scan.LoadClaudeMDChecked(cwd, home, opts.claudeDir)
+	warns = append(warns, unreadMD...)
+	if pastUsesLost {
+		for _, p := range platforms {
+			if pid := string(p.ID); !evidenceBlind[pid] {
+				evidenceBlind[pid] = true
+				blindReason[pid] = "the record of past uses could not be read, so a use older than the transcripts on disk is not known"
+			}
+		}
+	}
 
 	names := map[string]string{}
 	for _, p := range platform.All() {
@@ -1016,10 +1048,17 @@ func gather(opts options) (*report.Report, error) {
 			servers[it.Platform] = append(servers[it.Platform], scopedName(it.Platform, usage.MCPServerKey(it.Name)))
 		}
 	}
-	readers := map[string][]string{}
-	for _, p := range platform.All() {
-		if p.ReadsClaudeSkills {
-			readers[string(platform.ClaudeCode)] = append(readers[string(platform.ClaudeCode)], string(p.ID))
+	readers := folderReaders(opts.claudeDir, home)
+	if opts.claudeDirExplicit && len(readers) > 0 {
+		// --claude-dir reads Claude Code alone. A tool installed here that
+		// loads this folder too was not read: a skill may be in use there.
+		for _, p := range detectPlatforms() {
+			if p.ReadsClaudeSkills && p.ID != platform.ClaudeCode {
+				why := "its history is not read when --claude-dir is given"
+				historyUnread[string(p.ID)] = why
+				warns = append(warns, scan.Warning{Path: p.ConfigDirAbs, Advisory: true, Msg: fmt.Sprintf(
+					"%s loads the skills of this folder too, and %s: unused skills here are shown as REVIEW, not REAP/MUTE. Run reap without --claude-dir to read it.", p.Name, why)})
+			}
 		}
 	}
 	built := report.Build(items, st, uniqueWarnings(warns), report.Opts{
@@ -1041,25 +1080,26 @@ func gather(opts options) (*report.Report, error) {
 			return r.Uses, r.Last, true
 		},
 
-		MinSessions:   opts.minSessions,
-		GraceDays:     opts.graceDays,
-		MinTokens:     opts.minTokens,
-		Model:         opts.model,
-		PricePerMTok:  price,
-		Cutoff:        cutoff,
-		WindowDays:    opts.days,
-		KeepSet:       keepSet,
-		EvidenceBlind: evidenceBlind,
-		BlindReason:   blindReason,
-		HistoryUnread: historyUnread,
-		PerPlatform:   perPlatform,
-		RetentionDays: retentionFor(opts.claudeDir),
-		ClaudeMDLines: claudeMD,
-		MuteThreshold: opts.muteThreshold,
-		MuteMinTokens: opts.muteMinTokens,
-		Muted:         muted,
-		MuteLost:      muteLost,
-		PruneLost:     prunedPluginItems(opts.claudeDir),
+		MinSessions:    opts.minSessions,
+		GraceDays:      opts.graceDays,
+		MinTokens:      opts.minTokens,
+		Model:          opts.model,
+		PricePerMTok:   price,
+		Cutoff:         cutoff,
+		WindowDays:     opts.days,
+		KeepSet:        keepSet,
+		EvidenceBlind:  evidenceBlind,
+		BlindReason:    blindReason,
+		HistoryUnread:  historyUnread,
+		ClaudeMDUnread: len(unreadMD) > 0,
+		PerPlatform:    perPlatform,
+		RetentionDays:  retentionFor(opts.claudeDir),
+		ClaudeMDLines:  claudeMD,
+		MuteThreshold:  opts.muteThreshold,
+		MuteMinTokens:  opts.muteMinTokens,
+		Muted:          muted,
+		MuteLost:       muteLost,
+		PruneLost:      prunedPluginItems(opts.claudeDir),
 	})
 	if _, err := mute.Entries(opts.claudeDir); err != nil {
 		// Without the list a muted skill reads as any other, and its uses as proof.
@@ -1201,6 +1241,22 @@ const corpusReachesHorizon = 0.9
 // satisfied), and a corpus that already reaches the horizon (the sweep is
 // deleting evidence now). A corpus far shorter than the horizon is just a
 // young installation and stays silent.
+// folderReaders names, for Claude Code, the other tools that load its skills
+// folder too. They load ~/.claude/skills: a second config folder
+// (CLAUDE_CONFIG_DIR, --claude-dir elsewhere) is Claude Code's alone.
+func folderReaders(claudeDir, home string) map[string][]string {
+	readers := map[string][]string{}
+	if home == "" || filepath.Clean(claudeDir) != filepath.Join(home, ".claude") {
+		return readers
+	}
+	for _, p := range platform.All() {
+		if p.ReadsClaudeSkills {
+			readers[string(platform.ClaudeCode)] = append(readers[string(platform.ClaudeCode)], string(p.ID))
+		}
+	}
+	return readers
+}
+
 // unreadHistory says whether a platform's history counts as not read, and
 // why: the tool to read it with is missing, the read failed, or part of it
 // was lost (a record over the limit, a database too large for one query).
@@ -1215,6 +1271,14 @@ func unreadHistory(parsed *usage.Stats, err error) (string, bool) {
 		return "at least one transcript record exceeded the parser limit or could not be read", true
 	}
 	return "", false
+}
+
+// readFailureIsNews says whether a SQLite read that failed still has to be
+// said: one cause, one warning. With no session in hand the block for a
+// platform with no evidence says it; when part was read, the warning about
+// incomplete evidence did.
+func readFailureIsNews(parsed *usage.Stats, err error) bool {
+	return err != nil && !errors.Is(err, usage.ErrNoSQLite) && parsed != nil && parsed.Sessions > 0 && !parsed.IncompleteEvidence
 }
 
 // heldAsReview is the subject of a warning's "… as REVIEW": the tool's own

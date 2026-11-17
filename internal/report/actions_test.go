@@ -47,7 +47,7 @@ func TestTheAgentFooterSaysOnlyWhatHappened(t *testing.T) {
 	if strings.Contains(a.String(), "held back") || !strings.Contains(a.String(), "1 warning — run reap for details") {
 		t.Errorf("advisory only:\n%s", a.String())
 	}
-	if !strings.Contains(b.String(), "1 item held back from a REAP verdict: its usage could not be read") {
+	if !strings.Contains(b.String(), "1 item held back from a REAP or MUTE verdict: its usage could not be read") {
 		t.Errorf("one held back:\n%s", b.String())
 	}
 }

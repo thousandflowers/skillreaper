@@ -1,7 +1,9 @@
 package scan
 
 import (
+	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -59,23 +61,36 @@ func markdownUnder(root string) []string {
 // headings included. Missing files are skipped. The result feeds ClaudeMDReferences, which protects a
 // referenced skill from REAP/MUTE.
 func LoadClaudeMD(cwd, home, claudeDir string) []string {
-	var lines []string
+	lines, _ := LoadClaudeMDChecked(cwd, home, claudeDir)
+	return lines
+}
+
+// LoadClaudeMDChecked is LoadClaudeMD that also says which memory files are
+// there and could not be read (no permission, a link leading nowhere, over
+// the size limit). Such a file may name skills: read as missing, it stopped
+// protecting them without a word.
+func LoadClaudeMDChecked(cwd, home, claudeDir string) (lines []string, unread []Warning) {
 	seen := map[string]bool{}
 	for _, p := range claudeMDPaths(cwd, home, claudeDir) {
-		lines = append(lines, readMemoryFile(p, home, seen, 0)...)
+		lines = append(lines, readMemoryFile(p, home, seen, 0, &unread)...)
 	}
-	return lines
+	return lines, unread
 }
 
 // readMemoryFile returns one file's lines followed by those of its imports. seen
 // keeps a file from being read twice, and so an import cycle from looping.
-func readMemoryFile(path, home string, seen map[string]bool, depth int) []string {
+func readMemoryFile(path, home string, seen map[string]bool, depth int, unread *[]Warning) []string {
 	if seen[path] || depth > maxImportDepth {
 		return nil
 	}
 	seen[path] = true
 	b, err := readCapped(path)
 	if err != nil {
+		// Not there is the usual case. There and unreadable, or a link whose
+		// target is gone, is a file whose names reap cannot see.
+		if _, statErr := os.Lstat(path); statErr == nil {
+			*unread = append(*unread, Warning{Path: path, Msg: fmt.Sprintf("this memory file could not be read (%v), so the skills it names are not known: unused skills are shown as REVIEW, not REAP/MUTE", err)})
+		}
 		return nil
 	}
 	var lines []string
@@ -84,7 +99,7 @@ func readMemoryFile(path, home string, seen map[string]bool, depth int) []string
 		line := sc.Text() // headings too: "#" opens one in Markdown, and the session loads it
 		lines = append(lines, line)
 		for _, m := range importRe.FindAllStringSubmatch(line, -1) {
-			lines = append(lines, readMemoryFile(resolveImport(m[1], filepath.Dir(path), home), home, seen, depth+1)...)
+			lines = append(lines, readMemoryFile(resolveImport(m[1], filepath.Dir(path), home), home, seen, depth+1, unread)...)
 		}
 	}
 	return lines

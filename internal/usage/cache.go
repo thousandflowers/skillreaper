@@ -39,6 +39,9 @@ func Fingerprint(dirs []string, windowDays int) string {
 	var ents []ent
 	for _, dir := range dirs {
 		for _, root := range transcriptRoots(dir) {
+			if root.broken {
+				return "" // part of the corpus cannot be seen: never cached as if whole
+			}
 			err := filepath.WalkDir(root.dir, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return err

@@ -53,6 +53,9 @@ type Opts struct {
 	// be read (OpenCode's SQLite store without the sqlite3 CLI), with why. A
 	// skill in a folder such a tool loads too may be in use there, unseen.
 	HistoryUnread map[string]string
+	// ClaudeMDUnread says that a CLAUDE.md or rules file is there and could
+	// not be read: it may name any skill.
+	ClaudeMDUnread bool
 	// RetentionDays is Claude Code's transcript retention, 0 when unknown.
 	RetentionDays int
 	// ClaudeMDLines holds the lines of every detected CLAUDE.md, headings included.
@@ -335,6 +338,9 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				row.Verdict, row.Reason = VerdictKeep, ReasonSkillAgent
 			case it.Category == scan.CatSkill && !IsPluginSource(it.Source) && usedByAReader(opts, evidenceFor, it):
 				row.Verdict, row.Reason = VerdictReview, ReasonUsedElsewhere
+			case it.Category == scan.CatSkill && opts.ClaudeMDUnread:
+				row.Verdict, row.Reason = VerdictReview, ReasonNoEvidence
+				row.EvidenceNote = "a CLAUDE.md or rules file could not be read, and may name it"
 			case it.Category == scan.CatSkill && !IsPluginSource(it.Source) && unreadReader(opts, it) != "":
 				// No use seen is no use only where every tool that loads the
 				// folder was read: this one may call the skill daily.

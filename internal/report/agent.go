@@ -136,7 +136,7 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 		if held > 1 {
 			its = "their usage"
 		}
-		fmt.Fprintf(w, "\n%d %s held back from a REAP verdict: %s could not be read.\n", held, Plural(held, "item"), its)
+		fmt.Fprintf(w, "\n%d %s held back from a REAP or MUTE verdict: %s could not be read.\n", held, Plural(held, "item"), its)
 	}
 	if len(r.Warnings) > 0 {
 		fmt.Fprintf(w, "\n%d %s — run reap for details.\n", len(r.Warnings), Plural(len(r.Warnings), "warning"))

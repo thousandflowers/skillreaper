@@ -57,3 +57,16 @@ func TestAMuteThatSavesNothingIsNotEligible(t *testing.T) {
 		t.Errorf("eligible: %v and %v", MuteEligible(saves), MuteEligible(nothing))
 	}
 }
+
+// What is held for want of evidence is held from MUTE too: a used skill held
+// that way was counted under "held back from a REAP verdict".
+func TestAgentSaysHeldFromEitherVerdict(t *testing.T) {
+	r := &Report{Sessions: 12, WindowDays: 30, Gap: &Gap{Loaded: 1}, Rows: []Row{
+		{Item: scan.Item{Category: scan.CatSkill, Name: "heavy"}, Verdict: VerdictReview, Reason: ReasonNoEvidence, Uses: 1},
+	}}
+	var b bytes.Buffer
+	RenderAgent(&b, r, 10)
+	if said := b.String(); !strings.Contains(said, "1 item held back from a REAP or MUTE verdict") {
+		t.Errorf("--agent:\n%s", said)
+	}
+}

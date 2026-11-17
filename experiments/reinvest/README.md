@@ -5,7 +5,12 @@ no skill covers, and proposes **swaps**: mute some never-used skills and create 
 from your own sessions, for about the same tokens per session. With `--online` it searches skills.sh and the
 MCP registry for one instead. You pick the swaps with the arrow keys.
 
-Python, standard library only. Not part of the Go build: kept here to decide whether and how to port it.
+> **This is the reference prototype. It is not maintained: use `reap reinvest`**, which is this program in the
+> binary, with fixes this script does not have. The script differs from it in ways that matter: it ignores
+> `CLAUDE_CONFIG_DIR` (it always reads and writes `~/.claude`), it prints no notice that excerpts of your sessions
+> are sent to Claude, and with `--online` it puts no limit on its searches. It shares the binary's cache folder.
+
+Python, standard library only. Not part of the Go build.
 
 ## Run
 
@@ -82,7 +87,7 @@ the new one. Tested for real (skill and MCP, success and rollback) with `HOME` p
    skills). An MCP server's weight is unknown until it runs, so an MCP swap installs and mutes nothing; the
    server is remembered (`weigh_later.json`), and once reap has weighed it from the transcripts (its tool names
    and instructions, as Claude Code injected them) the next run offers the mute as an `installed` swap.
-   A server no longer installed is forgotten. Needs reap with MCP weights (branch `feat/mcp-weight`).
+   A server no longer installed is forgotten. Needs reap 0.9.0 or later, for the MCP weights.
 
 ## What the experiments showed
 
@@ -113,8 +118,8 @@ Measured on one real install (~70 human sessions, 327 skills, 7 ever used), over
 
 - **Multi-line descriptions** (`description: >`, `|`, or a line continued below) were weighed by their first
   line only, by reap and so by reinvest: 29 installed skills at 3-8 tokens instead of 140-230. Both now read
-  the description whole (reap branch `feat/mcp-weight`); reinvest matches reap on all 301 installed skills.
+  the description whole (reap 0.9.0); reinvest matches reap on all 301 installed skills.
 
-## Open questions before porting
+## Open questions when it was ported
 
 - `reap reuse`: kinds of work covered by an installed skill you never invoke.

@@ -338,6 +338,40 @@ really injected, with multi-line descriptions read in full.
   rest, so a prune of another copy in the same apply is always the one
   refused; twins of one name and weight keep one order at every launch.
 - A delete that fails on the way says that part of the item is already gone.
+- A skill an agent names under `skills:` in its frontmatter is held at KEEP
+  (`agent-loaded`). Claude Code loads it into the agent when the agent
+  starts, no transcript records that, and it came out REAP.
+- An MCP server used through its prompts (`/mcp__server__prompt`) is seen as
+  used. The prompt was filed as a skill of that name and the server came
+  out REAP.
+- The measured token totals count a message once. Claude Code writes one
+  line per content block, each with the message's whole usage, and every
+  line was counted.
+- CLAUDE.md protects a skill named in any letter case, and `CLAUDE.local.md`
+  is read like `CLAUDE.md`.
+- A server is not kept by the calls of another whose name begins with its
+  own (`a` and `a__b`, `docs` and `docs.`): in the record of past uses a
+  call goes to the longest configured name that begins it.
+- The masking takes a password with no user in a URL (`redis://:…@host`), a
+  value with an escaped space, text glued after a closing quote, and a
+  connection string's value with a space in it.
+- `reap keep` writes the key by the item's name on disk, and takes the name
+  as the report shows it or ending in a space. For a name the report shows
+  cleaned it said `excluded from prune` and protected nothing.
+- The path of a config file is not the name of a server in it: typed where a
+  name goes it took the first server of the file, `--yes` and `delete`
+  included. The list of a shared name offers a quoted path for a skill or
+  an agent and none for a server.
+- `--claude-dir ""` and `--claude-json ""` are refused: read as not
+  given, the command ran on the usual folder.
+- A mute stopped because the item was kept meanwhile says so; the menu lets
+  no C1 control character through; a backslash in a name no longer breaks a
+  cell of the Markdown report.
+- Two first runs of the npm package at once both succeed: each downloads
+  into a folder of its own and moves the binary into place whole.
+- INSTALL.md says to run `reap uninstall-hook` before uninstalling;
+  SECURITY.md says what `--online` reaches and where a config is kept
+  unmasked.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -458,6 +492,9 @@ the same cache files and the same checks. What to know before running it:
   `CLAUDE_CONFIG_DIR` when the run was pointed at a folder through it.
 - With `--online --mcp`, a package has to name the server's repository
   itself, not one whose name only begins the same way.
+- The undo command printed after a swap carries no control character from a
+  skill's path, and a mute that was killed is undone like one cut off for
+  time.
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

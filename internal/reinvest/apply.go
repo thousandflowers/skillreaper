@@ -296,7 +296,7 @@ func (a *app) runInEmptyDir(cmd []string) error {
 	case res.timedOut:
 		return noAnswer(stepTimeout.Seconds())
 	case res.err != nil:
-		return res.err
+		return cutOff{res.err}
 	case res.code == 0:
 		return nil
 	}
@@ -437,9 +437,11 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 		}
 		outcome := "  ↺  rolled back: nothing changed"
 		inHand, undoing = "", true // this mute failed, it was not cut short; from here a stop lands in the undoing
-		// A mute that gave no answer in time was cut off, perhaps after it had done
-		// its work: it is undone too, and when that fails nobody knows which it is.
-		unsure := errors.As(err, new(noAnswer)) && a.runStep([]string{reapName, "unmute", x.target()}) != nil
+		// A mute that gave no answer in time, or was killed, was cut off, perhaps
+		// after it had done its work: it is undone too, and when that fails nobody
+		// knows which it is.
+		ended := errors.As(err, new(noAnswer)) || errors.As(err, new(cutOff))
+		unsure := ended && a.runStep([]string{reapName, "unmute", x.target()}) != nil
 		if left := a.rollBack(c, muted); len(left) > 0 {
 			outcome = "  ↺  rolled back, but still changed: " + strings.Join(left, ", ")
 		} else if unsure {
@@ -521,6 +523,10 @@ func dryRunLines(s swap) []string {
 	return lines
 }
 
+// cutOff is a step that ended without saying how it went: killed, or with its
+// pipes never closed.
+type cutOff struct{ error }
+
 // noAnswer is a step that was cut off for taking too long, in seconds.
 type noAnswer float64
 
@@ -530,7 +536,9 @@ func (n noAnswer) Error() string { return fmt.Sprintf("no answer in %d s", int(n
 // folder, when this run was pointed at one through the environment. A shell
 // without the variable looks in the usual folder and finds nothing muted.
 func undoMute(x skill) string {
-	cmd := "reap unmute " + scan.ShellArg(x.target())
+	// Without its control characters: it is printed to be read, and a path
+	// that holds them cannot be pasted either way.
+	cmd := "reap unmute " + scan.ShellArg(printable(x.target()))
 	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
 		cmd = "CLAUDE_CONFIG_DIR=" + scan.ShellArg(dir) + " " + cmd
 	}

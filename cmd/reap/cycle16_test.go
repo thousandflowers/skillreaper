@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -137,5 +138,65 @@ func TestKeepByTheNameAsShownProtectsTheItemOnDisk(t *testing.T) {
 		if code, out := reapRun("keep", "--remove", typed); code != 0 || kept() {
 			t.Errorf("keep --remove %s: %d, kept %v\n%s", typed, code, kept(), out)
 		}
+	}
+}
+
+// The path of a config file is not the name of a server in it. Typed or pasted
+// where a name goes, it took the first server of the file: pruned with --yes,
+// deleted for good.
+func TestAConfigFilesPathIsNotOneOfItsServers(t *testing.T) {
+	home := deleteHome(t)
+	cfg := filepath.Join(home, ".claude.json")
+	before := readFile(t, cfg)
+
+	for _, verb := range []string{"prune", "delete"} {
+		if code, out := reapRun(verb, "--yes", cfg); code == 0 || readFile(t, cfg) != before {
+			t.Errorf("%s %s: %d\n%s\nthe file is now: %s", verb, cfg, code, out, readFile(t, cfg))
+		}
+	}
+}
+
+// What the list offers to type is one word each, the path too, and for a
+// server it offers no path: the file is every server's.
+func TestTheListOfASharedNameOffersOnlyWhatWorks(t *testing.T) {
+	home := deleteHome(t)
+	putSkill(t, home, "srv") // a skill named like the server srv
+	putSkill(t, home, "sp ace")
+	other := filepath.Join(home, ".codex", "skills", "sp ace", "SKILL.md")
+	mustWriteFile(t, other, "---\nname: sp ace\ndescription: some words here\n---\nbody\n")
+	backdated(t, other)
+
+	_, out := reapRun("prune", "srv")
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "claude-code:mcp:srv") && !strings.Contains(line, "(a server in ") {
+			t.Errorf("the server's line offers its file as a name: %s", line)
+		}
+	}
+	if _, out := reapRun("prune", "sp ace"); !strings.Contains(out, "  '"+filepath.Join(home, ".claude", "skills", "sp ace")) {
+		t.Errorf("a path with a space is not one word:\n%s", out)
+	}
+}
+
+// --claude-dir "" is a folder that was named and is empty, as from a script
+// with an unset variable. Read as "not given", the command ran on the usual folder.
+func TestAnEmptyFolderFlagIsRefused(t *testing.T) {
+	home := deleteHome(t)
+	for _, flag := range []string{"--claude-dir", "--claude-json"} {
+		code, out := reapRun(flag, "", "prune", "--yes")
+		if code != 2 || !lexist(filepath.Join(home, ".claude", "skills", "mine", "SKILL.md")) {
+			t.Errorf("%s \"\": %d\n%s", flag, code, firstN(out, 300))
+		}
+	}
+}
+
+// A mute stopped because the item was kept meanwhile says so, as prune does.
+func TestAMuteStoppedByAKeepSaysWhy(t *testing.T) {
+	deleteHome(t)
+	var out, errOut bytes.Buffer
+
+	run([]string{"mute", "mine"}, &keepThenYes{t: t, name: "mine"}, &out, &errOut)
+
+	if said := out.String() + errOut.String(); !strings.Contains(said, "put on the keep list while this run was waiting") {
+		t.Errorf("the mute says nothing of why it did nothing:\n%s", said)
 	}
 }

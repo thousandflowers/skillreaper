@@ -251,6 +251,18 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return 2
 	}
+	// A folder named with an empty value (a script's unset variable) was
+	// named: read as "not given", the command would act on the usual folder.
+	emptied := ""
+	fs.Visit(func(f *flag.Flag) {
+		if (f.Name == "claude-dir" || f.Name == "claude-json") && f.Value.String() == "" {
+			emptied = f.Name
+		}
+	})
+	if emptied != "" {
+		fmt.Fprintf(stderr, "error: --%s was given an empty value\n", emptied)
+		return 2
+	}
 	if showVersion {
 		fmt.Fprintln(stdout, "reap", version())
 		return 0
@@ -1516,7 +1528,11 @@ func findRow(r *report.Report, typed string, eligible func(report.Row) bool) ([]
 	}
 	lines := make([]string, len(matches))
 	for i, m := range matches {
-		lines[i] = fmt.Sprintf("  %s  %s", scan.ShellArg(m.Platform+":"+string(m.Category)+":"+m.Name), shown(m.Path))
+		where := scan.ShellArg(shown(m.Path))
+		if m.Category == scan.CatMCP {
+			where = "(a server in " + shown(m.Path) + ")"
+		}
+		lines[i] = fmt.Sprintf("  %s  %s", scan.ShellArg(m.Platform+":"+string(m.Category)+":"+m.Name), where)
 	}
 	return nil, fmt.Errorf("%s matches %d items; name one of them, by this form or by its path:\n%s", typed, len(matches), strings.Join(lines, "\n"))
 }
@@ -1530,7 +1546,9 @@ func rowsNamed(r *report.Report, typed, plat, cat, name string, eligible func(re
 			continue
 		}
 		switch i := strings.LastIndexByte(row.Name, ':'); {
-		case row.Path == typed, row.Name == name:
+		// A path names a skill or an agent. A config file's path is every
+		// server's in it, and names none of them.
+		case row.Path == typed && row.Category != scan.CatMCP, row.Name == name:
 			exact = append(exact, row)
 		case i >= 0 && row.Name[i+1:] == name:
 			leaf = append(leaf, row)

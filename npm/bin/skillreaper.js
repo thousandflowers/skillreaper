@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
-import { accessSync, constants as fsConstants, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { accessSync, constants as fsConstants, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { homedir, constants as osConstants } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,20 +36,31 @@ function run(command, args) {
 
 async function download() {
   mkdirSync(home, { recursive: true });
-  const tmp = resolve(home, tarball);
+  // Everything happens in a folder of this run's own, and the binary is moved
+  // into place whole at the end. Two first runs at once shared one archive
+  // path: one removed it under the other, and a binary still being unpacked
+  // already looked installed.
+  const stage = mkdtempSync(resolve(home, '.download-'));
+  const tmp = resolve(stage, tarball);
   console.error(`downloading skillreaper ${versionLabel} for ${os}/${archName}...`);
 
   try {
     await downloadVerifiedReleaseAsset({ version, assetName: tarball, destination: tmp });
-    run('tar', ['-xzf', tmp, '-C', home, binaryName]);
-    if (os !== 'windows') run('chmod', ['+x', bin]);
-    unlinkSync(tmp);
+    run('tar', ['-xzf', tmp, '-C', stage, binaryName]);
+    if (os !== 'windows') run('chmod', ['+x', resolve(stage, binaryName)]);
+    try {
+      renameSync(resolve(stage, binaryName), bin);
+    } catch (err) {
+      if (!existsSync(bin)) throw err; // another run put it there first: that one is as good
+    }
     console.error(`installed skillreaper ${versionLabel} at ${bin}`);
   } catch (err) {
-    if (existsSync(tmp)) unlinkSync(tmp);
     console.error(`download failed: ${err.message}`);
-    process.exit(1);
+    process.exitCode = 1;
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
   }
+  if (process.exitCode) process.exit(process.exitCode);
 }
 
 if (!existsSync(bin)) {

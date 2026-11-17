@@ -42,7 +42,7 @@ func (f *frame) put(y, x int, s string, st Style) {
 			}
 			continue
 		}
-		if c < 0x20 || c == 0x7f {
+		if c < 0x20 || c >= 0x7f && c < 0xa0 { // C0, DEL and C1: U+009B is CSI to some terminals
 			c = ' ' // a control character must never reach the terminal
 		}
 		if row[col].cont && col > 0 {

@@ -455,3 +455,13 @@ func TestAPasteWithAPauseInItIsStillSwallowedWhole(t *testing.T) {
 		t.Errorf("keys = %v, want only the a typed after the paste", keys)
 	}
 }
+
+// The C1 controls (U+0080 to U+009F) are controls too: U+009B is CSI to some
+// terminals. None reaches the screen.
+func TestFramePutsNoC1Control(t *testing.T) {
+	f := newFrame(1, 20)
+	f.put(0, 0, "a\u009b2Jb\u0085c", Style{})
+	if got := f.text(0); strings.ContainsAny(got, "\u009b\u0085") || !strings.HasPrefix(got, "a 2Jb c") {
+		t.Errorf("row = %q", got)
+	}
+}

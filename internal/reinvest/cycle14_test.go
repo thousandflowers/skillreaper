@@ -140,3 +140,39 @@ func TestCycle15_a_mute_cut_off_for_time_is_undone_too(t *testing.T) {
 		})
 	}
 }
+
+// A path is printed for the person to read and paste. One with control
+// characters in it is printed without them: raw, they reached the terminal.
+func TestCycle16_the_undo_of_a_mute_prints_no_control_character(t *testing.T) {
+	cmd := undoMute(skill{Name: "x", Path: "/s/a\x1b]52;c;cHduZWQ=\x07\x1b[31mb/SKILL.md"})
+
+	if strings.ContainsAny(cmd, "\x1b\x07") {
+		t.Errorf("undoMute = %q", cmd)
+	}
+}
+
+// A mute that ended any way but by saying how it went (killed, or its pipes
+// never closed) may have done its work too: it is undone like one cut off for time.
+func TestCycle16_a_mute_that_was_killed_is_undone_too(t *testing.T) {
+	tempHome(t)
+	a := fakeApp(t)
+	late := []string{reapName, "--yes", "mute", "/s/second/SKILL.md"}
+	undo := []string{reapName, "unmute", "/s/second/SKILL.md"}
+	calls := stepsRecorded(a, func(cmd []string) error {
+		if sameWords(cmd, late) {
+			return cutOff{errors.New("signal: killed")}
+		}
+		return nil
+	})
+	s := writtenSwap()
+	s.Mute = []skill{{Name: "first", Path: "/s/first/SKILL.md"}, {Name: "second", Path: "/s/second/SKILL.md"}}
+
+	log := a.applyOne(s)
+
+	if !containsCmd(*calls, undo...) {
+		t.Errorf("the mute that was killed was not undone: %v", *calls)
+	}
+	if n := len(log); n < 2 || log[n-2] != "  ✗  reap mute second: signal: killed" || log[n-1] != "  ↺  rolled back: nothing changed" {
+		t.Errorf("got %q", log)
+	}
+}

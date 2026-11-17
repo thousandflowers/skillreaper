@@ -125,10 +125,12 @@ reap version
 
 `~/.claude/reaped` is not a cache. It holds every item you pruned (the only
 copy), the descriptions `reap mute` took out, your keep list and the backups
-of `.claude.json`. Before you uninstall, put back what you want to keep:
+of `.claude.json`. Before you uninstall, put back what you want to keep. The
+third line is for those who ran `install-hook`: without it `settings.json`
+goes on calling a binary that is gone.
 ```bash
 reap restore --all
 reap unmute --all
-reap uninstall-hook   # if you ran install-hook: it leaves settings.json calling a binary that is gone
+reap uninstall-hook
 ```
 After that the folder can go. Whatever is still in it goes for good.

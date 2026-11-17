@@ -1,5 +1,12 @@
 # Launch Posts
 
+> Drafts from the first launch, kept for their wording. Before posting any of
+> them: the figures in the X thread (187, 183, 76%, 8000, 45) are examples and
+> have to be replaced by measured ones (`reap` on a real stack, or
+> `make readme-numbers`); and reap does not measure latency or wrong tool
+> picks (README, roadmap #55), so the lines that promise those need a source
+> or have to go.
+
 ## Hacker News
 
 **Title**: Show HN: Reap – Find and prune unused AI agent skills from your transcripts
@@ -22,10 +29,10 @@ reap prune   # quarantine unused items (reversible)
 The output groups items by verdict (REAP -> REVIEW -> KEEP) with token weight
 bars, dead token costs, and monthly spend - all from your own transcript data.
 
-Nothing is ever deleted. `reap restore --all` undos everything.
+`reap prune` deletes nothing. `reap restore --all` undoes everything.
 
-100% local, zero deps, single binary. Supports Claude Code, OpenCode, Codex
-CLI, and Cursor. Written in Go.
+100% local, zero deps, single binary. Measures Claude Code, Codex CLI and
+OpenCode; inventories Cursor, Gemini CLI, Hermes and OpenClaw. Written in Go.
 
 https://github.com/thousandflowers/skillreaper
 
@@ -56,7 +63,7 @@ How it works:
 2. `reap prune` - moves unused items to a quarantine folder
 3. `reap restore --all` - undos everything
 
-100% local. Zero config. Nothing is ever deleted.
+100% local. Zero config. `reap prune` deletes nothing.
 
 ---
 
@@ -74,7 +81,7 @@ First-token latency improves.
 
 **Post 4**:
 
-Supports Claude Code, OpenCode, Codex CLI, Cursor.
+Measures Claude Code, Codex CLI, OpenCode. Inventories Cursor, Gemini CLI, Hermes, OpenClaw.
 Homebrew, npm, Go install - take your pick.
 
 ```

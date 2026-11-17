@@ -161,13 +161,13 @@ over the network.</sub>
 
 ## First 60 seconds
 
-Three commands, in this order. Only the third one writes anything, and it
-prints its own undo line.
+Three commands, in this order: measure, decide, act. Only the third one
+writes anything, and it prints its own undo line.
 
 ```bash
-reap                       # 1. measure: what you load, what fires, what it costs
-reap why <name>            # 2. decide: the evidence behind one verdict
-reap prune                 # 3. act: quarantine the dead ones, interactive
+reap
+reap why <name>
+reap prune
 ```
 
 Or all three on one screen: `skillreaper`, [the menu](#the-menu).
@@ -186,7 +186,7 @@ group's title and in a NOTE column. Every row carries a verdict:
 | **`MUTE`** | Used rarely + heavy - description stripped, skill stays available |
 | **`KEEP`** | Used, tiny, manually protected, or at work with no use of its own |
 | **`REVIEW`** | Too new, not enough sessions, or used in a way reap cannot weigh |
-| **`-`** | Not judged: something you muted, a hook, a prose file |
+| **`-`** | Not judged: something you muted, a hook, a prose file, an MCP server seen only in your transcripts |
 
 Every verdict includes a reason suffix explaining *why*, and an item whose
 evidence was incomplete stays `REVIEW` rather than being flagged. The reasons:
@@ -341,14 +341,21 @@ with any line below. If the skills can't find it, they print how to run it with
 **Install permanently** - Homebrew and npm install both names, `reap` and
 `skillreaper`, so either one works. `go install` gives you `reap`:
 
+Pick one. macOS, with Homebrew:
+
 ```bash
-# macOS — Homebrew
 brew install thousandflowers/tap/skillreaper
+```
 
-# Any platform — npm (downloads the matching prebuilt, checksum-verified)
+Any platform, with npm (downloads the matching prebuilt, checksum-verified):
+
+```bash
 npm install -g skillreaper
+```
 
-# Any platform — Go (Go ≥ 1.24)
+Any platform, with Go 1.24 or newer:
+
+```bash
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```
 
@@ -372,51 +379,53 @@ Upgrading, uninstalling, and platform-specific tips →
 ### Usage
 💬 **Curious what `reap` finds in other setups?** [Share your output →](https://github.com/thousandflowers/skillreaper/discussions)
 
-```bash
-skillreaper                   # the menu: choose on one screen, apply after a receipt
-reap menu                     # the same menu, by its command name
-reap                          # scan + report (read-only)
-reap gap                      # loaded-vs-fired utilization + MCP payload quality
-reap prune                    # quarantine REAP items (reversible)
-reap prune <name>             # quarantine that one item, whatever its verdict
-reap mute <name>              # strip description, keep skill available
-reap delete <name>            # remove one item for good (cannot be restored)
-reap unmute                   # list what is muted
-reap unmute <name>            # restore description from backup
-reap unmute <path>            # restore that one copy, not its namesakes elsewhere
-reap unmute --all             # restore all muted skills
-reap keep <name>              # protect an item from pruning
-reap restore                  # list what is pruned, with ids
-reap restore <id>             # undo one prune
-reap restore --all            # undo every prune
-reap why <name>               # explain in detail why an item got its verdict
-reap by-project               # skills bucketed by the project that fired them
-reap route                    # propose a usage-informed lazy-load routing plan (opt-in)
-reap apm                      # emit a proposed APM apm.yml from this repo's firing
-reap apm --diff apm.yml       # reconcile: what to add (fired, undeclared) / drop (declared, cold)
-reap share                    # print a ready-to-paste line about what you reclaimed
-reap reinvest --dry-run       # experimental: propose a skill for work none of yours covers
-reap snapshot                 # save this run's --json payload for later comparison
-reap diff                     # compare the newest two snapshots
-reap diff <a> <b>             # compare two named snapshots
-reap manifest <name>          # emit a release manifest for one skill
-reap install-hook             # install weekly nudge (SessionStart hook)
-reap install-hook --dry-run   # preview without writing
-reap uninstall-hook           # remove hook, other hooks untouched
-reap --json                   # structured JSON output
-reap --md                     # markdown report
-reap --days 7                 # shorter evidence window
-reap --mute-threshold 0.20    # uses ÷ sessions below which MUTE triggers (default 20%)
-reap version                  # print version
-```
+| Command | What it does |
+|---|---|
+| `skillreaper` | The menu: choose on one screen, apply after a receipt |
+| `reap menu` | The same menu, by its command name |
+| `reap` | Scan + report (read-only) |
+| `reap gap` | Loaded-vs-fired utilization + MCP payload quality |
+| `reap prune` | Quarantine REAP items (reversible) |
+| `reap prune <name>` | Quarantine that one item, whatever its verdict |
+| `reap mute <name>` | Strip description, keep skill available |
+| `reap delete <name>` | Remove one item for good (cannot be restored) |
+| `reap unmute` | List what is muted |
+| `reap unmute <name>` | Restore description from backup |
+| `reap unmute <path>` | Restore that one copy, not its namesakes elsewhere |
+| `reap unmute --all` | Restore all muted skills |
+| `reap keep <name>` | Protect an item from pruning |
+| `reap restore` | List what is pruned, with ids |
+| `reap restore <id>` | Undo one prune |
+| `reap restore --all` | Undo every prune |
+| `reap why <name>` | Explain in detail why an item got its verdict |
+| `reap by-project` | Skills bucketed by the project that fired them |
+| `reap route` | Propose a usage-informed lazy-load routing plan (opt-in) |
+| `reap apm` | Emit a proposed APM apm.yml from this repo's firing |
+| `reap apm --diff apm.yml` | Reconcile: what to add (fired, undeclared) / drop (declared, cold) |
+| `reap share` | Print a ready-to-paste line about what you reclaimed |
+| `reap reinvest --dry-run` | Experimental: propose a skill for work none of yours covers |
+| `reap snapshot` | Save this run's --json payload for later comparison |
+| `reap diff` | Compare the newest two snapshots |
+| `reap diff <a> <b>` | Compare two named snapshots |
+| `reap manifest <name>` | Emit a release manifest for one skill |
+| `reap install-hook` | Install weekly nudge (SessionStart hook) |
+| `reap install-hook --dry-run` | Preview without writing |
+| `reap uninstall-hook` | Remove hook, other hooks untouched |
+| `reap --json` | Structured JSON output |
+| `reap --md` | Markdown report |
+| `reap --days 7` | Shorter evidence window |
+| `reap --mute-threshold 0.20` | Uses ÷ sessions below which MUTE triggers (default 20%) |
+| `reap version` | Print version |
 
 <br>
 
 ### The menu
 
 ```bash
-skillreaper        # or: reap menu
+skillreaper
 ```
+
+`reap menu` opens the same screen.
 
 <p align="center">
   <img src="docs/menu-demo.gif" alt="The skillreaper menu: choosing what to prune and mute, the number falling to zero, then the receipt" width="900"><br>

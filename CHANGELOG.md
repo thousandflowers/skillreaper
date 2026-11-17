@@ -263,7 +263,7 @@ really injected, with multi-line descriptions read in full.
   are; `docs/renders/summary.txt` matches its captures and `make
   renders-check` now checks it; INSTALL.md names every place the npm binary
   can be kept.
-- A secret in a hook or server command is masked in every shape: in quotes
+- A secret in a hook or server command is masked in more shapes: in quotes
   (`--token "…"`, `TOKEN="…"`, `{"api_key":"…"}`), after `=` when it
   begins with a dash, as the user part of a URL, after `--user` or glued to
   `-u`, with a space in it, and in a Digest `Authorization` header. A server's
@@ -301,6 +301,43 @@ really injected, with multi-line descriptions read in full.
   stopped by SIGTERM exits 143, not Ctrl-C's 130.
 - SECURITY.md names a private channel for a vulnerability; the README says
   that a Codex item with no use stays REVIEW.
+- The masking also finds a secret's name behind another flag's `=`
+  (`--env=TOKEN=…`), after what joins commands (`;`, `|`), in a connection
+  string, and under more names (cookie, session, passphrase, `--pass`,
+  `--pwd`, `--sig`, `--jwt`); the value is masked whole, whatever characters
+  it holds. SECURITY.md says what the masking reads and what it cannot.
+- An MCP server whose name ends in a character tool names drop (`docs.`, a
+  lone `é`) is seen as used: its calls were credited to another name, and it
+  came out REAP. So is a server named with `__` that was only reached
+  through the resource tools, once its transcripts are gone.
+- A session counts in the window when one of its turns happened in it. The
+  file's date counted it before: a folder restored from a backup, or copied
+  to a new machine, made every old session a recent one with no use in it.
+- A typed name that is one item's whole name and, read as
+  `platform:category:name`, another item, is not guessed: reap lists both
+  forms, each quoted as one word. It took the other item, `--yes` included.
+- The keep list is read again after the question is answered. An item kept
+  from another terminal while `Prune…? [y/N]` was open is left alone by
+  prune, mute and delete.
+- A scan that could read nothing is said as a failed scan by `snapshot`,
+  `share`, `gap` and `prune` too, and no snapshot of it is stored.
+- `reap why` takes a whole name before a namespaced one, finds a name with a
+  control character by what it is on disk, and for an item with a use on
+  record no longer asks for more sessions that change nothing.
+- `reap mute` waiting behind another run stops at once on Ctrl-C; `reap mute
+  mcp:<name>` says the item is a server; the `reap unmute` command inside an
+  error works for a name that begins with a dash.
+- `--claude-json` is checked by the commands that read it, not by `version`
+  or `install-hook`; the answer to a misplaced `reinvest` is no longer under
+  a page of usage; a name in the Markdown report cannot read as a tag or a
+  link.
+- The plugin's skill prunes the one item that was named, not everything;
+  INSTALL.md checks the downloaded archive against `checksums.txt`.
+- In the menu: a lock on a name that ends in a space comes off again; a
+  paste that pauses is still swallowed whole; a lock is applied before the
+  rest, so a prune of another copy in the same apply is always the one
+  refused; twins of one name and weight keep one order at every launch.
+- A delete that fails on the way says that part of the item is already gone.
 - `reap mute` leaves a file whose `---` header never closes as it is: it has
   no frontmatter, as the scanner reads it.
 - The npm wrapper gives up on a download only when it stops arriving, not
@@ -413,6 +450,14 @@ the same cache files and the same checks. What to know before running it:
   impatient Enter accepted the first swap.
 - `reap --days 5 reinvest --max 2` is answered with the command to type, and
   the step lines agree in number (`1 kind of work`, `1 skill written`).
+- A `y` typed before `apply?` is on screen is dropped: it answered for a
+  skill whose text had not been shown yet.
+- A mute cut off for taking too long is undone like the ones before it; it
+  could stay muted under a line saying nothing had changed.
+- The `reap unmute` command printed after a swap carries
+  `CLAUDE_CONFIG_DIR` when the run was pointed at a folder through it.
+- With `--online --mcp`, a package has to name the server's repository
+  itself, not one whose name only begins the same way.
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).

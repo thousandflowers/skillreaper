@@ -676,3 +676,46 @@ func TestCardSourceNamesTheMarketplaceWhenItTellsApart(t *testing.T) {
 
 	mustEqual(t, "sources", strings.Join(got, " | "), "plugin:bar | plugin:foo@mktA | plugin:foo@mktB")
 }
+
+// A lock goes first in an apply. With a prune of another copy of the name in
+// the same apply, which of the two won depended on their weights.
+func TestALockIsAppliedBeforeTheRest(t *testing.T) {
+	rows := []report.Row{raw("dup", tokens(500)), raw("dup", platform("codex"), tokens(50))}
+	m, _, _ := newMenu(t, one(rows...))
+	p := newPlan()
+	for _, r := range m.rows {
+		verb := vPrune
+		if r.Platform == "codex" {
+			verb = vLock
+		}
+		p.set(r, verb)
+	}
+
+	picks := m.receiptPicks(p)
+
+	mustEqual(t, "first", picks[0].Verb+" "+picks[0].Row.Platform, vLock+" codex")
+}
+
+// Rows of one name and one weight keep one order too: by tool, then by source.
+func TestTwinsOfOneWeightHaveAFixedOrder(t *testing.T) {
+	twins := []report.Row{
+		raw("same", source("plugin:tool@mktb")), raw("same", source("plugin:tool@mkta")),
+		raw("same", platform("codex")), raw("same"),
+	}
+	want := ""
+	for _, order := range [][]int{{0, 1, 2, 3}, {3, 2, 1, 0}, {1, 3, 0, 2}} {
+		var rows []report.Row
+		for _, i := range order {
+			rows = append(rows, twins[i])
+		}
+		m, _, _ := newMenu(t, one(rows...))
+		got := ""
+		for _, r := range m.flatList()[0].rows {
+			got += r.Platform + "/" + r.Source + " "
+		}
+		if want == "" {
+			want = got
+		}
+		mustEqual(t, "order", got, want)
+	}
+}

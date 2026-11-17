@@ -4,6 +4,7 @@
 package menu
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -549,7 +550,8 @@ func heavierThenByName(a, b *Row) bool {
 	if a.Tokens != b.Tokens {
 		return a.Tokens > b.Tokens
 	}
-	return a.Name < b.Name
+	// Twins of one name are told apart by tool, by source, then by where they are.
+	return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Platform, b.Platform), cmp.Compare(a.Source, b.Source), cmp.Compare(a.Path, b.Path)) < 0
 }
 
 func (m *Menu) flatList() []group {

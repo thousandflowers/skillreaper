@@ -512,7 +512,7 @@ func RenderAPMMarkdown(w io.Writer, m APMReport) {
 		if status == "" {
 			status = "include"
 		}
-		fmt.Fprintf(w, "| %s | %s | %d | %s |\n", mdCell(d.Name), mdCell(coord), d.Uses, status)
+		fmt.Fprintf(w, "| %s | %s | %d | %s |\n", mdText(d.Name), mdText(coord), d.Uses, status)
 	}
 	if len(m.Drop) > 0 {
 		fmt.Fprintf(w, "\n## Declared but cold here (suggest dropping)\n\n")

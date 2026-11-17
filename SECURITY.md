@@ -14,6 +14,16 @@ start by hand:
 - The npm package downloads the release binary the first time it runs,
   and checks it against the release's checksums.
 
+## Secrets in what reap prints
+
+The hook and MCP rows of the report show the command each one runs. What looks
+like a credential there is masked: the value after a name that says so (key,
+token, secret, password, auth, cookie, session and the like), the user part of
+a URL, `Authorization` and `Cookie` headers, `-u user:password`. This reads
+shapes, not secrets. A credential under a name that says nothing, or passed as
+a bare argument, is shown as it is written in your config: look before you
+share `--json` output or a snapshot file.
+
 ## Reporting a Vulnerability
 
 If the issue could affect other users, report it in private: on the

@@ -148,8 +148,8 @@ func creditToolCalls(c, st *usage.Stats, mcpNames []string) {
 			if !strings.HasPrefix(tool, key+sep) {
 				continue
 			}
-			first, _, _ := strings.Cut(tool, sep)
 			if st.ToolSep == "" {
+				first := usage.CreditedServer(tool)
 				if first == key {
 					break // the parser's credit was right
 				}

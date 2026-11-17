@@ -141,6 +141,9 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
+	if scanFailed(r, stderr) {
+		return 1
+	}
 	named := len(args) == 1
 	if !keepListReadable(opts, stderr) {
 		return 1
@@ -274,12 +277,21 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 	}
 	defer lock.Release()
 
+	nowKept, err := keptSince(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
 	out := plan
 	notes := map[string]prune.Note{}
 	for i, row := range candidates {
 		if stopped() {
 			out.interrupted = len(candidates) - i
 			break
+		}
+		if nowKept(row) {
+			out.failed = append(out.failed, problemOf(row, keptMeanwhile))
+			continue
 		}
 		var e prune.Entry
 		var err error
@@ -512,8 +524,10 @@ func (o pruneOutcome) writeJSON(w, stderr io.Writer, applied bool) int {
 // pruneNameMiss says why a name cannot be pruned or muted. Only an item with a
 // plugin source is said to be inside a plugin.
 func pruneNameMiss(opts options, r *report.Report, name string, muting bool) string {
+	_, cat, bare := splitSelector(name) // a selector in front does not change what the item is
 	for _, row := range r.Rows {
-		if row.Name != name && !strings.HasSuffix(row.Name, ":"+name) {
+		selected := (cat == "" || string(row.Category) == cat) && (row.Name == bare || strings.HasSuffix(row.Name, ":"+bare))
+		if row.Name != name && !selected {
 			continue
 		}
 		if muting && row.Category == scan.CatMCP {
@@ -648,7 +662,23 @@ func inFolder(opts options, err error) string {
 	text := err.Error()
 	var again *prune.Rerun
 	if errors.As(err, &again) {
-		text = strings.Replace(text, again.Error(), again.In(sameFolder(opts)), 1)
+		text = strings.Replace(text, again.Error(), again.In(func(name string) string { return pasteTail(opts, name) }), 1)
 	}
 	return text
+}
+
+// keptMeanwhile is why an item of the plan was left alone after all.
+const keptMeanwhile = "put on the keep list while this run was waiting: left alone"
+
+// keptSince reads the keep list again, with the lock held. A question can stay
+// open for minutes, and a `reap keep` in another terminal has said meanwhile
+// that the item is safe: the plan was made before it.
+func keptSince(opts options) (func(report.Row) bool, error) {
+	kept, err := override.KeepSet(opts.claudeDir)
+	if err != nil {
+		return nil, fmt.Errorf("the keep list cannot be read, so nothing it may protect is touched: %w", err)
+	}
+	return func(row report.Row) bool {
+		return kept[override.ItemKey(string(row.Category), row.DiskName())]
+	}, nil
 }

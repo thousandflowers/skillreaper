@@ -391,7 +391,8 @@ def package_matches_repo(server: dict) -> bool:
     except Exception as e:  # noqa: BLE001  (not confirmed is not a match)
         print(f"package metadata {pkg['identifier']}: {e}")
         return False
-    return bool(repo) and repo in json.dumps(meta).lower()
+    # the repository itself, not one whose name only begins the same way
+    return bool(repo) and re.search(re.escape(repo) + r"(?:\.git)?(?![a-z0-9._-])", json.dumps(meta).lower()) is not None
 
 
 def _server_doc(s: dict) -> str:

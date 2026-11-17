@@ -60,6 +60,15 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 	defer lock.Release()
+	nowKept, err := keptSince(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if nowKept(row) {
+		fmt.Fprintf(stderr, "error: %s was %s\n", row.Name, keptMeanwhile)
+		return 1
+	}
 	if row.Category == scan.CatMCP {
 		err = prune.DeleteMCP(opts.claudeDir, row.Path, serverScope(row), row.DiskName())
 	} else {

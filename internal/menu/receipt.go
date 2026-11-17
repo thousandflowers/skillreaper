@@ -197,12 +197,14 @@ func (m *Menu) receiptPicks(p *Plan) []Pick {
 	}
 	rank := func(pk Pick) int {
 		switch pk.Verb {
-		case vDelete:
+		case vLock: // a lock is every copy's: it stands before what it would refuse
 			return 0
-		case vDisable:
+		case vDelete:
 			return 1
+		case vDisable:
+			return 2
 		}
-		return 2
+		return 3
 	}
 	sort.SliceStable(picks, func(i, j int) bool {
 		if rank(picks[i]) != rank(picks[j]) {

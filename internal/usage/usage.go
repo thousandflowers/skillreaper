@@ -800,6 +800,7 @@ func parseFile(path, project string, st *Stats) string {
 	mcpInstr := map[string]int{}
 	skillChars := map[string]int{}
 	var lastTS time.Time
+	inWindow := false // a turn of this session falls in the window
 
 	br := bufio.NewReaderSize(f, 256*1024)
 	for {
@@ -837,10 +838,15 @@ func parseFile(path, project string, st *Stats) string {
 		if ts.After(lastTS) {
 			lastTS = ts
 		}
-		if (e.Type == "user" || e.Type == "assistant") && !e.IsSidechain && !subagent && sessionID == "" {
-			sessionID = e.SessionID
+		if (e.Type == "user" || e.Type == "assistant") && !e.IsSidechain && !subagent {
+			// The file's date says the file was touched, not that the session
+			// happened then: it is in the window when one of its turns is.
+			inWindow = inWindow || !st.beforeWindow(ts)
 			if sessionID == "" {
-				sessionID = "file:" + path // older transcripts carry no id
+				sessionID = e.SessionID
+				if sessionID == "" {
+					sessionID = "file:" + path // older transcripts carry no id
+				}
 			}
 		}
 		if e.Cwd != "" && project != "" && st.ProjectPaths[project] == "" {
@@ -939,6 +945,9 @@ func parseFile(path, project string, st *Stats) string {
 	}
 	for key, n := range skillChars {
 		st.SkillWeight = recordInjected(st.SkillWeight, key, Injected{Chars: n, At: lastTS})
+	}
+	if !inWindow {
+		return ""
 	}
 	return sessionID
 }
@@ -1140,21 +1149,36 @@ type pendingMCP struct {
 	ts   time.Time
 }
 
+// CreditedServer is the server a tool call is credited to before the
+// configured names are known: what stands before the first separator, and the
+// whole name when nothing does.
+func CreditedServer(tool string) string {
+	if i := strings.Index(tool, ToolSepDefault); i > 0 {
+		return tool[:i]
+	}
+	return tool
+}
+
 // recordMCPCall counts one call of mcp__server__tool.
 func recordMCPCall(st *Stats, name string, ts time.Time) {
 	rest := strings.TrimPrefix(name, "mcp__")
-	i := strings.Index(rest, "__")
-	if i <= 0 {
-		st.record(scan.CatMCP, rest, ts)
+	credited := CreditedServer(rest)
+	st.record(scan.CatMCP, credited, ts)
+	i := strings.Index(rest, ToolSepDefault)
+	if i < 0 {
 		return
 	}
-	st.record(scan.CatMCP, rest[:i], ts)
-	// A server can itself be named a__b: only the configured
-	// names can settle where the server ends, at join time.
-	if strings.Contains(rest[i+2:], "__") {
+	// Where the server's name ends is not always in the name. A server can be
+	// named a__b; one named docs. is docs_, and its tool reads docs___search;
+	// one named é is _, and the name begins with the separator. Only the
+	// configured names can settle it, at join time.
+	after := rest[i+len(ToolSepDefault):]
+	if i == 0 || strings.HasPrefix(after, "_") || strings.Contains(after, ToolSepDefault) {
 		whole := scan.SafeText(rest)
 		if st.beforeWindow(ts) {
-			st.older.add(scan.CatMCP, whole, ts) // history, for the record of past uses
+			if whole != scan.SafeText(credited) { // else record has filed it under this very name
+				st.older.add(scan.CatMCP, whole, ts) // history, for the record of past uses
+			}
 			return
 		}
 		st.recordTool(whole, ts)

@@ -186,3 +186,47 @@ func TestRedactSecretsMasksEveryShapeOfSecret(t *testing.T) {
 		}
 	}
 }
+
+// A name that says "secret" is found wherever a command can put it: after the
+// "=" of another flag, after what joins two commands, in a connection string.
+// Its value runs to the next space, whatever characters it holds.
+func TestRedactSecretsFindsANameBehindAnotherAndMasksItsWholeValue(t *testing.T) {
+	const s = "SeCr3tValue99"
+	for _, c := range []struct{ in, keep string }{
+		{"srv --env=TOKEN=" + s, "srv --env=TOKEN="},
+		{"srv --header=X-Api-Key:" + s, "srv --header=X-Api-Key:"},
+		{"srv --cookie sid=" + s, "srv --cookie"},
+		{"curl -b sid=" + s + " https://x", "https://x"},
+		{"curl -b 'sid=" + s + "; a=b' https://x", "https://x"},
+		{"srv --connection-string Server=db;Uid=me;Password=" + s + ";", "Uid=me"},
+		{"cd /x;API_KEY=" + s + " run", " run"},
+		{"x|TOKEN=" + s, "x|TOKEN="},
+		{"x>TOKEN=" + s, "x>TOKEN="},
+		{"echo `TOKEN=" + s + "`", "echo"},
+		{"run --passphrase " + s, "run --passphrase"},
+		{"run --pass " + s, "run --pass"},
+		{"run --db-pwd " + s, "run --db-pwd"},
+		{"run --pw=" + s, "run --pw="},
+		{"run --sig " + s, "run --sig"},
+		{"run --session " + s, "run --session"},
+		{"run --jwt " + s, "run --jwt"},
+		{"run --token -" + s, "run --token"},
+		{`run --token=ab\` + s, "run --token="},
+		{"run password=ab'" + s, "run password="},
+		{"TOKEN=$'" + s + "' run", " run"},
+		{"https://h/cb#access_token=" + s, "https://h/cb#access_token="},
+		{"https://h/x?sig=" + s, "https://h/x?sig="},
+		{"docker run -eAPI_KEY=" + s + " img", " img"},
+	} {
+		got := RedactSecrets(c.in)
+		if strings.Contains(got, s[2:]) || !strings.Contains(got, c.keep) {
+			t.Errorf("RedactSecrets(%s) = %s", c.in, got)
+		}
+	}
+	// A short word inside a longer one is no secret's name.
+	for _, plain := range []string{"npx -y compass-design --port 8080 /tmp/x", "tar -xzf pwned.tgz -C /opt"} {
+		if got := RedactSecrets(plain); got != plain {
+			t.Errorf("RedactSecrets(%s) = %s", plain, got)
+		}
+	}
+}

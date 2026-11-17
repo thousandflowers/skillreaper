@@ -22,3 +22,12 @@ func TestMCPDisplayKeepsAnArgumentWithASpaceWhole(t *testing.T) {
 		t.Errorf("display() = %s", got)
 	}
 }
+
+// An argument with a quote in it is one word too, and all of it is masked.
+func TestMCPDisplayMasksAnArgumentWithAQuoteInIt(t *testing.T) {
+	c := mcpServerConfig{Command: json.RawMessage(`"node"`), Args: []string{"--password", "Se'Cr3tValue99"}}
+
+	if got := c.display(); strings.Contains(got, "Cr3t") {
+		t.Errorf("display() = %s", got)
+	}
+}

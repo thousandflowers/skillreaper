@@ -54,8 +54,12 @@ from here to see what they would do. They ask on a terminal, and here there is
 none: they stop with `no terminal to ask on; pass --yes to go ahead`, and
 `--yes` is the change itself, not a preview.
 
-If the user explicitly asks in this turn: get an unambiguous yes, run
-`reap prune --yes`, and remind them of `reap restore --all`. If the request is
-at all ambiguous, hand them the plain `reap prune` command instead.
+If the user explicitly asks in this turn, get an unambiguous yes first. When
+they named an item, run `reap prune <name> --yes` and say that name back in
+your question: the bare `reap prune --yes` takes every item reap would reap,
+with no further question. Use the bare form only when they asked for all of
+it, and say how many items that is before the yes. Either way, remind them of
+`reap restore --all`. If the request is at all ambiguous, hand them the plain
+`reap prune` command instead.
 
 For the per-category breakdown, point them at `/skillreaper:gap`.

@@ -310,8 +310,8 @@ report renders in the conversation instead of a scrollback you have to re-read:
 ```
 
 The plugin is a thin wrapper: it drives the same binary, so install that too
-with any line below. The skills fall back to `npx skillreaper` and tell you how
-to install permanently if they can't find it.
+with any line below. If the skills can't find it, they print how to run it with
+`npx skillreaper` and how to install it permanently.
 
 **Install permanently** - Homebrew and npm install both names, `reap` and
 `skillreaper`, so either one works. `go install` gives you `reap`:

@@ -711,3 +711,57 @@ func TestACallBeforeTheWindowKeepsItsWholeToolName(t *testing.T) {
 		t.Errorf("uses before the window = %v", older[scan.CatMCP])
 	}
 }
+
+// docs. is docs_ in a tool's name, and its tool reads mcp__docs___search: the
+// first "__" says the server is docs. Such a call is kept under its whole name,
+// for the configured names to settle; so is one whose server begins the name
+// with an underscore.
+func TestACallWhoseServerEndsInAnUnderscoreKeepsItsWholeName(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	call := func(name string, daysAgo int) string {
+		at := now.AddDate(0, 0, -daysAgo).Format(time.RFC3339)
+		return `{"type":"assistant","sessionId":"s","timestamp":"` + at + `","message":{"content":[{"type":"tool_use","id":"` + name + at + `","name":"` + name + `","input":{}}]}}`
+	}
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		call("mcp__docs___search", 1), call("mcp_____t", 1), call("mcp__plain__read", 1), call("mcp__docs___search", 90))
+
+	st, err := Parse(dir, now.AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if st.ToolCalls["docs___search"] != 1 || st.ToolCalls["___t"] != 1 || st.ToolCalls["plain__read"] != 0 {
+		t.Errorf("tool calls kept whole = %v", st.ToolCalls)
+	}
+	if older, _ := st.OlderUses(); older[scan.CatMCP]["docs___search"] != 1 {
+		t.Errorf("before the window = %v", older[scan.CatMCP])
+	}
+	if got := CreditedServer("docs___search") + " " + CreditedServer("___t") + " " + CreditedServer("a__b__t"); got != "docs ___t a" {
+		t.Errorf("credited = %q", got)
+	}
+}
+
+// A session is in the window when something in it happened in the window. Its
+// file's date says only that the file was touched: a folder restored from a
+// backup, or copied to a new machine, is all dated today, and every old session
+// counted as a recent one in which nothing was used.
+func TestASessionCountsByWhenItHappenedNotByItsFilesDate(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	said := func(id string, daysAgo int) string {
+		return `{"type":"user","sessionId":"` + id + `","timestamp":"` + now.AddDate(0, 0, -daysAgo).Format(time.RFC3339) + `","message":{"content":"hi"}}`
+	}
+	writeTranscript(t, filepath.Join(dir, "proj", "old.jsonl"), said("old", 90), said("old", 80))
+	writeTranscript(t, filepath.Join(dir, "proj", "resumed.jsonl"), said("resumed", 90), said("resumed", 1))
+	writeTranscript(t, filepath.Join(dir, "proj", "undated.jsonl"), `{"type":"user","sessionId":"undated","message":{"content":"hi"}}`)
+
+	st, err := Parse(dir, now.AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if st.Sessions != 2 {
+		t.Errorf("sessions in the window = %d, want the resumed one and the undated one", st.Sessions)
+	}
+}

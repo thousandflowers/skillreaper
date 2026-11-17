@@ -200,3 +200,26 @@ func TestLookupServerFindsCallsOfANameWithTheSeparator(t *testing.T) {
 		t.Error("a server nobody called was found")
 	}
 }
+
+// A server's record is what was filed under its own name (a resource read, or
+// a call the parser credited rightly) and the calls kept whole that are its own.
+func TestLookupServerAddsTheExactNameAndTheCallsKeptWhole(t *testing.T) {
+	d := &Digest{Items: map[string]map[string]Record{"mcp": {
+		"a__b":          {Uses: 1}, // ReadMcpResourceTool names the server itself
+		"a__b__tool":    {Uses: 2},
+		"docs":          {Uses: 3}, // the parser's credit for docs___search
+		"docs___search": {Uses: 3},
+		"___t":          {Uses: 4},
+		"plain":         {Uses: 5},
+		"plain__x__y":   {Uses: 5}, // kept whole, and credited to plain already
+	}}}
+	for name, want := range map[string]int{"a__b": 3, "docs_": 3, "docs": 3, "_": 4, "plain": 5} {
+		if r, ok := d.LookupServer("mcp", name); !ok || r.Uses != want {
+			t.Errorf("%s = %+v, %v, want %d uses", name, r, ok, want)
+		}
+	}
+	older := &Digest{Items: map[string]map[string]Record{"mcp": {"docs": {Uses: 3}}}}
+	if r, ok := older.LookupServer("mcp", "docs_"); !ok || r.Uses != 3 {
+		t.Errorf("docs_ in an older record = %+v, %v", r, ok)
+	}
+}

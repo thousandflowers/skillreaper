@@ -43,15 +43,20 @@ func stopCode() int {
 // so any two running at once lose what one of them recorded.
 func lockState(claudeDir string, wait time.Duration, stderr io.Writer) (*prune.Lock, bool) {
 	l, err := prune.AcquireLockWait(claudeDir, wait)
+	return l, lockTaken(err, stderr)
+}
+
+// lockTaken says why the lock was not taken, when it was not.
+func lockTaken(err error, stderr io.Writer) bool {
 	switch {
 	case err == nil:
-		return l, true
+		return true
 	case errors.Is(err, prune.ErrLocked):
 		fmt.Fprintln(stderr, "error: another reap is changing this directory; wait for it to finish")
 	default:
 		fmt.Fprintf(stderr, "error: could not take the lock: %v\n", err)
 	}
-	return nil, false
+	return false
 }
 
 // lockPoll is how often a wait for the lock looks again.

@@ -294,7 +294,7 @@ func (a *app) runInEmptyDir(cmd []string) error {
 	}
 	switch {
 	case res.timedOut:
-		return fmt.Errorf("no answer in %d s", int(stepTimeout.Seconds()))
+		return noAnswer(stepTimeout.Seconds())
 	case res.err != nil:
 		return res.err
 	case res.code == 0:
@@ -437,8 +437,13 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 		}
 		outcome := "  ↺  rolled back: nothing changed"
 		inHand, undoing = "", true // this mute failed, it was not cut short; from here a stop lands in the undoing
+		// A mute that gave no answer in time was cut off, perhaps after it had done
+		// its work: it is undone too, and when that fails nobody knows which it is.
+		unsure := errors.As(err, new(noAnswer)) && a.runStep([]string{reapName, "unmute", x.target()}) != nil
 		if left := a.rollBack(c, muted); len(left) > 0 {
 			outcome = "  ↺  rolled back, but still changed: " + strings.Join(left, ", ")
+		} else if unsure {
+			outcome = "  ?  " + x.Name + ": its mute was cut short (reap unmute lists what is muted)"
 		}
 		return append(log, "  ✗  reap mute "+x.Name+": "+err.Error(), outcome), false
 	}
@@ -448,7 +453,7 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 		}
 	}
 	for _, x := range muted {
-		log = append(log, "  ✓  muted "+x.Name+" (reap unmute "+scan.ShellArg(x.target())+" undoes)")
+		log = append(log, "  ✓  muted "+x.Name+" ("+undoMute(x)+" undoes)")
 	}
 	return log, true
 }
@@ -463,7 +468,7 @@ func stoppedHalfway(c candidate, installing bool, log []string, muted []skill, i
 	done := map[string]bool{inHand: true}
 	for _, x := range muted {
 		done[x.Name] = true
-		lines = append(lines, "  ✓  muted "+x.Name+" (reap unmute "+scan.ShellArg(x.target())+" undoes)")
+		lines = append(lines, "  ✓  muted "+x.Name+" ("+undoMute(x)+" undoes)")
 	}
 	if inHand != "" && (len(muted) == 0 || muted[len(muted)-1].Name != inHand) {
 		lines = append(lines, "  ?  "+inHand+": its mute was cut short (reap unmute lists what is muted)")
@@ -514,4 +519,20 @@ func dryRunLines(s swap) []string {
 		lines = append(lines, "  ·  reap mute "+scan.ShellArg(x.Name))
 	}
 	return lines
+}
+
+// noAnswer is a step that was cut off for taking too long, in seconds.
+type noAnswer float64
+
+func (n noAnswer) Error() string { return fmt.Sprintf("no answer in %d s", int(n)) }
+
+// undoMute is the command that takes a mute back, as it is pasted: with the
+// folder, when this run was pointed at one through the environment. A shell
+// without the variable looks in the usual folder and finds nothing muted.
+func undoMute(x skill) string {
+	cmd := "reap unmute " + scan.ShellArg(x.target())
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		cmd = "CLAUDE_CONFIG_DIR=" + scan.ShellArg(dir) + " " + cmd
+	}
+	return cmd
 }

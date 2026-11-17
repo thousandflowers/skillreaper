@@ -457,7 +457,11 @@ func DeleteItem(it scan.Item) error {
 	if err != nil || len(strings.Split(rel, string(filepath.Separator))) < 2 {
 		return fmt.Errorf("refusing to delete %s: it is not an item inside a skills or agents folder", src)
 	}
-	return os.RemoveAll(src)
+	if err := os.RemoveAll(src); err != nil {
+		// What it reached before failing is gone, and nothing brings it back.
+		return fmt.Errorf("%w: part of it is deleted already, look at what is left in %s", err, src)
+	}
+	return nil
 }
 
 // DeleteMCP removes one server from a config file for good, changing nothing else
@@ -783,24 +787,30 @@ func deleteEvery(raw []byte, path ...string) (without, payload []byte, err error
 }
 
 // Rerun is an error that ends in the commands that put things right. Whoever
-// prints it knows which folder the run was pointed at, and In adds it: ids
-// start at 001 in every folder, so a command without it acts on another one.
+// prints it knows which folder the run was pointed at, and In writes each
+// command's end with it: ids start at 001 in every folder, so a command
+// without it acts on another one.
 type Rerun struct {
 	Why      string
-	Commands []string
+	Commands []Command
 }
 
-func (e *Rerun) Error() string { return e.In("") }
+// Command is one command of a Rerun: what to run, and the id or name it is run on.
+type Command struct{ Verb, On string }
 
-// In is the error with tail after each command.
-func (e *Rerun) In(tail string) string {
-	with := make([]string, len(e.Commands))
+func (e *Rerun) Error() string {
+	return e.In(func(on string) string { return " " + scan.ShellArg(on) })
+}
+
+// In is the error with each command ended as tail says.
+func (e *Rerun) In(tail func(on string) string) string {
+	said := make([]string, len(e.Commands))
 	for i, c := range e.Commands {
-		with[i] = c + tail
+		said[i] = c.Verb + tail(c.On)
 	}
-	return e.Why + strings.Join(with, ", then ")
+	return e.Why + strings.Join(said, ", then ")
 }
 
 func restoreAgain(e *Entry, why string) error {
-	return &Rerun{Why: why, Commands: []string{"reap restore " + e.ID}}
+	return &Rerun{Why: why, Commands: []Command{{Verb: "reap restore", On: e.ID}}}
 }

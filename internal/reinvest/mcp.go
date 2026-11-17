@@ -205,7 +205,23 @@ func (a *app) packageMatchesRepo(server *obj) bool {
 		a.logf("package metadata %s: %v", id, err)
 		return false
 	}
-	return repo != "" && strings.Contains(pyLower(dumpJSON(meta)), repo)
+	return repo != "" && namesRepo(pyLower(dumpJSON(meta)), repo)
+}
+
+// namesRepo says whether text names the repository itself: owner/name ending
+// there, with or without .git, and not as the start of a longer name.
+func namesRepo(text, repo string) bool {
+	for {
+		i := strings.Index(text, repo)
+		if i < 0 {
+			return false
+		}
+		text = text[i+len(repo):]
+		rest := strings.TrimPrefix(text, ".git")
+		if rest == "" || !strings.ContainsRune("abcdefghijklmnopqrstuvwxyz0123456789-_.", rune(rest[0])) {
+			return true
+		}
+	}
 }
 
 func (a *app) serverDoc(server *obj) string {

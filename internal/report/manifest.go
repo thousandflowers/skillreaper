@@ -156,7 +156,7 @@ func RenderManifestMarkdown(w io.Writer, m Manifest) {
 	if len(m.Hooks) > 0 {
 		fmt.Fprintf(w, "- **Hooks present:**\n")
 		for _, h := range m.Hooks {
-			fmt.Fprintf(w, "  - %s\n", mdCell(h))
+			fmt.Fprintf(w, "  - %s\n", mdText(h))
 		}
 	} else {
 		fmt.Fprintf(w, "- **Hooks present:** none\n")

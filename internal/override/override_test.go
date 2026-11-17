@@ -111,3 +111,17 @@ func TestRemoveKeepFromEmpty(t *testing.T) {
 		t.Error("expected error for empty keep list")
 	}
 }
+
+// A lock is written under the item's name as it is on disk, and a name can end
+// in a space. It comes off by that same key: trimmed, it matched nothing, and
+// the item stayed locked for good.
+func TestRemoveKeepTakesAKeyThatEndsInASpace(t *testing.T) {
+	dir := t.TempDir()
+	_ = AddKeep(dir, "skill:trailing ")
+	if _, err := RemoveKeep(dir, "skill:trailing "); err != nil {
+		t.Fatal(err)
+	}
+	if items, _ := ListKeep(dir); len(items) != 0 {
+		t.Fatalf("still kept: %q", items)
+	}
+}

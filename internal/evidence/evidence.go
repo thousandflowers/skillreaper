@@ -238,20 +238,40 @@ func (d *Digest) LookupFold(cat, name string) (Record, bool) {
 // serverSep is what joins a server's name and a tool's in a recorded call.
 const serverSep = "__"
 
-// LookupServer is Lookup for an MCP server. A call is recorded as server__tool,
-// and the parser can only credit what stands before the first "__". A server
-// whose own name holds "__" finds its calls under their whole names; in a
-// record written before those were kept there is only that first part, and it
-// is taken: more uses than its own is the safe mistake, none would condemn it.
+// LookupServer is Lookup for an MCP server: what was filed under its own name,
+// and its calls that were kept whole. A call is recorded as server__tool and
+// the parser can only credit what stands before the first "__", so a server
+// whose name holds "__", or ends in "_", has its calls under their whole names.
+// One the parser credited to this very name is in its own record already.
+// In a record written before whole names were kept there is only the parser's
+// credit, and it is taken: more uses than its own is the safe mistake, none
+// would condemn it.
 func (d *Digest) LookupServer(cat, name string) (Record, bool) {
-	if !strings.Contains(name, serverSep) {
-		return d.Lookup(cat, name)
+	sum, found := d.Lookup(cat, name)
+	calls, kept := d.sumWhere(cat, func(recorded string) bool {
+		return strings.HasPrefix(recorded, name+serverSep) && creditedTo(recorded) != name
+	})
+	if kept {
+		sum.Uses += calls.Uses
+		if calls.Last.After(sum.Last) {
+			sum.Last = calls.Last
+		}
+		return sum, true
 	}
-	if r, ok := d.sumWhere(cat, func(recorded string) bool { return strings.HasPrefix(recorded, name+serverSep) }); ok {
-		return r, true
+	if older := creditedTo(name + serverSep); !found && older != name {
+		return d.Lookup(cat, older)
 	}
-	first, _, _ := strings.Cut(name, serverSep)
-	return d.Lookup(cat, first)
+	return sum, found
+}
+
+// creditedTo is the server the parser credits a call to before the configured
+// names are known: what stands before the first separator, the whole name when
+// nothing does.
+func creditedTo(tool string) string {
+	if i := strings.Index(tool, serverSep); i > 0 {
+		return tool[:i]
+	}
+	return tool
 }
 
 // sumWhere adds up every record of cat whose name matches.

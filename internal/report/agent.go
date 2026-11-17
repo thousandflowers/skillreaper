@@ -145,6 +145,12 @@ func mdCell(s string) string {
 	return strings.NewReplacer("|", `\|`, "`", "'").Replace(s)
 }
 
+// mdText is mdCell for text outside a code span, where a name could read as a
+// tag or as a link.
+func mdText(s string) string {
+	return strings.NewReplacer("<", "&lt;", "[", `\[`).Replace(mdCell(s))
+}
+
 // deadRows returns the REAP rows heaviest first. Ties break on name so the
 // order never depends on scan order.
 func deadRows(r *Report) []Row {

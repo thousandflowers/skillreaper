@@ -13,6 +13,7 @@ const (
 	escWaitLocal  = 200 * time.Millisecond
 	escWaitRemote = 500 * time.Millisecond // an arrow split by a slow link must not read as Esc
 
+	pasteWait  = 5 * time.Second // how long a paste may go quiet before it is given up
 	pasteStart = "200~"
 	pasteEnd   = "\x1b[201~"
 )
@@ -197,8 +198,10 @@ func (d *decoder) swallowString() {
 func (d *decoder) swallowPaste() {
 	tail := ""
 	for !strings.HasSuffix(tail, pasteEnd) {
-		b, ok := d.get()
-		if !ok {
+		// A paste can pause for longer than the parts of a key do. Read as one
+		// that had ended, its tail would arrive as keys nobody typed.
+		b, st := d.src.next(pasteWait)
+		if st != gotByte {
 			return
 		}
 		tail += string(rune(b))

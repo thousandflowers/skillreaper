@@ -47,7 +47,8 @@ func RemoveKeep(claudeDir, arg string) (string, error) {
 	var matches []string
 	for _, k := range f.Keep {
 		lk := strings.ToLower(k)
-		if lk == want {
+		// As typed first: a key is written from the name on disk, which can end in a space.
+		if lk == strings.ToLower(arg) || lk == want {
 			matches = []string{k}
 			break
 		}

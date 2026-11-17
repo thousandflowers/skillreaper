@@ -118,17 +118,31 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 
 	stopped, release := applyGuard()
 	defer release()
-	lock, ok := lockState(opts.claudeDir, stateLockWait, stderr)
-	if !ok {
+	// A stop while waiting behind another run is a stop, not a quarter of a
+	// minute and then "another reap is changing this directory".
+	lock, err := lockUnlessStopped(opts.claudeDir, stateLockWait, stopped)
+	if err != nil && stopped() {
+		return stopCode()
+	}
+	if !lockTaken(err, stderr) {
 		return 1
 	}
 	defer lock.Release()
+	nowKept, err := keptSince(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
 
 	out := plan
 	for i, row := range candidates {
 		if stopped() {
 			out.interrupted = len(candidates) - i
 			break
+		}
+		if nowKept(row) {
+			out.failed = append(out.failed, problemOf(row, keptMeanwhile))
+			continue
 		}
 		err := mute.Mute(opts.claudeDir, row.RootDir, row.Name, row.Path)
 		switch {

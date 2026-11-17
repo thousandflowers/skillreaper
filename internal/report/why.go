@@ -63,16 +63,22 @@ type ExplainInput struct {
 // namespaced key (so "plan" matches "ecc:plan").
 func MatchItems(r *Report, arg string) []Row {
 	cat, name := splitCategory(arg)
-	var out []Row
+	var whole, leaf []Row
 	for _, row := range r.Rows {
 		if cat != "" && string(row.Category) != cat {
 			continue
 		}
-		if rowMatchesName(row, name) {
-			out = append(out, row)
+		switch i := strings.LastIndexByte(row.Name, ':'); {
+		case row.Name == name, row.DiskName() == name: // as shown, or as it is on disk
+			whole = append(whole, row)
+		case i >= 0 && row.Name[i+1:] == name:
+			leaf = append(leaf, row)
 		}
 	}
-	return out
+	if len(whole) > 0 { // one item's whole name is not also the tail of another's
+		return whole
+	}
+	return leaf
 }
 
 func splitCategory(arg string) (cat, name string) {
@@ -84,16 +90,6 @@ func splitCategory(arg string) (cat, name string) {
 		}
 	}
 	return "", arg
-}
-
-func rowMatchesName(row Row, name string) bool {
-	if row.Name == name {
-		return true
-	}
-	if i := strings.LastIndexByte(row.Name, ':'); i >= 0 && row.Name[i+1:] == name {
-		return true
-	}
-	return false
 }
 
 // CanonicalName is the category:name key used as the explanation header and in
@@ -226,6 +222,10 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 			// More sessions change nothing here: it is held for a use on record.
 			return "used before this window, so reap will not condemn it. if you are sure, run: reap prune " + scan.ShellArg(CanonicalName(row))
 		default:
+			if !row.HistoricalLast.IsZero() {
+				// Enough sessions would only turn this into "held for a use on record".
+				return "used before this window, so reap will not condemn it. if you are sure, run: reap prune " + scan.ShellArg(CanonicalName(row))
+			}
 			need := minSessionsFor(row.InstalledAt, in.Now.AddDate(0, 0, -in.WindowDays), in.MinSessions, in.WindowDays) - sessions
 			if need < 1 {
 				need = 1

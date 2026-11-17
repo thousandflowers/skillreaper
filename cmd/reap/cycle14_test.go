@@ -261,3 +261,103 @@ func TestReinvestAfterAFlagOfItsOwnSaysToPutItFirst(t *testing.T) {
 		t.Errorf("%d %s", code, out)
 	}
 }
+
+// usedThenSwept runs the report with one transcript that uses a server, then
+// with that transcript gone and a dozen later sessions that never call it, and
+// returns the server's verdict each time.
+func usedThenSwept(t *testing.T, server, toolUse string) (while, after string) {
+	t.Helper()
+	home := deleteHome(t)
+	cfg, err := json.Marshal(map[string]any{"mcpServers": map[string]any{server: map[string]string{"command": "x"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(home, ".claude.json"), string(cfg))
+	projects := filepath.Join(home, ".claude", "projects", "p")
+	stamp := func(hoursAgo int) string {
+		return time.Now().Add(-time.Duration(hoursAgo) * time.Hour).UTC().Format(time.RFC3339)
+	}
+	used := filepath.Join(projects, "used.jsonl")
+	mustWriteFile(t, used, `{"type":"assistant","sessionId":"u","timestamp":"`+stamp(48)+`","message":{"content":[`+toolUse+`]}}`+"\n")
+	verdict := func() string {
+		var r struct {
+			Rows []struct{ Name, Verdict string }
+		}
+		if err := json.Unmarshal([]byte(reapStdout(t, "--json", "--no-banner")), &r); err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range r.Rows {
+			if row.Name == server {
+				return row.Verdict
+			}
+		}
+		t.Fatalf("no row for %s", server)
+		return ""
+	}
+	while = verdict()
+	if err := os.Rename(used, filepath.Join(home, "swept.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 12 {
+		id := "later" + strconv.Itoa(i)
+		mustWriteFile(t, filepath.Join(projects, id+".jsonl"), `{"type":"user","sessionId":"`+id+`","timestamp":"`+stamp(1)+`","message":{"content":"hi"}}`+"\n")
+	}
+	return while, verdict()
+}
+
+// Where a server's name ends is not always in a tool's name. A server that was
+// used is seen as used, in the window and in the record of past uses, when its
+// name ends in an underscore once cleaned (docs.), is one such character (é),
+// or holds "__" and was reached through the resource tools.
+func TestAUsedServerWithAnAwkwardNameIsNeverReaped(t *testing.T) {
+	call := func(name string) string { return `{"type":"tool_use","id":"t1","name":"` + name + `","input":{}}` }
+	for server, use := range map[string]string{
+		"docs.": call("mcp__docs___search"),
+		"é":     call("mcp_____t"),
+		"a__b":  `{"type":"tool_use","id":"t1","name":"ReadMcpResourceTool","input":{"server":"a__b","uri":"x"}}`,
+	} {
+		t.Run(server, func(t *testing.T) {
+			while, after := usedThenSwept(t, server, use)
+			if while != "KEEP" {
+				t.Errorf("while its transcript is there: %s", while)
+			}
+			if after == "REAP" {
+				t.Errorf("once its transcript is gone: %s", after)
+			}
+		})
+	}
+}
+
+// A name is text someone may paste into a Markdown report: what would read as
+// a tag or a link there is written so that it reads as the name.
+func TestMarkdownReportKeepsANameFromReadingAsMarkup(t *testing.T) {
+	home := deleteHome(t)
+	putSkill(t, home, "<script>")
+	putSkill(t, home, "[link](x)")
+
+	out := reapStdout(t, "--md", "--no-banner")
+
+	for _, raw := range []string{"| <script> |", "| [link](x) |"} {
+		if strings.Contains(out, raw) {
+			t.Errorf("the Markdown report holds %q", raw)
+		}
+	}
+	for _, safe := range []string{"| &lt;script> |", `| \[link](x) |`} {
+		if !strings.Contains(out, safe) {
+			t.Errorf("the Markdown report lacks %q:\n%s", safe, out)
+		}
+	}
+}
+
+// The report shows a name with its control characters taken out. reap why
+// finds the item by the name as it is on disk too.
+func TestWhyFindsAnItemByItsNameOnDisk(t *testing.T) {
+	home := deleteHome(t)
+	putSkill(t, home, "tab\there")
+
+	for _, typed := range []string{"tab\there", "tab?here"} {
+		if code, out := reapRun("why", typed); code != 0 {
+			t.Errorf("why %q: %d %s", typed, code, out)
+		}
+	}
+}

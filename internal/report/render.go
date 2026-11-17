@@ -623,7 +623,7 @@ func RenderMarkdown(w io.Writer, r *Report) {
 				reason = "user-kept"
 			}
 			fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s |\n",
-				mdCell(row.Name), mdCell(shortSource(row.Source)), weight, uses, last, row.Verdict, reason)
+				mdText(row.Name), mdText(shortSource(row.Source)), weight, uses, last, row.Verdict, reason)
 		}
 	}
 }

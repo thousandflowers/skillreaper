@@ -230,6 +230,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			printUsage(stdout)
 			return
 		}
+		if slices.Contains(args, reinvestCommand) {
+			return // the answer is one line: where reinvest goes
+		}
 		printUsage(stderr)
 	}
 	// Go's flag.Parse stops at the first positional argument, so flags placed
@@ -529,15 +532,6 @@ func fillDefaults(opts *options, stderr io.Writer) error {
 		}
 		*p = abs
 	}
-	// A mistyped path is said: read as an empty stack it hides every server.
-	if opts.claudeJSON != "" {
-		if info, err := os.Stat(opts.claudeJSON); err != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("no config file at %s", opts.claudeJSON)
-		}
-	}
-	if info, err := os.Stat(opts.claudeDir); opts.claudeDir != "" && err == nil && !info.IsDir() {
-		return fmt.Errorf("%s is a file, and --claude-dir takes a folder", opts.claudeDir)
-	}
 	opts.claudeDirExplicit = opts.claudeDir != ""
 	opts.claudeJSONGiven = opts.claudeJSON != ""
 	opts.hasClaudeCode = opts.claudeDirExplicit
@@ -682,6 +676,16 @@ var detectPlatforms = platform.Detect
 // gather runs every scanner plus transcript parsers across all
 // detected platforms and joins the result into a report.
 func gather(opts options) (*report.Report, error) {
+	// A mistyped path is said: read as an empty stack it hides every server.
+	// Said here, by what reads the files, and not to `reap version`.
+	if opts.claudeJSONGiven {
+		if info, err := os.Stat(opts.claudeJSON); err != nil || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("no config file at %s", opts.claudeJSON)
+		}
+	}
+	if info, err := os.Stat(opts.claudeDir); opts.claudeDirExplicit && err == nil && !info.IsDir() {
+		return nil, fmt.Errorf("%s is a file, and --claude-dir takes a folder", opts.claudeDir)
+	}
 	var platforms []platform.Info
 
 	if opts.claudeDirExplicit {
@@ -1209,6 +1213,9 @@ func observationFrom(one *usage.Stats) evidence.Observation {
 	// a__b) is kept under its whole name as well: LookupServer reads it there.
 	if one.ToolSep == "" {
 		for tool, n := range one.ToolCalls {
+			if usage.CreditedServer(tool) == tool {
+				continue // filed under this very name already
+			}
 			addUse(string(scan.CatMCP), tool, n, one.ToolLast[tool])
 		}
 	}
@@ -1299,28 +1306,37 @@ func cmdReport(opts options, stdout, stderr io.Writer) int {
 	// inventory into a failure. An empty directory raises advisory warnings
 	// about missing evidence, reads perfectly, and is what a first run looks
 	// like: exiting 1 there would make the very first command look broken.
+	if scanFailed(r, stderr) {
+		return 1
+	}
+	return 0
+}
+
+// scanFailed says so when nothing was inventoried and something could not be
+// read, which is a failed scan and not a clean stack. An empty folder raises
+// only advisory warnings, reads perfectly, and is what a first run looks like.
+func scanFailed(r *report.Report, stderr io.Writer) bool {
 	failed := 0
 	for _, w := range r.Warnings {
 		if !w.Advisory {
 			failed++
 		}
 	}
-	if len(r.Rows) == 0 && failed > 0 {
-		noun := "warnings"
-		if failed == 1 {
-			noun = "warning"
-		}
-		fmt.Fprintf(stderr, "error: nothing could be inventoried, with %d read %s. A failed scan, not a clean stack.\n",
-			failed, noun)
-		return 1
+	if len(r.Rows) > 0 || failed == 0 {
+		return false
 	}
-	return 0
+	fmt.Fprintf(stderr, "error: nothing could be inventoried, with %d read %s. A failed scan, not a clean stack.\n",
+		failed, report.Plural(failed, "warning"))
+	return true
 }
 
 func cmdGap(opts options, stdout, stderr io.Writer) int {
 	r, err := gather(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if scanFailed(r, stderr) {
 		return 1
 	}
 	switch {
@@ -1460,9 +1476,16 @@ func findPreferring(r *report.Report, name string, eligible func(report.Row) boo
 func findRow(r *report.Report, typed string, eligible func(report.Row) bool) ([]report.Row, error) {
 	plat, cat, name := splitSelector(typed)
 	matches := rowsNamed(r, typed, plat, cat, name, eligible)
-	if len(matches) == 0 && name != typed {
-		// "codex:foo" can be a name in its own right, and not foo in Codex
-		matches = rowsNamed(r, typed, "", "", typed, eligible)
+	if name != typed {
+		// "codex:foo" can be a name in its own right, and not foo in Codex. With
+		// both there the two stand side by side, and it is asked which.
+		for _, row := range rowsNamed(r, typed, "", "", typed, eligible) {
+			if !slices.ContainsFunc(matches, func(m report.Row) bool {
+				return m.Platform == row.Platform && m.Category == row.Category && m.Name == row.Name && m.Path == row.Path
+			}) {
+				matches = append(matches, row)
+			}
+		}
 	}
 	if len(matches) < 2 {
 		return matches, nil
@@ -1485,7 +1508,7 @@ func findRow(r *report.Report, typed string, eligible func(report.Row) bool) ([]
 	}
 	lines := make([]string, len(matches))
 	for i, m := range matches {
-		lines[i] = fmt.Sprintf("  %s:%s:%s  %s", m.Platform, m.Category, m.Name, shown(m.Path))
+		lines[i] = fmt.Sprintf("  %s  %s", scan.ShellArg(m.Platform+":"+string(m.Category)+":"+m.Name), shown(m.Path))
 	}
 	return nil, fmt.Errorf("%s matches %d items; name one of them, by this form or by its path:\n%s", typed, len(matches), strings.Join(lines, "\n"))
 }
@@ -1878,6 +1901,9 @@ func cmdShare(opts options, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
+	if scanFailed(r, stderr) {
+		return 1
+	}
 	could := r.DeadTokensPerSession + r.MuteTokensPerSession
 	cut := 0
 	if entries, err := prune.LoadManifest(opts.claudeDir); err == nil {
@@ -1933,6 +1959,9 @@ func cmdSnapshot(opts options, stdout, stderr io.Writer) int {
 	r, err := gather(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if scanFailed(r, stderr) {
 		return 1
 	}
 	path, err := snapshot.Save(opts.claudeDir, r, clock.Now(), snapshotSettings(opts))

@@ -408,3 +408,50 @@ func TestKeyboardWatcher(t *testing.T) {
 
 var _ Screen = (*Fake)(nil)
 var _ Screen = (*Terminal)(nil)
+
+// paused hands out its bytes with one silence in the middle, as a slow paste does.
+type paused struct {
+	before, after []byte
+	silence       time.Duration
+}
+
+func (p *paused) next(wait time.Duration) (byte, readState) {
+	from := &p.before
+	if len(p.before) == 0 {
+		if quiet := p.silence; quiet > 0 {
+			p.silence = 0
+			if wait >= 0 && wait < quiet {
+				return 0, timedOut
+			}
+		}
+		from = &p.after
+	}
+	if len(*from) == 0 {
+		return 0, timedOut
+	}
+	b := (*from)[0]
+	*from = (*from)[1:]
+	return b, gotByte
+}
+
+func (p *paused) unread(b byte) { p.after = append([]byte{b}, p.after...) }
+
+// A paste is inert to its end, however slowly it arrives: one that paused for
+// half a second let its tail through as keys nobody typed.
+func TestAPasteWithAPauseInItIsStillSwallowedWhole(t *testing.T) {
+	src := &paused{before: []byte("\x1b[200~dd"), after: []byte("d\x1b[201~a"), silence: 500 * time.Millisecond}
+	d := &decoder{src: src, escWait: escWaitLocal}
+	var keys []Key
+	for {
+		b, st := src.next(time.Hour)
+		if st != gotByte {
+			break
+		}
+		if k, ok := d.decode(b); ok {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) != 1 || keys[0] != 'a' {
+		t.Errorf("keys = %v, want only the a typed after the paste", keys)
+	}
+}

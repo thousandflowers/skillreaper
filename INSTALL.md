@@ -84,9 +84,11 @@ Single static binary per archive. No dependencies.
 # Example: macOS Apple Silicon. `latest` resolves to the newest release, so this
 # block cannot go stale — swap the filename for your row in the table above.
 curl -LO https://github.com/thousandflowers/skillreaper/releases/latest/download/skillreaper_darwin_arm64.tar.gz
+curl -LO https://github.com/thousandflowers/skillreaper/releases/latest/download/checksums.txt
+shasum -a 256 -c --ignore-missing checksums.txt   # must say OK; on Linux: sha256sum -c --ignore-missing checksums.txt
 tar xzf skillreaper_darwin_arm64.tar.gz
 mv skillreaper /usr/local/bin/reap   # the archive ships the binary as skillreaper; rename to reap
-rm skillreaper_darwin_arm64.tar.gz
+rm skillreaper_darwin_arm64.tar.gz checksums.txt
 ```
 
 **Verify**:

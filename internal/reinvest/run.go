@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/thousandflowers/skillreaper/internal/flagcheck"
+	"github.com/thousandflowers/skillreaper/internal/tty"
 )
 
 const (
@@ -340,12 +341,11 @@ func (a *app) chooseAndApply(swaps []swap, dryRun bool) error {
 		a.showDoc(s.cand())
 	}
 	if !dryRun {
-		fmt.Fprint(a.term, applyQuestion)
-		answer, err := readLine(a.stdin)
-		if err != nil && err != io.EOF {
+		yes, err := a.confirmed()
+		if err != nil {
 			return err
 		}
-		if pyLower(pyStrip(answer)) != "y" {
+		if !yes {
 			fmt.Fprintln(a.term, "  nothing changed")
 			return nil
 		}
@@ -405,4 +405,17 @@ func OwnArgs(args []string) []string {
 		}
 	}
 	return own
+}
+
+// confirmed asks whether to apply and reads the answer. What was typed before
+// the question was on screen is dropped first: a y typed ahead answered for a
+// skill whose text had not been shown yet.
+func (a *app) confirmed() (bool, error) {
+	tty.FlushInput(a.stdin)
+	fmt.Fprint(a.term, applyQuestion)
+	answer, err := readLine(a.stdin)
+	if err != nil && err != io.EOF {
+		return false, err
+	}
+	return pyLower(pyStrip(answer)) == "y", nil
 }

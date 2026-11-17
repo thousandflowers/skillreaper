@@ -67,7 +67,9 @@ is shown as `(no name)`; a choice that could not be carried out stays chosen,
 so that the same key applies it again once its cause is put right; an apply
 started from the screen after the last row shows what came of it, where it
 showed nothing, and that screen counts what was just applied; a delete of a
-row whose file the menu itself changed through another row is not refused; a name cut in its
+row whose file the menu itself changed through another row is not refused; the
+header says `you would save` for what is chosen and `you saved` only once it
+is applied; a name cut in its
 middle no longer leaves an accent on the `…`; where the locale cannot draw a
 wide character, the columns after it stay in line.
 
@@ -546,6 +548,9 @@ really injected, with multi-line descriptions read in full.
   warnings count `1 day`; the line on weight never measured names MCP
   servers alone, since hooks are not judged; `reap why` on a prose file
   gives the file's size, not a `description`.
+- The line asking for a star after a report says what reap `can save you`:
+  it said `saved you` before anything was pruned. After a prune it says
+  what that prune saved.
 
 ### Behaviour changes on the command line
 

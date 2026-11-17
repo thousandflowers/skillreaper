@@ -307,3 +307,20 @@ func TestKeepListPrintsNoControlCharacters(t *testing.T) {
 		}
 	}
 }
+
+// After a report nothing has been saved yet: the star line says what reap can
+// save. After a prune it says what that prune saved.
+func TestTheStarLineSaysSavedOnlyAfterAPrune(t *testing.T) {
+	home := deleteHome(t)
+	r := &report.Report{DeadTokensPerSession: 22700}
+	var after, afterPrune bytes.Buffer
+	tryShowStarCta(options{claudeDir: filepath.Join(home, ".claude")}, &after, r, true)
+	if said := after.String(); !strings.Contains(said, "reap can save you ~22.7k tok/session") || strings.Contains(said, "saved you") {
+		t.Errorf("after a report: %q", said)
+	}
+	other := deleteHome(t)
+	tryShowStarCta(options{claudeDir: filepath.Join(other, ".claude")}, &afterPrune, r, true, 1300)
+	if said := afterPrune.String(); !strings.Contains(said, "reap saved you ~1.3k tok/session") {
+		t.Errorf("after a prune: %q", said)
+	}
+}

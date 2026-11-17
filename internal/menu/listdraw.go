@@ -148,7 +148,7 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 		m.put(1, end+2, words, bold)
 		m.put(2, end+2, "~"+m.tokens(int(left))+" tokens re-sent every session", dim)
 		if l.shown > 0 {
-			m.put(3, end+2, m.savedSaid(m.money(savedPriced)), green)
+			m.put(3, end+2, m.savedSaid(m.money(savedPriced), l.p.size() > 0), green)
 		}
 	default:
 		words := "tokens wasted every session"
@@ -166,7 +166,7 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 			m.put(2, end+2, month, dim)
 		}
 		if l.shown > 0 {
-			m.put(3, end+2, "you saved ~"+m.tokens(int(l.shown))+" tokens per session", green)
+			m.put(3, end+2, savedVerb(l.p.size() > 0)+" ~"+m.tokens(int(l.shown))+" tokens per session", green)
 		}
 	}
 	moneyTab, tokenTab := " "+m.cur.Sym+" money ", " tokens "

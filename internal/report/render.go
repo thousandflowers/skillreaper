@@ -45,13 +45,19 @@ const MinStarCtaTokens = 200
 // RenderStarCta prints a single sober line asking for a GitHub star,
 // personalized with the saved-token figure. It must only be called when
 // the throttling and output-format gates have already passed.
-func RenderStarCta(w io.Writer, deadTokens int, color bool) {
+// saved is true after a prune, with what it moved: after a report nothing has
+// been saved yet, and the figure is what reap can save.
+func RenderStarCta(w io.Writer, tokens int, saved, color bool) {
 	paint := painter(color)
-	tokStr := fmt.Sprintf("%d", deadTokens)
-	if deadTokens >= 1000 {
-		tokStr = fmt.Sprintf("%.1fk", float64(deadTokens)/1000)
+	tokStr := fmt.Sprintf("%d", tokens)
+	if tokens >= 1000 {
+		tokStr = fmt.Sprintf("%.1fk", float64(tokens)/1000)
 	}
-	line := "⭐ reap saved you ~" + tokStr + " tok/session. If it helps: github.com/thousandflowers/skillreaper"
+	verb := "can save you"
+	if saved {
+		verb = "saved you"
+	}
+	line := "⭐ reap " + verb + " ~" + tokStr + " tok/session. If it helps: github.com/thousandflowers/skillreaper"
 	fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, line))
 }
 

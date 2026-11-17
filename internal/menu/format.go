@@ -86,11 +86,20 @@ func (m *Menu) worth(text string) string {
 }
 
 // savedSaid is what the choices save, as money a month.
-func (m *Menu) savedSaid(text string) string {
+func (m *Menu) savedSaid(text string, pending bool) string {
 	if m.subscriber {
-		return "you saved " + text + " a month, at API prices"
+		return savedVerb(pending) + " " + text + " a month, at API prices"
 	}
-	return "you saved at least " + text + " a month"
+	return savedVerb(pending) + " at least " + text + " a month"
+}
+
+// savedVerb is "you saved" for what was applied. With a choice still to apply,
+// or one that could not be carried out, nothing of it is saved yet.
+func savedVerb(pending bool) string {
+	if pending {
+		return "you would save"
+	}
+	return "you saved"
 }
 
 // bigMoneyWords is the same wording around a figure in the big font: above it,

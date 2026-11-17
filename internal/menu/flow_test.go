@@ -41,7 +41,7 @@ func TestSpaceOnAGroupTakesReapsSuggestion(t *testing.T) {
 	t.Run("the headline falls by what was chosen", func(t *testing.T) {
 		x := open(t, flowData()).press(space).wait().run()
 
-		mustShow(t, x.final(), "you saved ~600 tokens per session")
+		mustShow(t, x.final(), "you would save ~600 tokens per session") // chosen, not applied yet
 	})
 
 	t.Run("space again gives the group back", func(t *testing.T) {

@@ -430,7 +430,7 @@ func TestListHeadline(t *testing.T) {
 	t.Run("what was chosen is said as saved, in the unit shown", func(t *testing.T) {
 		x := open(t, pricedData()).press(space).wait().run()
 
-		mustShow(t, x.final(), "you saved at least US$12.00 a month")
+		mustShow(t, x.final(), "you would save at least US$12.00 a month")
 	})
 
 	t.Run("the receipt speaks in the unit the list was in", func(t *testing.T) {

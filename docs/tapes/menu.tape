@@ -107,7 +107,7 @@ Space
 Sleep 2200ms
 
 # The whole of "suggest to mute" at once: the number has nothing left to lose,
-# the green "you saved" line grows.
+# the green "you would save" line grows.
 Down
 Sleep 600ms
 Space

@@ -2139,7 +2139,8 @@ func isNudgeDisabled(opts options) bool {
 	return os.Getenv("SKILLREAPER_NO_NUDGE") != ""
 }
 
-func tryShowStarCta(opts options, stdout io.Writer, r *report.Report, color bool) {
+// moved, when given, is what a prune just moved: the line then says "saved".
+func tryShowStarCta(opts options, stdout io.Writer, r *report.Report, color bool, moved ...int) {
 	if isNudgeDisabled(opts) {
 		return
 	}
@@ -2164,7 +2165,11 @@ func tryShowStarCta(opts options, stdout io.Writer, r *report.Report, color bool
 	if !hook.ShouldShowStarCta(now, st) {
 		return
 	}
-	report.RenderStarCta(stdout, r.DeadTokensPerSession, true)
+	if len(moved) > 0 {
+		report.RenderStarCta(stdout, moved[0], true, true)
+	} else {
+		report.RenderStarCta(stdout, r.DeadTokensPerSession, false, true)
+	}
 	st.LastStarCtaAt = now
 	st.StarCtaCount++
 	_ = hook.SaveNudgeState(opts.claudeDir, st)

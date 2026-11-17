@@ -474,7 +474,7 @@ func TestSavedOnAFlatPlanReadsAsASentence(t *testing.T) {
 
 	x := open(t, d).press(tab).press(space).wait().run()
 
-	mustShow(t, x.final(), "you saved US$12.00 a month, at API prices")
+	mustShow(t, x.final(), "you would save US$12.00 a month, at API prices")
 	mustNotShow(t, x.final(), "saved worth")
 }
 
@@ -821,4 +821,24 @@ func TestTheResultOnTheScreenBetweenListsStopsBeforeTheLabel(t *testing.T) {
 	if at < 0 || strings.TrimSpace(line[at+len("apply 2 changes"):]) != "" {
 		t.Errorf("the label is not the end of the line: %q", line)
 	}
+}
+
+// "Saved" is for what was applied. A choice not applied yet, or one that
+// failed, would save: the header said "you saved" for both.
+func TestTheHeaderSaysSavedOnlyForWhatWasApplied(t *testing.T) {
+	chosen := open(t, flowData()).press(space).wait().run()
+	mustShow(t, chosen.final(), "you would save ~600 tokens per session")
+	mustNotShow(t, chosen.final(), "you saved")
+
+	x := open(t, flowData())
+	x.m.now = clockAt(0, 0, time.Second)
+	x.press(space, applyKey, 'y', 'y').wait().run()
+	mustShow(t, x.final(), "you saved ~600 tokens per session")
+
+	failing := open(t, flowData())
+	failing.a.fail = map[string]error{"srv": errors.New("permission denied")}
+	failing.m.now = clockAt(0, 0, time.Second)
+	failing.press(space, applyKey, 'y', 'y').wait().run()
+	mustShow(t, failing.final(), "you would save")
+	mustNotShow(t, failing.final(), "you saved")
 }

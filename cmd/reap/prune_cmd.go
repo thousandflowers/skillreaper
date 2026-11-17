@@ -461,7 +461,7 @@ func (o pruneOutcome) printSummary(opts options, stdout, stderr io.Writer, r *re
 	// actually made.
 	report.RenderValueFeedback(stdout, "pruned", len(o.done), o.movedUnmeasured, o.movedTokens, o.movedMonthly, r.PricePerToken*1e6, col)
 	tryShowShareHint(opts, stdout, col)
-	tryShowStarCta(opts, stdout, r, col)
+	tryShowStarCta(opts, stdout, r, col, o.movedTokens)
 	return o.exitCode()
 }
 

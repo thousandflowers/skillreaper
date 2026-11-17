@@ -209,6 +209,9 @@ func renderMuteSavings(w io.Writer, r *Report, width int, paint func(code, s str
 		// link); what can be done differs for each, and reap why says it.
 		said = fmt.Sprintf("MUTE — %d heavy low-use %s a bulk reap mute leaves alone: reap why <name> says what can be done", r.MuteCount, Plural(r.MuteCount, "skill"))
 	}
+	if left := r.MuteCount - n; n > 0 && left > 0 { // the ones the figure leaves out
+		said += fmt.Sprintf(" (+%d a bulk reap mute leaves alone: reap why <name>)", left)
+	}
 	fmt.Fprintln(w)
 	for _, l := range wrap(said, width, "  "+mark(VerdictMute)+"  ", "     ") {
 		fmt.Fprintln(w, paint(cBold, l))

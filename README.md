@@ -781,6 +781,11 @@ platform's evidence is marked incomplete and its items stay **REVIEW (never
 REAP/MUTE)**, with a warning naming the platform - partial evidence can never
 mistakenly mark a tool as dead.
 
+**A built-in command can count as a skill's use.** A transcript records
+`/plan` the same way whether it ran Claude Code's own command or a skill of
+yours named `plan`. reap counts it as a use of the skill, so such a skill is
+kept: when it cannot tell, it errs towards keeping.
+
 **Not a tool declaration fix.** Claude Code's deferred tools reduce the
 *init-time tool declaration* overhead. Skillreaper addresses a different
 problem: **always-loaded skill and agent descriptions.** If a skill description

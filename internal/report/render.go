@@ -325,6 +325,18 @@ func headlineNotes(r *Report) []string {
 			"measured over the window: %s tokens re-read from cache across %s, against %s of fresh input",
 			humanBig(r.Measured.CacheRead), nOf(int(r.Measured.Messages), "message"), humanBig(r.Measured.Input)))
 	}
+	// With two tools the figure is an average over all their sessions, and the
+	// rows under it are not: without a word the reader adds them up and misses.
+	tools := 0
+	for _, n := range r.PlatformSessions {
+		if n > 0 {
+			tools++
+		}
+	}
+	if tools > 1 && r.DeadTokensPerSession > 0 {
+		out = append(out, fmt.Sprintf(
+			"the dead-token figure is an average over the %d sessions of %d tools: an item weighs in its own tool's sessions only", r.Sessions, tools))
+	}
 	// Without this line the total reads as the whole bill. It is not: the dead
 	// items whose weight could never be measured contribute 0 to it.
 	if r.DeadUnknownWeight > 0 {

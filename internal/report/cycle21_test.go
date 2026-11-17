@@ -122,3 +122,45 @@ func TestWhyDoesNotCallAProseFileADescription(t *testing.T) {
 		t.Errorf("why:\n%s", said)
 	}
 }
+
+// Cycle 23: what the report says can be done is what reap does, and its
+// figures say what they are.
+func TestCycle23ReportSaysWhatIsTrue(t *testing.T) {
+	has := func(got, want string) {
+		t.Helper()
+		if !strings.Contains(got, want) {
+			t.Errorf("%q does not hold %q", got, want)
+		}
+	}
+	// A skill whose whole skills folder is a link is not reap's to prune.
+	folderLinked := Row{Item: scan.Item{Category: scan.CatSkill, Name: "x", Path: "/dot/skills/x/SKILL.md", ViaLink: "/dot/skills", FolderLink: true}, Verdict: VerdictReap}
+	if got := recommendationFor(folderLinked, 12, ExplainInput{}); strings.Contains(got, "run: reap prune") || !strings.Contains(got, "by hand") {
+		t.Errorf("a folder-linked skill: %q", got)
+	}
+	// The agent view sends to reap prune only what reap prune takes.
+	inPlugin := Row{Item: scan.Item{Category: scan.CatSkill, Name: "plug:preap", Source: "plugin:plug@m"}, Verdict: VerdictReap, Tokens: 165}
+	var agent bytes.Buffer
+	RenderAgent(&agent, &Report{Sessions: 12, WindowDays: 30, DeadCount: 1, Rows: []Row{inPlugin}}, 0)
+	if said := agent.String(); strings.Contains(said, "To prune: reap prune") || !strings.Contains(said, "reap why") {
+		t.Errorf("--agent with only a plugin's item unused:\n%s", said)
+	}
+	// Removable items that were never measured are not "~0 removable".
+	srv := Row{Item: scan.Item{Category: scan.CatMCP, Name: "srv1", Removable: true}, Verdict: VerdictReap, WeightUnknown: true}
+	split := NewHeadline(&Report{DeadCount: 2, Rows: []Row{srv, inPlugin}}).Split()
+	if strings.Contains(split, "~0 removable") {
+		t.Errorf("split: %q", split)
+	}
+	has(split, "1 removable with reap prune, weight not measured")
+	// Two tools: the dead-token figure is an average, and says so.
+	notes := strings.Join(headlineNotes(&Report{Sessions: 52, DeadTokensPerSession: 255, PlatformSessions: map[string]int{"claude-code": 40, "opencode": 12}}), "\n")
+	has(notes, "average over the 52 sessions of 2 tools")
+	if one := strings.Join(headlineNotes(&Report{Sessions: 40, DeadTokensPerSession: 255, PlatformSessions: map[string]int{"claude-code": 40}}), "\n"); strings.Contains(one, "average over") {
+		t.Errorf("one tool: %q", one)
+	}
+	// Some MUTE rows a bulk mute takes and some it leaves: both are counted.
+	own := Row{Item: scan.Item{Category: scan.CatSkill, Name: "b", Path: "/s/b/SKILL.md", Removable: true}, Verdict: VerdictMute, Tokens: 100}
+	pluginMute := Row{Item: scan.Item{Category: scan.CatSkill, Name: "plug:pmute", Path: "/p/SKILL.md", Source: "plugin:plug@m"}, Verdict: VerdictMute, Tokens: 100}
+	var gap bytes.Buffer
+	renderMuteSavings(&gap, &Report{MuteCount: 2, Rows: []Row{own, pluginMute}}, 120, painter(false))
+	has(gap.String(), "+1 a bulk reap mute leaves alone")
+}

@@ -203,6 +203,10 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 	}
 	switch row.Verdict {
 	case VerdictReap:
+		if row.FolderLink {
+			// The link is the whole skills folder: reap prune refuses to take it.
+			return "unused, but its whole skills folder is a link to " + row.ViaLink + ": reap will not take that link. remove it by hand from " + row.Path
+		}
 		if row.ViaLink != "" {
 			return "unused, reached through a link to " + row.ViaLink + ". run: reap prune " + scan.ShellArg(CanonicalName(row)) + " takes the link and leaves that"
 		}

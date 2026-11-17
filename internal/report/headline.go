@@ -39,6 +39,8 @@ type Headline struct {
 	Muted           int
 	ByHandTokens    int // unused items outside plugins that reap cannot edit
 	mutedIdle       int // the muted that never fired: the ones among NeverFired
+	// removableUnmeasured counts what reap prune takes whose weight is unknown.
+	removableUnmeasured int
 }
 
 // NewHeadline derives the opening figures from a finished report.
@@ -52,6 +54,9 @@ func NewHeadline(r *Report) Headline {
 		case row.Verdict != VerdictReap:
 		case row.Removable:
 			h.RemovableTokens += row.Tokens
+			if row.WeightUnknown {
+				h.removableUnmeasured++
+			}
 		case IsPluginSource(row.Source):
 			h.PluginTokens += row.Tokens
 		default:
@@ -102,6 +107,9 @@ func (h Headline) Split() string {
 		return ""
 	}
 	parts := []string{fmt.Sprintf("~%s removable with reap prune", HumanNum(h.RemovableTokens))}
+	if h.RemovableTokens == 0 && h.removableUnmeasured > 0 { // "~0" would be a number
+		parts[0] = fmt.Sprintf("%d removable with reap prune, weight not measured", h.removableUnmeasured)
+	}
 	if h.PluginTokens > 0 {
 		parts = append(parts, fmt.Sprintf("~%s inside plugins", HumanNum(h.PluginTokens)))
 	}

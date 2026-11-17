@@ -107,7 +107,12 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 		if len(dead) > top {
 			fmt.Fprintf(w, "(%d more marked REAP not shown — use --json for all)\n", len(dead)-top)
 		}
-		fmt.Fprintln(w, "\nTo prune: reap prune   (interactive, reversible via reap restore --all)")
+		if prunable := removableDead(dead); prunable > 0 {
+			fmt.Fprintln(w, "\nTo prune: reap prune   (interactive, reversible via reap restore --all)")
+		} else {
+			// Nothing here is reap prune's to take: it would answer "Nothing to reap".
+			fmt.Fprintf(w, "\nA bare reap prune takes none of these (inside a plugin, or reached through a link): reap why <name> says what can be done.\n")
+		}
 	}
 
 	// held back only when some were: a warning alone may be an advisory
@@ -239,4 +244,15 @@ func noisyPayload(r *Report) []PayloadRow {
 		}
 	}
 	return out
+}
+
+// removableDead counts the unused rows a bare reap prune takes.
+func removableDead(dead []Row) int {
+	n := 0
+	for _, row := range dead {
+		if row.Removable {
+			n++
+		}
+	}
+	return n
 }

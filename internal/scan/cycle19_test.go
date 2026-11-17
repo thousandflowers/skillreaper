@@ -231,3 +231,33 @@ func TestShellWordsKeepAWindowsPath(t *testing.T) {
 		t.Errorf("words: %q", got)
 	}
 }
+
+// A value that begins on the line after its key is that text: read as empty,
+// a 600-character description weighed a few tokens, and mute still took it all.
+func TestAValueOnTheLinesAfterItsKeyIsRead(t *testing.T) {
+	for header, want := range map[string]string{
+		"name: n\ndescription:\n  first line\n  second line\nlicense: MIT": "first line second line",
+		"description:\n  # a comment\n  real text":                         "real text",
+		"description: # c\n  real text":                                    "real text",
+		"description:\nlicense: MIT":                                       "",
+	} {
+		if got, _ := topLevelValue(strings.Split(header, "\n"), "description"); got != want {
+			t.Errorf("%q: description = %q, want %q", header, got, want)
+		}
+	}
+}
+
+// A list of tools written one per line is that many tools, not "all".
+func TestToolsWrittenAsAListAreCounted(t *testing.T) {
+	for doc, want := range map[string]int{
+		"---\nallowed-tools:\n  - Read\n  - Bash\n---\n": 2,
+		"---\nallowed-tools: # c\n  - Read\n---\n":       1,
+		"---\nallowed-tools: [Read, Bash, Grep]\n---\n":  3,
+		"---\nallowed-tools: Read, Bash\n---\n":          2,
+		"---\nname: x\n---\n":                            ToolSurfaceAll,
+	} {
+		if got := toolSurface([]byte(doc), "allowed-tools"); got != want {
+			t.Errorf("%q: %d tools, want %d", doc, got, want)
+		}
+	}
+}

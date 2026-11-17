@@ -106,6 +106,11 @@ func toolSurface(b []byte, keys ...string) int {
 			continue
 		}
 		v = strings.TrimSpace(v)
+		if v == "" { // written one per line under the key: a list, not "all"
+			if listed := frontmatterList(b, k); len(listed) > 0 {
+				return len(listed)
+			}
+		}
 		if v == "" || v == "*" {
 			return ToolSurfaceAll
 		}
@@ -191,12 +196,15 @@ func topLevelValue(lines []string, key string) (string, bool) {
 			}
 			return v, true
 		}
-		if raw == "" {
-			return v, true
+		// A plain value runs on over the indented lines after it, and may begin
+		// on them, with nothing after the key: all of it is the value, as mute
+		// takes it. A line that is only a comment is not part of it.
+		var parts []string
+		if raw != "" {
+			parts = append(parts, v)
 		}
-		parts := []string{v}
 		for _, c := range cont {
-			if t := strings.TrimSpace(c); t != "" {
+			if t := strings.TrimSpace(c); t != "" && !strings.HasPrefix(t, "#") {
 				parts = append(parts, t)
 			}
 		}

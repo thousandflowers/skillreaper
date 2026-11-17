@@ -13,7 +13,7 @@ import (
 // deadRow builds a REAP row with the given name and token weight.
 func deadRow(name string, tokens int) Row {
 	return Row{
-		Item:    scan.Item{Category: scan.CatSkill, Name: name},
+		Item:    scan.Item{Category: scan.CatSkill, Name: name, Removable: true}, // a personal skill: reap prune takes it
 		Verdict: VerdictReap,
 		Reason:  ReasonUnused,
 		Tokens:  tokens,

@@ -71,6 +71,12 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 	} else {
 		fmt.Fprintln(w, "no items loaded")
 	}
+	defer func() { // last, so that the figure never travels without it
+		if r.DeadUnknownWeight > 0 {
+			fmt.Fprintf(w, "\nThe dead-token figure is a floor: %s (MCP servers) %s weight that was never measured.\n",
+				nOf(r.DeadUnknownWeight, "unused item"), map[bool]string{true: "carries", false: "carry"}[r.DeadUnknownWeight == 1])
+		}
+	}()
 
 	// No money line here, unlike every other renderer. A dollar figure is a
 	// token count multiplied by a price we do not control and that moves when a

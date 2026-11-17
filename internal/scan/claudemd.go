@@ -130,20 +130,44 @@ func markedAsSkill(line string, i, j int) bool {
 }
 
 // ClaudeMDReferences reports whether a skill is named in any of the given lines.
-// Its whole invocation key counts as a word. The bare suffix of a plugin key
-// ("plan" of "ecc:plan") has to be marked as a skill, because it is often an
-// ordinary word and every rules file would otherwise protect it.
+// A key with a dash, a colon, an underscore or a digit in it is no sentence's
+// word, and counts wherever it stands alone. A key that is one plain word
+// ("review"), like the bare suffix of a plugin key ("plan" of "ecc:plan"), is
+// often an ordinary word: it has to be written as a name, or every rules file
+// that says "always review the diff" protects a skill nobody uses.
 func ClaudeMDReferences(lines []string, name string) bool {
 	if name == "" {
 		return false
 	}
+	var asName func(line string, i, j int) bool
+	if plainWord(name) {
+		asName = writtenAsName
+	}
 	_, bare, isPlugin := strings.Cut(name, ":")
 	for _, line := range lines {
-		if wordAt(line, name, nil) || isPlugin && bare != "" && wordAt(line, bare, markedAsSkill) {
+		if wordAt(line, name, asName) || isPlugin && bare != "" && wordAt(line, bare, markedAsSkill) {
 			return true
 		}
 	}
 	return false
+}
+
+// plainWord says whether a name is letters and nothing else.
+func plainWord(name string) bool {
+	for i := 0; i < len(name); i++ {
+		if c := name[i]; (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
+// writtenAsName is markedAsSkill, or the name heading a list item: "- review:
+// reads the diff" is how a rules file lists what it has.
+func writtenAsName(line string, i, j int) bool {
+	heads := strings.TrimLeft(line[:i], " \t") != line[:i] || i == 0 || line[i-1] == ' '
+	item := strings.TrimLeft(strings.TrimSpace(line[:i]), "-*+") == "" && strings.TrimSpace(line[:i]) != ""
+	return markedAsSkill(line, i, j) || heads && item && strings.HasPrefix(line[j:], ":")
 }
 
 // wordAt reports whether word stands alone somewhere in line and, when a check

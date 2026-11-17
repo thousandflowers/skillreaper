@@ -400,7 +400,7 @@ func TestLinkRowsLoseTheLinkAndNeverTheTarget(t *testing.T) {
 			t.Fatalf("mute through a shared-folder link: %d %s", code, out)
 		}
 		before, _ := os.ReadFile(filepath.Join(home, "dot/ext/SKILL.md"))
-		if code, out := reapRun("mute", "ext", "--yes"); code == 0 || !strings.Contains(out, "outside") {
+		if code, out := reapRun("mute", "ext", "--yes"); code == 0 || !strings.Contains(out, "does not edit files there") {
 			t.Fatalf("mute of a link leading elsewhere: %d %s", code, out)
 		}
 		after, _ := os.ReadFile(filepath.Join(home, "dot/ext/SKILL.md"))

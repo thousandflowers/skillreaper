@@ -164,3 +164,14 @@ func TestCycle23ReportSaysWhatIsTrue(t *testing.T) {
 	renderMuteSavings(&gap, &Report{MuteCount: 2, Rows: []Row{own, pluginMute}}, 120, painter(false))
 	has(gap.String(), "+1 a bulk reap mute leaves alone")
 }
+
+// The agent view's dead-token figure is a floor when some unused items were
+// never measured, and says so: pasted alone it read as the total.
+func TestAgentViewSaysWhenItsFigureIsAFloor(t *testing.T) {
+	srv := Row{Item: scan.Item{Category: scan.CatMCP, Name: "srv1", Removable: true}, Verdict: VerdictReap, WeightUnknown: true}
+	var b bytes.Buffer
+	RenderAgent(&b, &Report{Sessions: 12, WindowDays: 30, DeadCount: 1, DeadUnknownWeight: 1, Rows: []Row{srv}}, 0)
+	if said := b.String(); !strings.Contains(said, "a floor") || !strings.Contains(said, "1 unused item") {
+		t.Errorf("--agent:\n%s", said)
+	}
+}

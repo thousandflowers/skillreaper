@@ -397,3 +397,21 @@ func TestMuteQuietWithoutYesIsNotDone(t *testing.T) {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errOut.String())
 	}
 }
+
+// A named mute of a skill reached through a link outside the folders reap
+// edits is refused before any question, in the words reap why uses: it asked
+// "Mute x?" first, then answered with an error about roots.
+func TestMuteOfALinkedSkillIsRefusedBeforeTheQuestion(t *testing.T) {
+	home := deleteHome(t)
+	for i := range 12 {
+		mustWriteFile(t, filepath.Join(home, ".claude", "projects", "p", "q"+strings.Repeat("x", i)+".jsonl"),
+			`{"type":"user","sessionId":"q`+strings.Repeat("x", i)+`","timestamp":"`+nowStamp()+`","message":{"content":"hi"}}`+"\n")
+	}
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"mute", "ext"}, strings.NewReader("y\n"), &out, &errOut)
+
+	if said := out.String() + errOut.String(); code == 0 || strings.Contains(said, "[y/N]") || strings.Contains(said, "roots") || !strings.Contains(said, "reap mute does not edit files there") {
+		t.Errorf("exit %d:\n%s", code, said)
+	}
+}

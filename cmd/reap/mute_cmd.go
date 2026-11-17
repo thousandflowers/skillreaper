@@ -47,6 +47,16 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		if refuseKept(opts, rows[0], stderr) {
 			return 1
 		}
+		if err := mute.Editable(opts.claudeDir, rows[0].RootDir, rows[0].Path); err != nil {
+			// Before the question, and in the words reap why uses: asked first,
+			// the answer to a yes was an error about roots.
+			if rows[0].ViaLink != "" {
+				fmt.Fprintf(stderr, "error: %s is reached through a link to %s: reap mute does not edit files there. Shorten its description by hand, or leave it.\n", rows[0].Name, shown(rows[0].ViaLink))
+			} else {
+				fmt.Fprintf(stderr, "error: %v\n", err)
+			}
+			return 1
+		}
 		candidates = rows
 	} else {
 		var eligible []report.Row

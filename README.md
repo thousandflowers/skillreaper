@@ -31,6 +31,8 @@ To prune: reap prune   (interactive, reversible via reap restore --all)
 1 warning — run reap for details.
 
 measured by skillreaper · github.com/thousandflowers/skillreaper
+
+The dead-token figure is a floor: 11 unused items (MCP servers) carry weight that was never measured.
 ```
 <!-- readme-numbers:end -->
 
@@ -780,6 +782,14 @@ reads per transcript record. If a record is oversized or unreadable, that
 platform's evidence is marked incomplete and its items stay **REVIEW (never
 REAP/MUTE)**, with a warning naming the platform - partial evidence can never
 mistakenly mark a tool as dead.
+
+**A name in your CLAUDE.md protects a skill, a plain word only where it is
+written as a name.** A skill named in your CLAUDE.md or rules is kept
+(`claude-md-ref`). A name with a dash, a colon, an underscore or a digit in
+it (`code-review`, `ecc:plan`) counts wherever it stands. A one-word name
+(`review`) is also a word of the language, so it counts only as `/review`,
+in backticks or bold, beside the word "skill", or heading a list item
+(`- review: …`): "always review the diff" protects nothing.
 
 **A built-in command can count as a skill's use.** A transcript records
 `/plan` the same way whether it ran Claude Code's own command or a skill of

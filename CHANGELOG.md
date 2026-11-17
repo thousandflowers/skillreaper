@@ -107,8 +107,10 @@ really injected, with multi-line descriptions read in full.
   each other there, and `restore` could not bring both back.
 - A name two items share is refused rather than guessed: select with
   `codex:skill:x` or a path.
-- Named prune, mute and delete reach a plugin's item or a link; a bulk prune
-  never does.
+- Named prune and delete reach a plugin's item or a link, and a named mute a
+  plugin's item; a bulk prune or mute never does. A named mute of a skill
+  reached through a link outside the folders reap edits is refused before
+  any question.
 - `reap restore` with no arguments lists what is pruned, with ids.
 - A kept item refuses a named prune or mute until `reap keep --remove`.
 - Removing, deleting or restoring an MCP server checks `~/.claude.json` again
@@ -555,6 +557,28 @@ really injected, with multi-line descriptions read in full.
 - `reap prune --quiet` and `reap mute --quiet` without `--yes`, with
   something to do, exit 3 and say `nothing done: --quiet needs --yes` on
   stderr. They exited 0 in silence, and a script took that for done.
+- A skill whose name is one plain word is protected by your CLAUDE.md only
+  where the word is written as a name (`/review`, backticks or bold,
+  beside the word "skill", or heading a list item). "always review the
+  diff" protected a skill named `review` that nothing used: in one stack,
+  36 skills of 60. A name with a dash, a colon, an underscore or a digit
+  counts wherever it stands, as before.
+- A description that begins on the line after `description:` is weighed:
+  it read as empty, a few tokens for 600 characters, while `reap mute`
+  took all of it. `allowed-tools` written one per line is that many
+  tools, not `all`.
+- `reap why` does not send a skill to `reap prune` when its whole skills
+  folder is a link, which prune refuses; `reap prune`, `reap delete` and a
+  named `reap mute` refuse such a case before any note, plan or question.
+- `reap --agent` names `reap prune` only when it would take something,
+  and says that its dead-token figure is a floor when some unused items
+  were never measured; the headline does not say `~0 removable` for items
+  that are removable and unmeasured; with sessions of two tools the
+  dead-token figure says it is an average over both; `reap gap` counts
+  the MUTE rows a bulk mute leaves alone beside the ones it takes.
+- `reap prune --json` after an apply counts `unmeasured` among what was
+  moved; `reap keep --remove` and `reap apm` print names without control
+  characters; INSTALL.md says what to do with the Windows archive.
 
 ### Behaviour changes on the command line
 
@@ -725,8 +749,8 @@ the same cache files and the same checks. What to know before running it:
 - A folder left in `skills-reinvest` is linked again only when it holds
   that skill and nothing else; a server that could not be noted down is
   not promised a later mute.
-- With `--online`, candidates that fit but have nothing unused to trade
-  for them are said to be that, not `nothing verified`.
+- Candidates that fit but have nothing unused to trade for them are said
+  to be that, not `nothing verified`.
 - A grouping answer that places no session is no answer: saved as one, it
   gave `0 kinds of work` for a week with no call made. A key in what
   `claude -p` said is masked before the line is cut, not after.

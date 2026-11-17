@@ -39,7 +39,7 @@ func TestClaudeMDReferences(t *testing.T) {
 // relies on, and it used to be left open to REAP.
 func TestLoadClaudeMDReadsHeadings(t *testing.T) {
 	dir := t.TempDir()
-	content := "## Use the `graphify` skill before every release\nuse the realskill here\n"
+	content := "## Use the `graphify` skill before every release\nuse the real-skill here\n"
 	if err := os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestLoadClaudeMDReadsHeadings(t *testing.T) {
 	if !ClaudeMDReferences(lines, "graphify") {
 		t.Error("a skill named in a heading is not protected")
 	}
-	if !ClaudeMDReferences(lines, "realskill") {
+	if !ClaudeMDReferences(lines, "real-skill") {
 		t.Error("a name in a line of text should count")
 	}
 }
@@ -89,17 +89,17 @@ func TestLoadClaudeMDReadsWhatEverySessionLoads(t *testing.T) {
 	claudeDir := filepath.Join(home, ".claude")
 	cwd := filepath.Join(root, "repo", "sub")
 	writeAll(t, root, map[string]string{
-		"home/.claude/CLAUDE.md":          "use globalskill\n@EXTRA.md\n@~/shared.md\n",
-		"home/.claude/EXTRA.md":           "use importedskill\n@EXTRA.md\n",
-		"home/shared.md":                  "use tildeskill\n",
-		"home/.claude/rules/a/b.md":       "use ruleskill\n",
+		"home/.claude/CLAUDE.md":          "use global-skill\n@EXTRA.md\n@~/shared.md\n",
+		"home/.claude/EXTRA.md":           "use imported-skill\n@EXTRA.md\n",
+		"home/shared.md":                  "use tilde-skill\n",
+		"home/.claude/rules/a/b.md":       "use rule-skill\n",
 		"home/.claude/rules/a/notes.txt":  "use txtskill\n",
-		"repo/CLAUDE.md":                  "use parentskill\n",
-		"repo/sub/.claude/rules/local.md": "use projectruleskill\n",
-		"repo/sub/CLAUDE.md":              "use cwdskill\n",
+		"repo/CLAUDE.md":                  "use parent-skill\n",
+		"repo/sub/.claude/rules/local.md": "use projectrule-skill\n",
+		"repo/sub/CLAUDE.md":              "use cwd-skill\n",
 	})
 	lines := LoadClaudeMD(cwd, home, claudeDir)
-	for _, name := range []string{"globalskill", "importedskill", "tildeskill", "ruleskill", "parentskill", "projectruleskill", "cwdskill"} {
+	for _, name := range []string{"global-skill", "imported-skill", "tilde-skill", "rule-skill", "parent-skill", "projectrule-skill", "cwd-skill"} {
 		if !ClaudeMDReferences(lines, name) {
 			t.Errorf("%s not found", name)
 		}
@@ -113,14 +113,14 @@ func TestLoadClaudeMDReadsWhatEverySessionLoads(t *testing.T) {
 func TestLoadClaudeMDFollowsALinkedRulesFolder(t *testing.T) {
 	root := t.TempDir()
 	claudeDir := filepath.Join(root, "claude")
-	writeAll(t, root, map[string]string{"dotfiles/rules/a/r.md": "use linkedskill\n"})
+	writeAll(t, root, map[string]string{"dotfiles/rules/a/r.md": "use linked-skill\n"})
 	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join(root, "dotfiles", "rules"), filepath.Join(claudeDir, "rules")); err != nil {
 		t.Fatal(err)
 	}
-	if !ClaudeMDReferences(LoadClaudeMD("", "", claudeDir), "linkedskill") {
+	if !ClaudeMDReferences(LoadClaudeMD("", "", claudeDir), "linked-skill") {
 		t.Error("a skill named in a linked rules folder must count")
 	}
 }
@@ -144,5 +144,34 @@ func TestClaudeMDProtectionFoldsCaseAndReadsTheLocalFile(t *testing.T) {
 	mustWrite(t, filepath.Join(cwd, "CLAUDE.local.md"), "use /only-local for this project\n")
 	if !ClaudeMDReferences(LoadClaudeMD(cwd, "", ""), "only-local") {
 		t.Error("CLAUDE.local.md is not read")
+	}
+}
+
+// A name that is one plain word is also a word of the language: "review" in
+// "always review the diff" is not a mention of a skill named review. Such a
+// name protects its skill only where it is written as a name. A name with a
+// dash, a colon, an underscore or a digit in it is no sentence's word, and
+// counts wherever it stands.
+func TestAPlainWordProtectsOnlyWhereItIsWrittenAsAName(t *testing.T) {
+	for line, want := range map[string]bool{
+		"always review the diff before committing": false,
+		"Review everything twice.":                 false,
+		"run /review before a merge":               true,
+		"use `review` before a merge":              true,
+		"the **review** step comes last":           true,
+		"use the review skill":                     true,
+		"usa la skill review":                      true,
+		"- review: reads the diff":                 true,
+		"* Review: reads the diff":                 true,
+		"a note: review: later":                    false,
+	} {
+		if got := ClaudeMDReferences([]string{line}, "review"); got != want {
+			t.Errorf("%q protects review = %v, want %v", line, got, want)
+		}
+	}
+	for _, name := range []string{"code-review", "ecc:plan", "pdf2md", "my_skill"} {
+		if !ClaudeMDReferences([]string{"then run " + name + " on it"}, name) {
+			t.Errorf("%s in a sentence does not protect it", name)
+		}
 	}
 }

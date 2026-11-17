@@ -85,7 +85,10 @@ table above. `latest` resolves to the newest release, so the block cannot go
 stale. It is one chain: a download that fails, or a checksum that does not
 match, stops it there and installs nothing. The checksum line must say `OK`
 (on Linux write `sha256sum` in place of `shasum -a 256`). The archive ships
-the binary as `skillreaper`; the `mv` renames it to `reap`.
+the binary as `skillreaper`; the `mv` renames it to `reap`. The Windows
+archives hold `skillreaper.exe`, and the last two lines are for macOS and
+Linux: on Windows unpack the archive and put `skillreaper.exe` in a folder on
+your `PATH`, as `reap.exe` if you want that name.
 
 ```bash
 curl -fLO https://github.com/thousandflowers/skillreaper/releases/latest/download/skillreaper_darwin_arm64.tar.gz &&

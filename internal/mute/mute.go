@@ -266,6 +266,16 @@ func freeBackupPath(claudeDir, name, path string) string {
 }
 
 // Strippable reports whether the file has a description for Mute to strip.
+// Editable is nil when reap mute may rewrite the file: it lies in a folder
+// reap knows. A file reached through a link to somewhere else is not.
+func Editable(claudeDir, rootDir, skillPath string) error {
+	if rootDir == "" {
+		rootDir = claudeDir
+	}
+	_, err := resolveMutableExisting(rootDir, skillPath)
+	return err
+}
+
 func Strippable(path string) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {

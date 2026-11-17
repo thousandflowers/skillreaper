@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func cycle19Write(t *testing.T, path, body string) {
@@ -259,5 +260,20 @@ func TestToolsWrittenAsAListAreCounted(t *testing.T) {
 		if got := toolSurface([]byte(doc), "allowed-tools"); got != want {
 			t.Errorf("%q: %d tools, want %d", doc, got, want)
 		}
+	}
+}
+
+// A skill marked to run only by hand is scanned as such.
+func TestAManualOnlySkillIsMarked(t *testing.T) {
+	dir := t.TempDir()
+	cycle19Write(t, filepath.Join(dir, "byhand", "SKILL.md"), "---\nname: byhand\ndescription: some words here\ndisable-model-invocation: true\n---\nbody\n")
+	cycle19Write(t, filepath.Join(dir, "loaded", "SKILL.md"), "---\nname: loaded\ndescription: some words here\n---\nbody\n")
+	items, _ := appendSkillsFromDir(nil, nil, dir, "", "personal", time.Time{}, true, "claude-code")
+	manual := map[string]bool{}
+	for _, it := range items {
+		manual[it.Name] = it.ManualOnly
+	}
+	if !manual["byhand"] || manual["loaded"] {
+		t.Errorf("manual-only: %v", manual)
 	}
 }

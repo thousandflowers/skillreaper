@@ -43,6 +43,9 @@ type Item struct {
 	BodyChars       int       // chars loaded on invocation (SKILL.md body)
 	InstalledAt     time.Time `json:",omitzero"` // zero when unknown
 	Removable       bool      // safe to prune automatically
+	// ManualOnly is a skill marked to run only by hand: Claude Code leaves it
+	// out of the listing it injects, so it weighs nothing.
+	ManualOnly bool `json:",omitempty"`
 	// HookLoaded is set on a plugin skill its SessionStart hook injects: it
 	// works in every session and no transcript records an invocation.
 	HookLoaded bool

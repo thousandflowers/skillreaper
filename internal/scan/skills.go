@@ -186,6 +186,7 @@ func appendSkillsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			InstalledAt:     datedOr(installedAt, readPath),
 			Removable:       removable && viaLink == "",
 			ToolSurface:     toolSurface(b, "allowed-tools"),
+			ManualOnly:      manualOnly(b),
 			RunsIn:          skillAgent(b),
 			LinkTarget:      linkTarget,
 			ViaLink:         viaLink,
@@ -207,8 +208,14 @@ func brokenLink(path string) Warning {
 func SkillListing(key string, doc []byte) (desc string, chars int) {
 	_, desc, _ = parseFrontmatter(doc)
 	// Run only by hand: Claude Code leaves it out of the listing it injects.
-	if v, _ := frontmatterValue(doc, "disable-model-invocation"); strings.EqualFold(v, "true") {
+	if manualOnly(doc) {
 		return desc, 0
 	}
 	return desc, len(key) + len(desc)
+}
+
+// manualOnly says whether a skill is marked to run only by hand.
+func manualOnly(doc []byte) bool {
+	v, _ := frontmatterValue(doc, "disable-model-invocation")
+	return strings.EqualFold(v, "true")
 }

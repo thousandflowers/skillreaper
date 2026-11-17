@@ -22,11 +22,13 @@ type Explanation struct {
 	TokenWeight int `json:"token_weight"`
 	// WeightUnknown tells a weight that was never measured from zero.
 	WeightUnknown bool `json:"weight_unknown,omitempty"`
-	DescChars     int  `json:"desc_chars"`
-	ListedChars   int  `json:"listed_chars,omitempty"`
-	Sessions      int  `json:"sessions"`
-	Uses          int  `json:"uses"`
-	Errors        int  `json:"errors"`
+	// ManualOnly is a skill that runs only by hand: its weight is known, and zero.
+	ManualOnly  bool `json:"manual_only,omitempty"`
+	DescChars   int  `json:"desc_chars"`
+	ListedChars int  `json:"listed_chars,omitempty"`
+	Sessions    int  `json:"sessions"`
+	Uses        int  `json:"uses"`
+	Errors      int  `json:"errors"`
 
 	LastSeen         string `json:"last_seen"`
 	LastAttempt      string `json:"last_attempt,omitempty"`
@@ -111,6 +113,7 @@ func BuildExplanation(row Row, sessions int, in ExplainInput) Explanation {
 		Summary:       summaryFor(row),
 		TokenWeight:   row.Tokens,
 		WeightUnknown: row.WeightUnknown,
+		ManualOnly:    row.ManualOnly,
 		DescChars:     row.DescChars,
 		ListedChars:   row.ListedChars,
 		Sessions:      sessions,
@@ -329,6 +332,8 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 
 	weight := "? (weight unknown)"
 	switch {
+	case e.ManualOnly:
+		weight = "0 tok  (runs only by hand: Claude Code does not load it)"
 	case e.Category == string(scan.CatMCP) && e.TokenWeight > 0:
 		weight = fmt.Sprintf("~%d tok  (tool names + instructions, last session that loaded it)", e.TokenWeight)
 	case e.Category == string(scan.CatMCP):

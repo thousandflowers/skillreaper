@@ -576,6 +576,9 @@ really injected, with multi-line descriptions read in full.
   that are removable and unmeasured; with sessions of two tools the
   dead-token figure says it is an average over both; `reap gap` counts
   the MUTE rows a bulk mute leaves alone beside the ones it takes.
+- `reap why` on a skill that runs only by hand
+  (`disable-model-invocation: true`) says it weighs `0 tok`, and why: it
+  said `weight unknown` of a weight that is known.
 - `reap prune --json` after an apply counts `unmeasured` among what was
   moved; `reap keep --remove` and `reap apm` print names without control
   characters; INSTALL.md says what to do with the Windows archive.

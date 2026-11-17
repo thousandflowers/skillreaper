@@ -175,3 +175,14 @@ func TestAgentViewSaysWhenItsFigureIsAFloor(t *testing.T) {
 		t.Errorf("--agent:\n%s", said)
 	}
 }
+
+// A skill that runs only by hand weighs nothing, and reap why says that: it
+// said "weight unknown" of a weight that is known, and is zero.
+func TestWhySaysAManualOnlySkillWeighsNothing(t *testing.T) {
+	row := Row{Item: scan.Item{Category: scan.CatSkill, Name: "byhand", ManualOnly: true}, Verdict: VerdictReap, Reason: ReasonUnused}
+	var b bytes.Buffer
+	RenderWhy(&b, BuildExplanation(row, 12, ExplainInput{}), false)
+	if said := b.String(); strings.Contains(said, "weight unknown") || !strings.Contains(said, "0 tok") || !strings.Contains(said, "runs only by hand") {
+		t.Errorf("why:\n%s", said)
+	}
+}

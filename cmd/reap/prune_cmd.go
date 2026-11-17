@@ -98,16 +98,24 @@ func serverScope(row report.Row) string {
 	return ""
 }
 
+// folderLinkReason is why a bulk prune leaves a skill that a prune by name
+// refuses too: reap will not remove the link, it would take every skill there.
+const folderLinkReason = "the whole skills folder is a link"
+
 // unremovableNote says what to do about an unused item prune cannot take. Only a
 // plugin's items are disabled through /plugin; anything else is one edit away in
 // the file that declares it.
 func unremovableNotes(rows []report.Row) []string {
 	plugin, other := 0, map[string][]string{}
 	var paths []string
-	var named []string
+	var named, folderLinked []string
 	for _, row := range rows {
 		if report.IsPluginSource(row.Source) && row.ViaLink == "" {
 			plugin++
+			continue
+		}
+		if row.FolderLink { // by name it is refused too: reap will not take that link
+			folderLinked = append(folderLinked, row.Name)
 			continue
 		}
 		if row.ViaLink != "" || row.Category == scan.CatSkill {
@@ -125,6 +133,9 @@ func unremovableNotes(rows []report.Row) []string {
 	}
 	if len(named) > 0 {
 		notes = append(notes, fmt.Sprintf("%s skipped — a link or a shared folder, pruned only by name", strings.Join(named, ", ")))
+	}
+	if len(folderLinked) > 0 {
+		notes = append(notes, fmt.Sprintf("%s skipped — %s, remove by hand", strings.Join(folderLinked, ", "), folderLinkReason))
 	}
 	for _, p := range paths {
 		notes = append(notes, fmt.Sprintf("%s skipped — reap cannot edit %s, remove by hand", strings.Join(other[p], ", "), p))
@@ -523,6 +534,8 @@ func (o pruneOutcome) writeJSON(w, stderr io.Writer, applied bool) int {
 	for _, row := range o.notRemovable {
 		switch {
 		case report.IsPluginSource(row.Source):
+		case row.FolderLink:
+			out.Skipped = append(out.Skipped, problemOf(row, folderLinkReason+"; remove by hand"))
 		case row.ViaLink != "" || row.Category == scan.CatSkill:
 			out.Skipped = append(out.Skipped, problemOf(row, "a link or a shared folder, pruned only by name"))
 		default:

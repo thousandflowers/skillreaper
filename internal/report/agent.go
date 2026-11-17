@@ -85,6 +85,9 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 	// and the token count are measured facts and survive a price change.
 	fmt.Fprintf(w, "%s · ~%d dead tokens/session\n",
 		NewHeadline(r).Line(), r.DeadTokensPerSession)
+	if note := averageNote(r); note != "" {
+		fmt.Fprintln(w, sentence(note)) // or the rows below do not add up to it
+	}
 
 	dead := deadRows(r)
 	if len(dead) == 0 {
@@ -205,6 +208,9 @@ func RenderGapAgent(w io.Writer, r *Report) {
 	tw.row("CATEGORY", "LOADED", "FIRED", "UTIL", "LOADED TOK", "TOUCHED TOK", "REACH")
 	zeroWeight := false
 	for _, c := range g.PerCat {
+		if c.Loaded == 0 {
+			continue // nothing of that kind here: no row, as in the plain view
+		}
 		if c.LoadedTok == 0 {
 			zeroWeight = true
 		}

@@ -7,8 +7,9 @@ description: Report how much of the context this agent loads is never used - unu
 Run `reap --agent`, then paste its output verbatim.
 
 Do not reformat, re-order, summarise, truncate or re-align anything, and do not
-add a heading or a table of your own: the binary already renders the report,
-including its closing attribution line.
+add a heading or a table of your own: the binary already renders the report.
+Paste all of it, to its last line: the attribution line, and any note that
+follows it.
 
 ## Arguments
 

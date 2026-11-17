@@ -476,7 +476,11 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 		// after it had done its work: it is undone too, and when that fails nobody
 		// knows which it is.
 		ended := errors.As(err, new(noAnswer)) || errors.As(err, new(cutOff))
+		if ended {
+			inHand = x.target() // perhaps muted: a stop while it is undone still names it
+		}
 		unsure := ended && a.runStep([]string{reapName, "unmute", x.target()}) != nil
+		inHand = ""
 		if left := a.rollBack(c, muted); len(left) > 0 {
 			outcome = "  ↺  rolled back, but still changed: " + strings.Join(left, ", ")
 		} else if unsure {

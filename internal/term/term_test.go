@@ -581,3 +581,14 @@ func TestAStraySequenceEndsAtAControlKey(t *testing.T) {
 		}
 	}
 }
+
+// The Linux console sends F1 to F5 as ESC [ [ A..E: the second bracket ended
+// the sequence and the letter after it was read as a key typed ("a" chooses,
+// "d" marks a delete).
+func TestLinuxConsoleFunctionKeysTypeNothing(t *testing.T) {
+	for _, in := range []string{"\x1b[[Aq", "\x1b[[Dq", "\x1b[[Eq"} {
+		if keys, _ := keysFrom(in); len(keys) != 1 || keys[0] != 'q' {
+			t.Errorf("%q: keys %q, want only the q", in, keys)
+		}
+	}
+}

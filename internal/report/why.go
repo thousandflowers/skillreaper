@@ -37,9 +37,11 @@ type Explanation struct {
 	GraceDays        int    `json:"grace_days"`
 	GraceExpired     bool   `json:"grace_expired"`
 
-	KeepList    bool   `json:"keep_list"`
-	ClaudeMD    bool   `json:"claude_md_referenced"`
-	ToolSurface string `json:"tool_surface"`
+	KeepList bool `json:"keep_list"`
+	ClaudeMD bool `json:"claude_md_referenced"`
+	// ClaudeMDPlain is a name that is in a CLAUDE.md only as a sentence's word.
+	ClaudeMDPlain bool   `json:"claude_md_plain_word,omitempty"`
+	ToolSurface   string `json:"tool_surface"`
 
 	// MUTE-specific (omitted from JSON when not applicable).
 	FiringRate    float64 `json:"firing_rate,omitempty"`
@@ -58,6 +60,7 @@ type ExplainInput struct {
 	WindowDays    int
 	Muted         bool // is this skill currently muted
 	ClaudeMDRef   bool // referenced in a CLAUDE.md
+	ClaudeMDPlain bool // in a CLAUDE.md only as a plain word, which protects nothing
 	Now           time.Time
 }
 
@@ -124,6 +127,7 @@ func BuildExplanation(row Row, sessions int, in ExplainInput) Explanation {
 		GraceDays:     in.GraceDays,
 		KeepList:      row.Kept,
 		ClaudeMD:      in.ClaudeMDRef,
+		ClaudeMDPlain: in.ClaudeMDPlain && !in.ClaudeMDRef,
 		ToolSurface:   permDisplay(row),
 	}
 
@@ -372,7 +376,15 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 	}
 
 	field("keep-list", yesNo(e.KeepList))
-	field("claude-md", referencedStr(e.ClaudeMD))
+	switch {
+	case e.Category != string(scan.CatSkill):
+		// A name in CLAUDE.md protects a skill and nothing else: no line.
+	case e.ClaudeMDPlain:
+		name := strings.TrimPrefix(e.Name, e.Category+":") // a plain word: letters only
+		field("claude-md", fmt.Sprintf("in it as a plain word, which protects nothing: write it there as `%s` or /%s, or run reap keep %s", name, name, name))
+	default:
+		field("claude-md", referencedStr(e.ClaudeMD))
+	}
 	if e.Verdict == VerdictMute {
 		field("muted", yesNo(e.Muted))
 	}

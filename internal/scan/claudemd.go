@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // maxImportDepth is how many @imports Claude Code follows from a memory file.
@@ -117,16 +118,42 @@ func endsWord(line string, j int) bool {
 	return !nameChar(line[j])
 }
 
-// markedAsSkill reports whether the word at line[i:j] is written as a skill: in
-// backticks or bold, as a /command, or next to the word "skill" on either side:
-// English puts it after the name, Italian before.
-func markedAsSkill(line string, i, j int) bool {
+// nameMarks are the pairs of marks a name is written between: code, emphasis
+// (bold, and a bold label "**name:**"), a link's text, quotes.
+var nameMarks = [][2]string{{"`", "`"}, {"*", "*"}, {"*", ":*"}, {"[", "]("}, {`"`, `"`}, {"'", "'"}}
+
+var (
+	// commandBefore is the slash of a command, or of a path into a skills
+	// folder: not the one inside "approve/review" or "docs/review".
+	commandBefore = regexp.MustCompile("(?i)(?:^|[\\s(\"'`*\\[,;:]|skills)/$")
+	// skillBefore and skillAfter are the word "skill" beside the name: English
+	// puts it after, Italian before. "review skills" is a sentence.
+	skillBefore = regexp.MustCompile(`(?i)\bskill:? $`)
+	skillAfter  = regexp.MustCompile(`(?i)^ skill\b`)
+	// itemBefore is what stands before the first word of a list item (ticked
+	// or numbered too), of a quoted line, or of a heading.
+	itemBefore = regexp.MustCompile(`^\s*(?:(?:>\s*)+|(?:>\s*)*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|#+\s+)$`)
+	// itemAfter is what follows a name that heads one: nothing, a colon, or a
+	// dash and its text.
+	itemAfter = regexp.MustCompile(`^(?::|\s*$|\s+[-–—]\s)`)
+	// cellBefore and cellAfter are the bars of a table cell that is the name.
+	cellBefore = regexp.MustCompile(`\|\s*$`)
+	cellAfter  = regexp.MustCompile(`^\s*\|`)
+)
+
+// writtenAsName reports whether the word at line[i:j] is written as a name
+// and not as a sentence's word: between marks, as a /command, beside the word
+// "skill", heading a list item or a heading, or alone in a table cell.
+func writtenAsName(line string, i, j int) bool {
 	before, after := line[:i], line[j:]
-	return strings.HasSuffix(before, "`") && strings.HasPrefix(after, "`") ||
-		strings.HasSuffix(before, "**") && strings.HasPrefix(after, "**") ||
-		strings.HasSuffix(before, "/") ||
-		strings.HasPrefix(after, " skill") ||
-		strings.HasSuffix(strings.ToLower(before), "skill ")
+	for _, mark := range nameMarks {
+		if strings.HasSuffix(before, mark[0]) && strings.HasPrefix(after, mark[1]) {
+			return true
+		}
+	}
+	return commandBefore.MatchString(before) || skillBefore.MatchString(before) || skillAfter.MatchString(after) ||
+		itemBefore.MatchString(before) && itemAfter.MatchString(after) ||
+		cellBefore.MatchString(before) && cellAfter.MatchString(after)
 }
 
 // ClaudeMDReferences reports whether a skill is named in any of the given lines.
@@ -145,29 +172,35 @@ func ClaudeMDReferences(lines []string, name string) bool {
 	}
 	_, bare, isPlugin := strings.Cut(name, ":")
 	for _, line := range lines {
-		if wordAt(line, name, asName) || isPlugin && bare != "" && wordAt(line, bare, markedAsSkill) {
+		if wordAt(line, name, asName) || isPlugin && bare != "" && wordAt(line, bare, writtenAsName) {
 			return true
 		}
 	}
 	return false
 }
 
-// plainWord says whether a name is letters and nothing else.
+// ClaudeMDMentions reports whether the name stands alone in any line, written
+// as a name or not: reap why says when it is there and protects nothing.
+func ClaudeMDMentions(lines []string, name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, line := range lines {
+		if wordAt(line, name, nil) {
+			return true
+		}
+	}
+	return false
+}
+
+// plainWord says whether a name is letters and nothing else, in any alphabet.
 func plainWord(name string) bool {
-	for i := 0; i < len(name); i++ {
-		if c := name[i]; (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
+	for _, r := range name {
+		if !unicode.IsLetter(r) {
 			return false
 		}
 	}
 	return true
-}
-
-// writtenAsName is markedAsSkill, or the name heading a list item: "- review:
-// reads the diff" is how a rules file lists what it has.
-func writtenAsName(line string, i, j int) bool {
-	heads := strings.TrimLeft(line[:i], " \t") != line[:i] || i == 0 || line[i-1] == ' '
-	item := strings.TrimLeft(strings.TrimSpace(line[:i]), "-*+") == "" && strings.TrimSpace(line[:i]) != ""
-	return markedAsSkill(line, i, j) || heads && item && strings.HasPrefix(line[j:], ":")
 }
 
 // wordAt reports whether word stands alone somewhere in line and, when a check

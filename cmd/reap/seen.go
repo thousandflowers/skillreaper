@@ -76,43 +76,56 @@ func stampsOf(rows []report.Row) stamps {
 // changed says whether the item is another one, or was written, since it was
 // read: its file, or the folder a delete would take. An item that is gone
 // altogether is not: the delete says that itself.
-func (s stamps) changed(row report.Row) bool {
-	was, known := s[row.Path]
+func (s stamps) changed(row report.Row) bool { return s.changedAt(row.Path) }
+
+func (s stamps) changedAt(path string) bool {
+	was, known := s[path]
 	if !known {
 		return false
 	}
-	target, err := os.Lstat(prune.Target(row.Item))
+	target, err := os.Lstat(was.takes)
 	if err != nil {
 		return false // nothing there to delete
 	}
-	now, err := os.Lstat(row.Path)
+	now, err := os.Lstat(path)
 	same := err == nil && os.SameFile(was.file, now) && was.file.ModTime().Equal(now.ModTime()) && was.file.Size() == now.Size()
 	if !same || (was.target != nil && !os.SameFile(was.target, target)) {
 		return true
 	}
-	inside, _ := insideOf(prune.Target(row.Item))
+	inside, _ := insideOf(was.takes)
 	return inside != was.inside // a file added to the folder, or changed in it
 }
 
-// refresh reads an item again after reap itself changed it (a mute, an
-// unmute, a prune): that change is not somebody else's.
-func (s stamps) refresh(row report.Row) {
+// untouched is taken before reap itself writes an item (a mute, an unmute, a
+// prune): every row that is that file, and that nobody changed since it was
+// read. One file can be two rows, a tool's own folder and a link to it in
+// another tool's. A row somebody else changed is left out, so reap's write
+// does not take their change for its own.
+func (s stamps) untouched(row report.Row) []string {
 	was, known := s[row.Path]
 	if !known {
-		return
+		return nil
 	}
-	// Every row that is this file: one file can be two rows, a tool's own
-	// folder and a link to it in another tool's.
+	var paths []string
 	for path, st := range s {
-		if !os.SameFile(st.file, was.file) {
-			continue
+		if os.SameFile(st.file, was.file) && !s.changedAt(path) {
+			paths = append(paths, path)
 		}
+	}
+	return paths
+}
+
+// refresh reads those rows again after reap's own write: that change is not
+// somebody else's.
+func (s stamps) refresh(untouched []string) {
+	for _, path := range untouched {
+		st := s[path]
 		file, err := os.Lstat(path)
 		if err != nil {
 			delete(s, path) // gone with what reap did: nothing left to compare
 			continue
 		}
-		// The listing of each row's own folder too: the file reap rewrote is in it.
+		// The listing of the row's own folder too: the file reap rewrote is in it.
 		st.file = file
 		st.inside, _ = insideOf(st.takes)
 		s[path] = st

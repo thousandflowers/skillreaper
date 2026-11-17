@@ -128,8 +128,8 @@ var (
 		// quote their sessions. Chmod too: a log from an older version was 0644.
 		// A file of reinvest's own: through a link, the file it leads to would
 		// be emptied and made private.
-		if info, statErr := os.Lstat(path); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
-			return nil, fmt.Errorf("%s is a link: move it away and run reinvest again", path)
+		if err := notALink(path); err != nil {
+			return nil, err
 		}
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 		if err == nil {
@@ -216,10 +216,22 @@ const (
 	sharedDir   = 0o777
 )
 
+// notALink refuses a file of reinvest's own that is a link: written through
+// it, the file it leads to would be overwritten, and for some made private.
+func notALink(path string) error {
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%s is a link: move it away and run reinvest again", path)
+	}
+	return nil
+}
+
 // writePrivate writes a cache file only this user can read: verdicts,
 // reports and written skills quote session text.
 func writePrivate(path, text string) error {
 	if err := os.MkdirAll(filepath.Dir(path), sharedDir); err != nil {
+		return err
+	}
+	if err := notALink(path); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, privateFile)
@@ -242,6 +254,9 @@ func writePrivate(path, text string) error {
 // writeShared writes a file with ordinary permissions, creating its folder.
 func writeShared(path, text string) error {
 	if err := os.MkdirAll(filepath.Dir(path), sharedDir); err != nil {
+		return err
+	}
+	if err := notALink(path); err != nil {
 		return err
 	}
 	return os.WriteFile(path, []byte(text), sharedFile)

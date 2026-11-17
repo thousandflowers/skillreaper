@@ -787,9 +787,11 @@ mistakenly mark a tool as dead.
 written as a name.** A skill named in your CLAUDE.md or rules is kept
 (`claude-md-ref`). A name with a dash, a colon, an underscore or a digit in
 it (`code-review`, `ecc:plan`) counts wherever it stands. A one-word name
-(`review`) is also a word of the language, so it counts only as `/review`,
-in backticks or bold, beside the word "skill", or heading a list item
-(`- review: …`): "always review the diff" protects nothing.
+(`review`) is also a word of the language, so it counts only where it is
+written as a name: `/review`, between backticks, asterisks or quotes, as a
+link's text, beside the word "skill", heading a list item (`- review: …`)
+or a heading of its own, or alone in a table cell. "always review the diff"
+protects nothing, and `reap why review` then says so.
 
 **A built-in command can count as a skill's use.** A transcript records
 `/plan` the same way whether it ran Claude Code's own command or a skill of

@@ -159,7 +159,7 @@ func TestReceiptAsksBeforeAnythingIsApplied(t *testing.T) {
 		if !strings.HasPrefix(second, "prune    old-notes ") || !strings.HasSuffix(second, "~100 tok") {
 			t.Errorf("second line = %q", second)
 		}
-		mustShow(t, receipt, "SKILLREAPER", "2 items · ~600 tokens lighter every session", "tokens saved every session")
+		mustShow(t, receipt, "SKILLREAPER", "2 items · ~600 tokens lighter every session", "tokens to save every session")
 	})
 
 	t.Run("the mouse is handed back while it is up, and taken again after", func(t *testing.T) {

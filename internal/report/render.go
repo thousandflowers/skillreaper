@@ -327,15 +327,8 @@ func headlineNotes(r *Report) []string {
 	}
 	// With two tools the figure is an average over all their sessions, and the
 	// rows under it are not: without a word the reader adds them up and misses.
-	tools := 0
-	for _, n := range r.PlatformSessions {
-		if n > 0 {
-			tools++
-		}
-	}
-	if tools > 1 && r.DeadTokensPerSession > 0 {
-		out = append(out, fmt.Sprintf(
-			"the dead-token figure is an average over the %d sessions of %d tools: an item weighs in its own tool's sessions only", r.Sessions, tools))
+	if note := averageNote(r); note != "" {
+		out = append(out, note)
 	}
 	// Without this line the total reads as the whole bill. It is not: the dead
 	// items whose weight could never be measured contribute 0 to it.
@@ -622,12 +615,34 @@ func permDisplay(row Row) string {
 	}
 }
 
+// averageNote says that the dead-token figure is an average over the sessions
+// of several tools, when it is; empty otherwise. Every format that prints the
+// figure above per-item weights carries it.
+func averageNote(r *Report) string {
+	tools := 0
+	for _, n := range r.PlatformSessions {
+		if n > 0 {
+			tools++
+		}
+	}
+	if tools < 2 || r.DeadTokensPerSession == 0 {
+		return ""
+	}
+	return fmt.Sprintf("the dead-token figure is an average over the %d sessions of %d tools: an item weighs in its own tool's sessions only", r.Sessions, tools)
+}
+
+// sentence is a note as a line of its own: capital first, full stop last.
+func sentence(note string) string { return strings.ToUpper(note[:1]) + note[1:] + "." }
+
 // RenderMarkdown writes the report as a shareable Markdown document.
 func RenderMarkdown(w io.Writer, r *Report) {
 	fmt.Fprintf(w, "# skillreaper report\n\n")
 	fmt.Fprintf(w, "Window: %s analyzed\n\n", windowOf(r.WindowDays, r.Sessions))
 	fmt.Fprintf(w, "**%s · ~%d dead tokens/session · ~$%.2f/month**\n",
 		NewHeadline(r).Line(), r.DeadTokensPerSession, r.MoneyPerMonth)
+	if note := averageNote(r); note != "" {
+		fmt.Fprintf(w, "\n%s\n", sentence(note))
+	}
 	if r.DeadUnknownWeight > 0 {
 		carry := "carry"
 		if r.DeadUnknownWeight == 1 {

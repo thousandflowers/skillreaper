@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/thousandflowers/skillreaper/internal/term"
 )
 
 // The picker is one list. Each entry shows the skills to mute above and a candidate below:
@@ -169,7 +171,7 @@ func frame(swaps []swap, cur, height, width int) []drawn {
 		if y < 0 || y >= height-1 || room <= 0 {
 			return
 		}
-		out = append(out, drawn{y, x, firstRunes(text, room), attr})
+		out = append(out, drawn{y, x, term.Cut(text, room), attr}) // by cells: a wide character takes two
 	}
 	if !roomFor(height, width) {
 		put(0, 0, tooSmallNotice, attrBold)

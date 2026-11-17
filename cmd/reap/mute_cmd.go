@@ -9,6 +9,7 @@ import (
 
 	"github.com/thousandflowers/skillreaper/internal/mute"
 	"github.com/thousandflowers/skillreaper/internal/report"
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -55,6 +56,20 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 			} else {
 				fmt.Fprintf(stderr, "error: %v\n", err)
 			}
+			return 1
+		}
+		// What cannot be done is said before the question too: the answer to
+		// a yes was an error.
+		muted, _ := mutedSet(opts.claudeDir, []scan.Item{rows[0].Item})
+		switch {
+		case muted[rows[0].Path]:
+			fmt.Fprintf(stderr, "error: already muted: %s\n", rows[0].Name)
+			return 1
+		case rows[0].ManualOnly:
+			fmt.Fprintf(stderr, "error: %s runs only by hand: Claude Code does not load its description, so a mute saves nothing\n", rows[0].Name)
+			return 1
+		case !mute.Strippable(rows[0].Path):
+			fmt.Fprintf(stderr, "error: no description to strip in %s\n", shown(rows[0].Path))
 			return 1
 		}
 		candidates = rows

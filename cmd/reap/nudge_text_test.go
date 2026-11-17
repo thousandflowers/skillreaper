@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/thousandflowers/skillreaper/internal/hook"
 )
 
 // The weekly nudge names what grew, in items (a server is no skill): the
@@ -18,7 +21,7 @@ func TestTheNudgeSaysWhatItCounts(t *testing.T) {
 		{1, 0, "skillreaper: 1 unused item to prune, more than at the last check. Run `reap` to review."},
 		{3, 2, "skillreaper: 3 unused items to prune and 2 items to mute, more than at the last check. Run `reap` to review."},
 	} {
-		if got := nudgeText(c.dead, c.mute); got != c.want {
+		if got := nudgeText(c.dead, c.mute, hook.NudgeState{LastNudgeAt: time.Unix(1, 0)}); got != c.want {
 			t.Errorf("nudgeText(%d, %d) = %q, want %q", c.dead, c.mute, got, c.want)
 		}
 	}

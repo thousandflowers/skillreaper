@@ -40,7 +40,8 @@ mute and lock groups. `menu.tape` drives the menu through it and writes
     (cd docs/tapes && REAP=/tmp/reap-menu vhs menu.tape)
 
 Two tapes need a hand before they record again. `hero.tape` was written for
-0.5.0: it stops unless `reap version` says 0.5.0, and it does not set
+0.5.0: it stops unless `reap version` says 0.5.0, its window is too narrow
+for the 101-column line the report now ends with, and it does not set
 `SOURCE_DATE_EPOCH`, without which the hero fixture shows no session (the README
 hero is the text block above, which `make readme-numbers` regenerates, not this
 tape). `reap-prune.tape` names the fixture script by the path of the checkout it

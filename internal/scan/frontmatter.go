@@ -76,8 +76,8 @@ func lengthOfLines(b []byte, n int) int {
 	return at
 }
 
-// frontmatterValue returns the single-line value of key in a Markdown file's
-// YAML frontmatter, and whether the key was present.
+// frontmatterValue returns the single-line value of a top-level key in a
+// Markdown file's YAML frontmatter, and whether the key was present.
 func frontmatterValue(b []byte, key string) (string, bool) {
 	sc := newLineScanner(trimBOM(b))
 	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
@@ -87,8 +87,9 @@ func frontmatterValue(b []byte, key string) (string, bool) {
 		if closesHeader(sc.Text()) { // where every reader of the header ends it
 			return "", false
 		}
-		line := strings.TrimSpace(sc.Text())
-		if v, ok := yamlValue(line, key); ok {
+		// The line as it stands: an indented key belongs to a nested map
+		// ("metadata:\n  allowed-tools: ..."), or is a line of another value.
+		if v, ok := yamlValue(strings.TrimRight(sc.Text(), " \t\r"), key); ok {
 			return v, true
 		}
 	}

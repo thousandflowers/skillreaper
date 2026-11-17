@@ -281,7 +281,7 @@ func (m *Menu) drawCard(r *Row, at, of int, chosen, effective string, options []
 		short = r.Name[cutAt+1:]
 	}
 	weight := min(1, float64(r.Tokens)/heavyTokens)
-	fit := fitTitle(short, wd-8)
+	fit := m.fitTitle(short, wd-8)
 	m.cardTitle(r, fit, weight, effective)
 	place := itoa(at+1) + " of " + itoa(of)
 	m.put(0, wd-len(place)-1, place, dim)

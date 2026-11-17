@@ -426,6 +426,11 @@ func (a *app) assignSessions(groups []*obj, fresh []session) (placed []*obj, ans
 		return nil, false, err
 	}
 	answer, ok := out.(*obj)
+	// "assign" is an object when it is there: as text it placed nothing, and
+	// the sessions were marked as placed.
+	if _, placing := answer.val("assign").(*obj); ok && answer.val("assign") != nil && !placing {
+		ok = false
+	}
 	if !ok || (answer.val("assign") == nil && answer.val("new") == nil) {
 		// Not the object that was asked for, or one that places nothing and
 		// names nothing new ({"error": …}): saved as an answer, the new
@@ -483,6 +488,18 @@ func (a *app) coveringSkills(kinds []kind, installed []skill) (names []string, a
 	}
 	answer, ok := out.(*obj)
 	if !ok {
+		return nil, false, nil
+	}
+	// It has to speak of at least one kind asked about ("0": null is an
+	// answer): {} or {"error": …} read as "no skill covers any of them".
+	about := 0
+	for i := range kinds {
+		if _, has := answer.get(strconv.Itoa(i)); has {
+			about++
+		}
+	}
+	if about == 0 {
+		a.noteAsk("an answer about none of the kinds of work")
 		return nil, false, nil
 	}
 	byCanon := map[string]string{}

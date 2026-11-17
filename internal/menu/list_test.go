@@ -437,8 +437,8 @@ func TestListHeadline(t *testing.T) {
 		money := open(t, pricedData()).press(space, applyKey).run()
 		toks := open(t, pricedData()).press(tab, space, applyKey).run()
 
-		mustShow(t, money.frame(doIt), "at least", "saved every month")
-		mustShow(t, toks.frame(doIt), "tokens saved every session")
+		mustShow(t, money.frame(doIt), "at least", "to save every month")
+		mustShow(t, toks.frame(doIt), "tokens to save every session")
 	})
 
 	t.Run("the system's currency and separators are used", func(t *testing.T) {

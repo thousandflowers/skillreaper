@@ -136,6 +136,11 @@ func (d *decoder) csi() (Key, bool) {
 			return 0, false
 		}
 		body = append(body, b)
+		if string(body) == "[" {
+			// The Linux console's F1 to F5 are ESC [ [ A..E: the letter is theirs.
+			d.rest()
+			return 0, false
+		}
 		if b >= 0x40 && b <= 0x7e {
 			break
 		}

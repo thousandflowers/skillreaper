@@ -68,10 +68,15 @@ so that the same key applies it again once its cause is put right; an apply
 started from the screen after the last row shows what came of it, where it
 showed nothing, and that screen counts what was just applied; a delete of a
 row whose file the menu itself changed through another row is not refused; the
-header says `you would save` for what is chosen and `you saved` only once it
-is applied; a lock applied from the screen between lists is counted there;
-after the menu's own mute of a file, every row that is that file can still be
-deleted; where the locale cannot draw the big font (`LC_ALL=C`), figures
+header says `you saved` for what was applied and `would save` for what is
+chosen or could not be done, each with its own figure, and the question
+before an apply says `to save`; a sum under one unit of the currency is
+`<$1` in the short figure, where it was `$0`; a lock applied from the screen
+between lists is counted there; after the menu's own mute of a file, every
+row that is that file can still be deleted, unless somebody else changed it
+in the meantime: that change is still refused; the Linux console's F1 to F5
+type nothing, where they chose or marked a row; in plain text a title is cut
+at the window only; where the locale cannot draw the big font (`LC_ALL=C`), figures
 and titles are plain text, where they were blocks of `#`; a name cut in its
 middle no longer leaves an accent on the `…`; where the locale cannot draw a
 wide character, the columns after it stay in line.
@@ -94,8 +99,9 @@ really injected, with multi-line descriptions read in full.
 
 - Uses are counted per platform and by the date of the event. A use in one tool
   says nothing about the copy installed in another.
-- Only commands you typed count as uses, and a skill a plugin's SessionStart hook
-  loads every session is no longer called unused.
+- A command counts as a use where the transcript records it being run, not
+  where its tag only stands in pasted text, and a skill a plugin's SessionStart
+  hook loads every session is no longer called unused.
 - A skill named in your `CLAUDE.md`, an import or your rules is protected
   wherever reap runs from, not only in the directory that file lives in.
 - A tool whose history cannot be read is no longer judged on other tools'
@@ -560,11 +566,15 @@ really injected, with multi-line descriptions read in full.
   something to do, exit 3 and say `nothing done: --quiet needs --yes` on
   stderr. They exited 0 in silence, and a script took that for done.
 - A skill whose name is one plain word is protected by your CLAUDE.md only
-  where the word is written as a name (`/review`, backticks or bold,
-  beside the word "skill", or heading a list item). "always review the
-  diff" protected a skill named `review` that nothing used: in one stack,
-  36 skills of 60. A name with a dash, a colon, an underscore or a digit
-  counts wherever it stands, as before.
+  where the word is written as a name: `/review`, between backticks,
+  asterisks, quotes or as a link's text, beside the word "skill", heading
+  a list item or a heading of its own, or alone in a table cell. "always
+  review the diff" protected a skill named `review` that nothing used; so
+  did "docs/review" and "review skills". A word is one in any alphabet. A
+  name with a dash, a colon, an underscore or a digit counts wherever it
+  stands, as before. `reap why` says when a name is in your CLAUDE.md as a
+  plain word that protects nothing, and speaks of CLAUDE.md for skills
+  only: a server of a name written there read "referenced" under REAP.
 - A description that begins on the line after `description:` is weighed:
   it read as empty, a few tokens for 600 characters, while `reap mute`
   took all of it. `allowed-tools` written one per line is that many
@@ -578,6 +588,23 @@ really injected, with multi-line descriptions read in full.
   that are removable and unmeasured; with sessions of two tools the
   dead-token figure says it is an average over both; `reap gap` counts
   the MUTE rows a bulk mute leaves alone beside the ones it takes.
+- With two tools, `reap --agent` and `--md` say that the dead-token figure
+  is an average over all their sessions, as the report does: the rows under
+  it did not add up to it. `reap gap --agent` has no row for a kind of item
+  there is none of, and `reap route` tells apart two tools' skills of one
+  name (`shared (codex)`, and `platform` in its JSON).
+- A key of a nested map in a skill's header (`metadata:` then an indented
+  `allowed-tools:`) is not the skill's own: it counted as its tools, or
+  made it run only by hand.
+- A skill that runs only by hand is not reap's to mute: nothing of it is
+  in the context, and the mute took the text its slash menu shows. A named
+  `reap mute` that cannot be done (already muted, no description, only by
+  hand) says so before it asks, where the answer to a yes was an error.
+- A bulk `reap prune` no longer says "pruned only by name" of a skill whose
+  whole skills folder is a link: by name it is refused too. The note and
+  `--json` say to remove it by hand, as `reap why` does.
+- The first weekly reminder does not say "more than at the last check",
+  and a later one names only what rose.
 - A clock pinned by `SOURCE_DATE_EPOCH` is said when it cannot be right for
   this stack: a transcript is newer than it, or it lies in the future. A
   shell that exports the variable for its own reasons (nix) had every age
@@ -772,6 +799,14 @@ the same cache files and the same checks. What to know before running it:
 - An answer that places no new session is no answer, and says why: saved
   as one, the sessions were marked as placed. A search answer that is an
   error is asked for again, not kept for a week.
+- A `reap --json` answer that is not this version's report stops the run:
+  read as an empty stack, the sessions were sent to be grouped and a new
+  skill was checked against no installed one. An answer about none of the
+  kinds of work asked about, `assign` as text, or `skills` that is no list,
+  is no answer either; a rejection with no reason says `no reason given`.
+- No file of reinvest's own is written through a link, and the picker cuts
+  wide characters at the window. A mute that gave no answer in time is
+  still named when a stop comes while it is undone.
 - `run.log` is not written through a link (the file it led to was emptied
   and made private); a refusal names a few of a folder's files and counts
   the rest; a `.DS_Store` that is a folder or a link is not Finder's.

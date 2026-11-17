@@ -69,6 +69,9 @@ type list struct {
 	total, target             int
 	totalPriced, totalMonth   float64
 	targetPriced, targetMonth float64
+	// done is the part of the target that was applied; the rest is chosen.
+	done       int
+	donePriced float64
 	// dead is the part of the target that is in the headline: what is chosen
 	// among the rows the big number counts. A mute of a skill you do use saves
 	// tokens too, but was never part of "wasted".
@@ -168,6 +171,7 @@ func (l *list) rebuild() {
 	}
 	if b.version != l.p.version {
 		l.target, l.targetPriced, l.targetMonth = 0, 0, 0
+		l.done, l.donePriced = 0, 0
 		l.dead, l.deadPriced, l.deadMonth = 0, 0, 0
 		count := func(r *Row, verb string) {
 			if !l.visible(r) {
@@ -186,6 +190,7 @@ func (l *list) rebuild() {
 		for r, verb := range m.applied {
 			count(r, verb)
 		}
+		l.done, l.donePriced = l.target, l.targetPriced
 		for r, verb := range l.p.verbs {
 			count(r, verb)
 		}

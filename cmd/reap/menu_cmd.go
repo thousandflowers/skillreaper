@@ -212,6 +212,8 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 	if err := a.guardKept(pk.Verb, key); err != nil {
 		return err
 	}
+	// Taken before the menu writes anything: what it may call its own change.
+	own := a.seen.untouched(row)
 	switch pk.Verb {
 	case menu.Prune:
 		var e prune.Entry
@@ -223,7 +225,7 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 		}
 		if err == nil {
 			notes[e.ID] = prune.Note{Tokens: row.Tokens, Platform: row.Platform, Source: row.Source}
-			a.seen.refresh(row) // a link to what was pruned is not "changed by someone else"
+			a.seen.refresh(own) // a link to what was pruned is not "changed by someone else"
 		}
 		return ignoreGone(err)
 	case menu.Delete:
@@ -240,13 +242,13 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 		if err := mute.Mute(a.dir, row.RootDir, row.Name, row.Path); err != nil && !errors.Is(err, mute.ErrAlreadyMuted) && !goneSinceScan(err) {
 			return err
 		}
-		a.seen.refresh(row) // the menu's own rewrite of the file is not a change by someone else
+		a.seen.refresh(own) // the menu's own rewrite of the file is not a change by someone else
 		return nil
 	case menu.Unmute:
 		// The row's own file first: a name can be muted in several tools at once.
 		if _, err := mute.UnmutePath(a.dir, row.Path); !errors.Is(err, mute.ErrNotMuted) {
 			if err == nil {
-				a.seen.refresh(row)
+				a.seen.refresh(own)
 			}
 			return err
 		}

@@ -622,8 +622,10 @@ func prunedCopy(copies map[string]string, it scan.Item) string {
 
 // MuteEligible says whether a bulk reap mute takes this row.
 func MuteEligible(row Row) bool {
+	// Not a skill that runs only by hand: its description is in no context,
+	// so a mute saves nothing and takes the text its slash menu shows.
 	return row.Path != "" &&
-		row.Removable &&
+		row.Removable && !row.ManualOnly &&
 		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
 		(row.Verdict == VerdictReap || row.Verdict == VerdictMute)
 }

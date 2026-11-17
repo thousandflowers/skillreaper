@@ -754,7 +754,7 @@ func TestKeysTypedWhileApplyingAreThrownAway(t *testing.T) {
 // would not fit, as the header's does: at 58 columns they were cut.
 func TestReceiptFigureFitsItsWords(t *testing.T) {
 	m, _, _ := newMenu(t, one(raw("alpha", tokens(810_000))))
-	words := "tokens saved every session"
+	words := "tokens to save every session"
 
 	mustEqual(t, "narrow", m.fitBig("810,000", "810k", words, 54), "810k")
 	mustEqual(t, "wide", m.fitBig("810,000", "810k", words, 120), "810,000")
@@ -839,8 +839,58 @@ func TestTheHeaderSaysSavedOnlyForWhatWasApplied(t *testing.T) {
 	failing.a.fail = map[string]error{"srv": errors.New("permission denied")}
 	failing.m.now = clockAt(0, 0, time.Second)
 	failing.press(space, applyKey, 'y', 'y').wait().run()
-	mustShow(t, failing.final(), "you would save")
-	mustNotShow(t, failing.final(), "you saved")
+	mustShow(t, failing.final(), "you saved ~100, would save ~500 more tokens per session")
+}
+
+// The two are told apart, each with its own figure: a choice taken back eased
+// the figure down under "you saved" with nothing applied, and a lock chosen
+// after an apply turned what was saved into "would save".
+func TestTheHeaderNeverCallsSavedWhatWasNot(t *testing.T) {
+	undone := open(t, flowData()).press(space).wait().press(space).wait().run()
+	for n, frame := range undone.s.frames {
+		if line := lineWith(frame, "you saved"); line != "" {
+			t.Fatalf("frame %d, nothing applied: %q", n, line)
+		}
+	}
+
+	locked := open(t, flowData())
+	locked.m.now = clockAt(0, 0, time.Second)
+	locked.press(space, applyKey, 'y', 'y').wait().press('l').wait().run()
+	mustShow(t, locked.final(), "you saved ~600 tokens per session")
+	mustNotShow(t, locked.final(), "would save")
+
+	m := open(t, pricedData()).m
+	mustEqual(t, "money", m.savedMoney("$1", "$5"), "you saved at least $1, would save at least $5 more a month")
+	m.subscriber = true
+	mustEqual(t, "flat plan", m.savedMoney("$1", "$5"), "you saved $1, would save $5 more a month, at API prices")
+	mustEqual(t, "flat plan, applied", m.savedMoney("$1", ""), "you saved $1 a month, at API prices")
+}
+
+// A sum under one unit of the currency is not "0" in the short figure: the
+// receipt said "$0 saved every month" under a line that said $0.09.
+func TestTheShortMoneyFigureIsNeverAFalseZero(t *testing.T) {
+	m := open(t, flowData()).m
+	for v, want := range map[float64]string{0.08: "<" + m.cur.Sym + "1", 0: m.cur.Sym + "0", 12.6: m.cur.Sym + "12", 2500: m.cur.Sym + m.short(2500)} {
+		if got := m.shortMoney(v); got != want {
+			t.Errorf("shortMoney(%v) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+// In plain text a title is cut at the window, not at what the big font could
+// have drawn: the name was cut mid-word with the whole of it on the row below.
+func TestAPlainTitleIsCutAtTheWindowOnly(t *testing.T) {
+	d := flowData()
+	d.Report.Rows[0].Name = "a-very-long-skill-name-indeed"
+	x := open(t, d)
+	x.m.plain = true
+	if got := x.m.fitTitle("a-very-long-skill-name-indeed", 60); got != "a-very-long-skill-name-indeed" {
+		t.Errorf("plain: %q", got)
+	}
+	x.m.plain = false
+	if got := x.m.fitTitle("a-very-long-skill-name-indeed", 60); got == "a-very-long-skill-name-indeed" {
+		t.Errorf("big font: the whole name in 60 cells: %q", got)
+	}
 }
 
 // Where the locale cannot draw the big font (its blocks all come out "#"), the
@@ -873,7 +923,7 @@ func TestWithoutBlockCharactersTheBigFontIsPlainText(t *testing.T) {
 	receipt.press(space, applyKey).run()
 	shown := receipt.frame("Do it?")
 	noBlocks(shown)
-	if line := lineWith(shown, "tokens saved every session"); !strings.ContainsAny(line, "0123456789") {
+	if line := lineWith(shown, "tokens to save every session"); !strings.ContainsAny(line, "0123456789") {
 		t.Errorf("the receipt's figure is not on the line of its words: %q", line)
 	}
 

@@ -85,21 +85,33 @@ func (m *Menu) worth(text string) string {
 	return "at least " + text
 }
 
-// savedSaid is what the choices save, as money a month.
-func (m *Menu) savedSaid(text string, pending bool) string {
-	if m.subscriber {
-		return savedVerb(pending) + " " + text + " a month, at API prices"
+// savedMoney is the same line in money a month. An empty figure is a part
+// there is nothing of.
+func (m *Menu) savedMoney(applied, pending string) string {
+	figure := func(text string) string {
+		if text == "" || m.subscriber {
+			return text
+		}
+		return "at least " + text
 	}
-	return savedVerb(pending) + " at least " + text + " a month"
+	tail := " a month"
+	if m.subscriber {
+		tail += ", at API prices"
+	}
+	return saved(figure(applied), figure(pending), tail)
 }
 
-// savedVerb is "you saved" for what was applied. With a choice still to apply,
-// or one that could not be carried out, nothing of it is saved yet.
-func savedVerb(pending bool) string {
-	if pending {
-		return "you would save"
+// saved is the header's green line. "You saved" is for what was applied; a
+// choice still to apply, or one that could not be carried out, would save.
+// Each has its own figure: one sum under one verb was false for half of it.
+func saved(applied, pending, tail string) string {
+	switch {
+	case applied == "":
+		return "you would save " + pending + tail
+	case pending == "":
+		return "you saved " + applied + tail
 	}
-	return "you saved"
+	return "you saved " + applied + ", would save " + pending + " more" + tail
 }
 
 // bigMoneyWords is the same wording around a figure in the big font: above it,
@@ -173,4 +185,22 @@ func padLeft(s string, width int) string {
 		return strings.Repeat(" ", n) + s
 	}
 	return s
+}
+
+// shortMoney is a compact amount of money. Under one unit it says so: the
+// whole part alone read "0" for eight cents.
+func (m *Menu) shortMoney(v float64) string {
+	if v > 0 && v < 1 {
+		return "<" + m.cur.Sym + "1"
+	}
+	return m.cur.Sym + m.short(v)
+}
+
+// fitTitle is the start of a name that a title of that width can show: what
+// the big font can draw, or in plain text what the window holds.
+func (m *Menu) fitTitle(name string, width int) string {
+	if m.plain {
+		return cut(name, width)
+	}
+	return fitTitle(name, width)
 }

@@ -44,12 +44,16 @@ const (
 
 // RouteSkill is one skill placed in the plan.
 type RouteSkill struct {
-	Name   string  `json:"name"`
-	Tier   string  `json:"tier"`   // exposed | routed
-	Reason string  `json:"reason"` // frequent | rare | no-evidence
-	Uses   int     `json:"uses"`
-	Tokens int     `json:"tokens"`
-	Rate   float64 `json:"rate"` // uses/sessions; ≥0, can exceed 1 if fired many times per session
+	Name string `json:"name"`
+	// Platform is the tool the skill is installed in. twin marks a skill whose
+	// name another tool's skill in the plan has too: it is shown with its tool.
+	Platform string `json:"platform,omitempty"`
+	twin     bool
+	Tier     string  `json:"tier"`   // exposed | routed
+	Reason   string  `json:"reason"` // frequent | rare | no-evidence
+	Uses     int     `json:"uses"`
+	Tokens   int     `json:"tokens"`
+	Rate     float64 `json:"rate"` // uses/sessions; ≥0, can exceed 1 if fired many times per session
 }
 
 // RouteCategory is one leaf router holding rarely-fired skills, derived from
@@ -89,6 +93,12 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 	plan := &RoutePlan{Sessions: r.Sessions, ExposeThreshold: exposeThreshold}
 	cats := map[string]*RouteCategory{}
 
+	named := map[string]int{}
+	for _, row := range r.Rows {
+		if row.Category == scan.CatSkill && row.Verdict != VerdictReap {
+			named[row.Name]++
+		}
+	}
 	for _, row := range r.Rows {
 		if row.Category != scan.CatSkill || row.Verdict == VerdictReap {
 			continue
@@ -99,7 +109,7 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 		if sessions := r.SessionsOf(row.Platform); sessions > 0 {
 			rate = float64(row.Uses) / float64(sessions)
 		}
-		rs := RouteSkill{Name: row.Name, Uses: row.Uses, Tokens: row.Tokens, Rate: rate}
+		rs := RouteSkill{Name: row.Name, Platform: row.Platform, twin: named[row.Name] > 1, Uses: row.Uses, Tokens: row.Tokens, Rate: rate}
 
 		switch {
 		case r.Sessions == 0 || row.Uses == 0:
@@ -131,6 +141,14 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 	plan.Categories = sortCategories(cats)
 	plan.BelowFloor = plan.TotalSkills < RouteAdviceFloor
 	return plan
+}
+
+// label is the skill's name, with its tool when another skill has that name.
+func (s RouteSkill) label() string {
+	if s.twin && s.Platform != "" {
+		return s.Name + " (" + s.Platform + ")"
+	}
+	return s.Name
 }
 
 // routeCategory derives a leaf-router name for a rarely-fired skill from
@@ -299,7 +317,7 @@ func routeGroup(w io.Writer, width int, paint func(code, s string) string,
 func routeRows(width, indent int, skills []RouteSkill, reason bool) []string {
 	var names, uses, rates, reasons []string
 	for _, s := range skills {
-		names = append(names, s.Name)
+		names = append(names, s.label())
 		uses = append(uses, HumanNum(s.Uses))
 		rates = append(rates, ratePct(s.Rate))
 		if reason {
@@ -358,7 +376,7 @@ func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 	fmt.Fprintln(w, "| Skill | Uses | Rate | Reason |")
 	fmt.Fprintln(w, "|---|---|---|---|")
 	for _, s := range plan.Exposed {
-		fmt.Fprintf(w, "| %s | %d | %s | %s |\n", mdText(s.Name), s.Uses, ratePct(s.Rate), s.Reason)
+		fmt.Fprintf(w, "| %s | %d | %s | %s |\n", mdText(s.label()), s.Uses, ratePct(s.Rate), s.Reason)
 	}
 
 	fmt.Fprintf(w, "\n## Routed (loaded on demand) — ~%s tok deferred\n\n", HumanCount(plan.RoutedTok))
@@ -367,7 +385,7 @@ func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 		fmt.Fprintln(w, "| Skill | Uses | Rate |")
 		fmt.Fprintln(w, "|---|---|---|")
 		for _, s := range c.Skills {
-			fmt.Fprintf(w, "| %s | %d | %s |\n", mdText(s.Name), s.Uses, ratePct(s.Rate))
+			fmt.Fprintf(w, "| %s | %d | %s |\n", mdText(s.label()), s.Uses, ratePct(s.Rate))
 		}
 		fmt.Fprintln(w)
 	}

@@ -1760,15 +1760,22 @@ func cmdUninstallHook(opts options, stdout, stderr io.Writer) int {
 
 // nudgeText says what the nudge counts: unused items to prune, items to mute,
 // or both, whichever is there.
-func nudgeText(dead, mute int) string {
+func nudgeText(dead, mute int, was hook.NudgeState) string {
+	// The first time there is no last check to be more than; later, only what
+	// rose is named: a count that stood still is not "more".
+	first := was.LastNudgeAt.IsZero()
 	var parts []string
-	if dead > 0 {
+	if dead > 0 && (first || dead > was.LastReapCount) {
 		parts = append(parts, fmt.Sprintf("%d unused %s to prune", dead, report.Plural(dead, "item")))
 	}
-	if mute > 0 {
+	if mute > 0 && (first || mute > was.LastMuteCount) {
 		parts = append(parts, fmt.Sprintf("%d %s to mute", mute, report.Plural(mute, "item")))
 	}
-	return "skillreaper: " + strings.Join(parts, " and ") + ", more than at the last check. Run `reap` to review."
+	than := ", more than at the last check"
+	if first {
+		than = ""
+	}
+	return "skillreaper: " + strings.Join(parts, " and ") + than + ". Run `reap` to review."
 }
 
 // cmdNudge is the SessionStart hook entry point: a passive, at-most-weekly
@@ -1791,6 +1798,7 @@ func cmdNudge(opts options, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
+	was := st
 	st.LastNudgeAt = now
 	st.LastReapCount = toPrune
 	st.LastMuteCount = toMute
@@ -1799,7 +1807,7 @@ func cmdNudge(opts options, stdout, stderr io.Writer) int {
 		// be written it would speak at the start of every session: quiet instead.
 		return 0
 	}
-	fmt.Fprintln(stderr, nudgeText(toPrune, toMute))
+	fmt.Fprintln(stderr, nudgeText(toPrune, toMute, was))
 	return 0
 }
 
@@ -1939,13 +1947,17 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 	claudeLines := scan.LoadClaudeMD(cwd, home, opts.claudeDir)
 	explain := func(row report.Row) report.Explanation {
 		muted, _ := mutedSet(opts.claudeDir, []scan.Item{row.Item})
+		// A name in CLAUDE.md protects a skill and nothing else.
+		isSkill := row.Category == scan.CatSkill
+		named := isSkill && scan.ClaudeMDReferences(claudeLines, row.Name)
 		return report.BuildExplanation(row, r.SessionsOf(row.Platform), report.ExplainInput{
 			MinSessions:   opts.minSessions,
 			GraceDays:     opts.graceDays,
 			MuteThreshold: opts.muteThreshold,
 			WindowDays:    opts.days,
 			Muted:         muted[row.Path],
-			ClaudeMDRef:   scan.ClaudeMDReferences(claudeLines, row.Name),
+			ClaudeMDRef:   named,
+			ClaudeMDPlain: isSkill && !named && scan.ClaudeMDMentions(claudeLines, row.Name),
 			Now:           clock.Now(),
 		})
 	}

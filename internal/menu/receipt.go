@@ -157,13 +157,13 @@ func (m *Menu) drawNext(y, h, wd int, nextName string, following []*Row, p *Plan
 		word, keys = "previous", "↑ or enter go back to it"
 	}
 	m.put(y+6, 3, word, dim)
-	title := fitTitle(nextName, wd-8)
+	title := m.fitTitle(nextName, wd-8)
 	summaryY := y + 8
 	if h >= bannerRows {
 		for row, text := range m.title(title) {
 			m.put(y+7+row, 3, text, asBold(m.tint(tintGreen)))
 		}
-		if title != nextName || !inFont(title) {
+		if title != nextName || !m.plain && !inFont(title) {
 			m.put(y+10, 3, nextName, dim)
 		}
 		summaryY = y + 11
@@ -464,11 +464,12 @@ func (v *receiptView) draw(question string) bool {
 	}
 	m.put(y+1, x, cut(summary, pw), bold)
 	if v.tok > 0 {
-		above, beside, figure := "", "tokens saved every session", m.tokens(v.tok)
+		// "To save": this is the question, nothing is saved before the answer.
+		above, beside, figure := "", "tokens to save every session", m.tokens(v.tok)
 		short := m.short(float64(v.tok))
 		if v.unit == unitMoney {
-			above, beside = m.bigMoneyWords("saved every month")
-			figure, short = m.money(v.priced), m.cur.Sym+m.short(v.priced*m.price*m.cur.Rate)
+			above, beside = m.bigMoneyWords("to save every month")
+			figure, short = m.money(v.priced), m.shortMoney(v.priced*m.price*m.cur.Rate)
 		}
 		figure = m.fitBig(figure, short, beside, pw)
 		m.put(y+2, x, above, dim)

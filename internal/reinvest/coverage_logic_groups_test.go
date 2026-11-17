@@ -619,7 +619,7 @@ func TestLogicCov_loadReapState_reads_a_report_only_from_a_run_that_worked(t *te
 // the first few are taken up. It used to print the cap (6) as if it were the count.
 func TestGaps_the_count_is_not_the_cap(t *testing.T) {
 	a := fakeApp(t)
-	answering(t, a, js(t, `{}`))
+	answering(t, a, js(t, `{"0": null}`)) // no skill covers them: an answer has to speak of a kind
 	kinds := make([]kind, maxGaps+2)
 	for i := range kinds {
 		kinds[i] = kind{Name: "k" + strconv.Itoa(i), Task: "t", Delegable: true, Sessions: 9}

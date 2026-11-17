@@ -276,6 +276,9 @@ func sortVerdicts(cands []candidate, keys []string, verdicts map[string]verdict,
 	return passing, rejected
 }
 
+// noReasonGiven stands where a rejection came with no reason.
+const noReasonGiven = "no reason given"
+
 // joinReasons gives every reason once, the most serious first.
 func joinReasons(reasons []string) string {
 	seen := map[string]bool{}
@@ -287,7 +290,10 @@ func joinReasons(reasons []string) string {
 		}
 	}
 	sort.SliceStable(unique, func(i, j int) bool { return reasonRank(unique[i]) < reasonRank(unique[j]) })
-	return strings.Join(unique, "; ")
+	if joined := strings.Join(unique, "; "); strings.TrimSpace(joined) != "" {
+		return joined
+	}
+	return noReasonGiven // a name, a colon and nothing told the reader nothing
 }
 
 // refusalLines turns refusals into report lines, one per candidate id.

@@ -1,6 +1,7 @@
 package reinvest
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -42,7 +43,13 @@ func parseReapState(output string) (reapState, error) {
 	if err != nil {
 		return reapState{}, fmt.Errorf("`reap --json` did not answer with JSON: %w", err)
 	}
+	// A report has its rows, were it none ("Rows": null). Anything else is
+	// another version's answer or not a report: read as an empty stack, the
+	// run went on and checked a new skill against no installed one.
 	data, _ := v.(*obj)
+	if _, isReport := data.get("Rows"); !isReport {
+		return reapState{}, errors.New("`reap --json` did not answer with a report (no \"Rows\" in it): is it this version's reap?")
+	}
 	state := reapState{MCP: map[string]*int{}}
 	state.Dead, _ = pyInt(data.val("DeadTokensPerSession"))
 	for _, raw := range data.list("Rows") {

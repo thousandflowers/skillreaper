@@ -460,3 +460,41 @@ func TestAPinnedClockThatDisagreesWithTheEvidenceIsSaid(t *testing.T) {
 		t.Error("no pin, and a warning")
 	}
 }
+
+// The menu's own mute must not take somebody else's change for its own: a
+// file put in the folder, or the skill rewritten, before the mute, is still a
+// change the person never saw when the delete comes.
+func TestMenuDeleteAfterItsOwnMuteStillRefusesAForeignChange(t *testing.T) {
+	for name, foreign := range map[string]func(t *testing.T, folder string){
+		"a file put in the folder": func(t *testing.T, folder string) {
+			if err := os.WriteFile(filepath.Join(folder, "foreign.txt"), []byte("theirs"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"the skill rewritten": func(t *testing.T, folder string) {
+			if err := os.WriteFile(filepath.Join(folder, "SKILL.md"), []byte("---\nname: shared\ndescription: another skill altogether\n---\ntheirs\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			home := deleteHome(t)
+			rows := reportRows(t)
+			applier := &menuApplier{dir: filepath.Join(home, ".claude"), seen: stampsOf(rows)}
+			folder := filepath.Join(home, ".agents/skills/shared")
+			foreign(t, folder)
+
+			if out := applier.Apply([]menu.Pick{{Row: rowOf(t, rows, "claude-code", "skill", "shared"), Verb: menu.Mute}}); out[0].Err != nil {
+				t.Fatalf("mute through the link: %v", out[0].Err)
+			}
+			out := applier.Apply([]menu.Pick{{Row: rowOf(t, rows, "codex", "skill", "shared"), Verb: menu.Delete}})
+
+			if out[0].Err == nil || !strings.Contains(out[0].Err.Error(), "changed since the menu read it") {
+				t.Errorf("the delete went through: %v", out[0].Err)
+			}
+			if _, err := os.Stat(filepath.Join(folder, "SKILL.md")); err != nil {
+				t.Errorf("the folder was deleted: %v", err)
+			}
+		})
+	}
+}

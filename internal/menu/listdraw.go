@@ -64,7 +64,7 @@ func (l *list) draw() bool {
 	left := math.Max(0, float64(l.total)-l.shownDead)
 	eased, deadShare := 0.0, 0.0
 	if target != 0 {
-		eased = l.shown / target // the money saved rises with the number
+		eased = max(0, min(1, l.shown/target)) // what is chosen rises with the number
 	}
 	if l.dead != 0 {
 		deadShare = l.shownDead / float64(l.dead)
@@ -131,24 +131,32 @@ func easeTo(shown, target float64) float64 {
 func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 	m := l.m
 	green := asBold(m.tint(tintGreen))
+	// What is chosen and not applied, rising as the big number falls.
+	chosen := int(float64(l.target-l.done) * eased)
 	switch {
 	case m.rep.Sessions == 0:
 		m.put(1, 3, "no sessions read: nothing is measured yet", bold)
 		m.put(2, 3, "the verdicts below have no evidence behind them", dim)
 	case l.unit == unitMoney:
-		savedPriced := l.targetPriced * eased
 		value := math.Max(0, l.totalPriced-l.deadPriced*deadShare) * m.price * m.cur.Rate
 		above, words := m.bigMoneyWords("wasted a month")
 		figure := m.moneyFigure(value)
 		if bigWidth(figure) > wd-5-len(words) {
-			figure = m.cur.Sym + m.short(value)
+			figure = m.shortMoney(value)
 		}
 		m.put(0, 3, above, dim)
 		end := m.big(1, 3, figure, frac, 1)
 		m.put(1, end+2, words, bold)
 		m.put(2, end+2, "~"+m.tokens(int(left))+" tokens re-sent every session", dim)
-		if l.shown > 0 {
-			m.put(3, end+2, m.savedSaid(m.money(savedPriced), l.p.size() > 0), green)
+		applied, pending := "", ""
+		if l.done > 0 {
+			applied = m.money(l.donePriced)
+		}
+		if chosen > 0 {
+			pending = m.money((l.targetPriced - l.donePriced) * eased)
+		}
+		if applied+pending != "" {
+			m.put(3, end+2, m.savedMoney(applied, pending), green)
 		}
 	default:
 		words := "tokens wasted every session"
@@ -165,8 +173,15 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 			}
 			m.put(2, end+2, month, dim)
 		}
-		if l.shown > 0 {
-			m.put(3, end+2, savedVerb(l.p.size() > 0)+" ~"+m.tokens(int(l.shown))+" tokens per session", green)
+		applied, pending := "", ""
+		if l.done > 0 {
+			applied = "~" + m.tokens(l.done)
+		}
+		if chosen > 0 {
+			pending = "~" + m.tokens(chosen)
+		}
+		if applied+pending != "" {
+			m.put(3, end+2, saved(applied, pending, " tokens per session"), green)
 		}
 	}
 	moneyTab, tokenTab := " "+m.cur.Sym+" money ", " tokens "

@@ -601,7 +601,7 @@ func TestAppCov_a_server_that_cannot_be_remembered_says_so(t *testing.T) {
 	s := swap{Cands: []candidate{{Kind: kindMCP, Name: "fs", Server: jsObj(t, `{"name": "io.github.acme/fs",
 		"packages": [{"registryType": "npm", "identifier": "fs", "version": "1.0.0"}]}`)}}}
 	log := a.applyOne(s)
-	if len(log) != 3 || log[1] != "  ✗  not remembered for a later mute: disk full" || !strings.Contains(log[2], "nothing muted yet") {
+	if len(log) != 3 || log[1] != "  ✗  not remembered for a later mute: disk full" || !strings.Contains(log[2], "will not offer a mute for it") {
 		t.Errorf("got %q", log)
 	}
 }

@@ -221,6 +221,8 @@ func (a *app) loadGroups(sessions []session, regroup bool) ([]*obj, error) {
 				for _, s := range fresh {
 					seen[s.ID] = true
 				}
+			} else {
+				a.failed("placing your new sessions got no answer · trying again next run")
 			}
 		}
 	}

@@ -76,10 +76,10 @@ func TestWhyCountsGraceFromTheInstallDate(t *testing.T) {
 		installed time.Time
 		want      string
 	}{
-		{now.AddDate(0, 0, 5), "wait — 19 day(s) left in the 14-day grace period"},
-		{now.AddDate(0, 0, -3), "wait — 11 day(s) left in the 14-day grace period"},
-		{now.AddDate(0, 0, -30), "wait — 0 day(s) left in the 14-day grace period"},
-		{time.Time{}, "wait — 14 day(s) left in the 14-day grace period"},
+		{now.AddDate(0, 0, 5), "wait — 19 days left in the 14-day grace period"},
+		{now.AddDate(0, 0, -3), "wait — 11 days left in the 14-day grace period"},
+		{now.AddDate(0, 0, -30), "wait — 0 days left in the 14-day grace period"},
+		{time.Time{}, "wait — 14 days left in the 14-day grace period"},
 	} {
 		row := Row{Item: scan.Item{Name: "x", Category: scan.CatSkill, InstalledAt: c.installed}, Verdict: VerdictReview, Reason: ReasonGrace}
 		if got := recommendationFor(row, 12, in); got != c.want {

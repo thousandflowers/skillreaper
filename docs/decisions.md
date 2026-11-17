@@ -10,7 +10,9 @@ add a new entry rather than editing an old one.
 **The plugin's version follows the tag.** `plugin.json` is no longer bumped only
 "when the skills actually change": `.github/workflows/release.yml` refuses a tag
 whose version differs from `plugin.json`, before anything is published, so the
-file is set to the version being tagged.
+file is set to the version being tagged. The same check stops a tag whose
+version has no `## <version>` section in `CHANGELOG.md`: that section is the
+release page.
 
 **The skills call `reap --agent`, not `reap --json`.** `--agent` is plain text
 built to be pasted as it is, so the `SKILL.md` files carry no render spec.

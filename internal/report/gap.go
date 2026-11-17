@@ -200,12 +200,28 @@ func renderMuteSavings(w io.Writer, r *Report, width int, paint func(code, s str
 	if r.MuteCount == 0 {
 		return
 	}
+	// What reap mute takes, not every MUTE row: one inside a plugin is not its
+	// to mute, and "recoverable with reap mute" would promise what it refuses.
+	n, tokens := Mutable(r.Rows)
+	said := fmt.Sprintf("MUTE — %d heavy low-use %s, ~%s tok/session recoverable with reap mute", n, Plural(n, "skill"), HumanNum(tokens))
+	if n == 0 {
+		said = fmt.Sprintf("MUTE — %d heavy low-use %s inside plugins: reap cannot mute those, /plugin disables the plugin", r.MuteCount, Plural(r.MuteCount, "skill"))
+	}
 	fmt.Fprintln(w)
-	for _, l := range wrap(fmt.Sprintf("MUTE — %d heavy low-use %s, ~%s tok/session recoverable with reap mute",
-		r.MuteCount, Plural(r.MuteCount, "skill"), HumanNum(r.MuteTokensPerSession)),
-		width, "  "+mark(VerdictMute)+"  ", "     ") {
+	for _, l := range wrap(said, width, "  "+mark(VerdictMute)+"  ", "     ") {
 		fmt.Fprintln(w, paint(cBold, l))
 	}
+}
+
+// Mutable counts the MUTE rows reap mute would take, and their weight.
+func Mutable(rows []Row) (n, tokens int) {
+	for _, row := range rows {
+		if row.Verdict == VerdictMute && MuteEligible(row) {
+			n++
+			tokens += MuteSaving(row) // as MuteTokensPerSession counts it
+		}
+	}
+	return n, tokens
 }
 
 // renderBrokenSkills lists skills that were invoked but only ever errored —

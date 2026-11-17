@@ -163,3 +163,27 @@ func TestACorruptMuteListIsNamed(t *testing.T) {
 		t.Errorf("mute with a corrupt list: %v", err)
 	}
 }
+
+// What mute takes is what the scanner weighs: with an indented "---" inside
+// the description, all of it, and the header still closes where it closes.
+func TestMuteAndTheScannerAgreeOnAnIndentedRule(t *testing.T) {
+	for _, whole := range []string{
+		"---\nname: hr\ndescription: |\n  Use when the user wants the hr thing.\n  ---\n  Not for the other thing.\n---\nbody of hr\n",
+		"---\nname: hr\ndescription: \"Use when the user\n  ---\n  asks about alpha\"\ntools: Read\n---\nbody\n",
+	} {
+		dir, path := cycle18Skill(t, whole)
+		if err := Mute(dir, dir, "x", path); err != nil {
+			t.Fatal(err)
+		}
+		muted, _ := os.ReadFile(path)
+		if strings.Contains(string(muted), "Not for the other") || strings.Contains(string(muted), "asks about") || !strings.HasPrefix(string(muted), "---\nname: hr\n") || !strings.Contains(string(muted), "\n---\nbody") {
+			t.Errorf("muted, the file reads:\n%s", muted)
+		}
+		if _, err := Unmute(dir, "x"); err != nil {
+			t.Fatal(err)
+		}
+		if back, _ := os.ReadFile(path); string(back) != whole {
+			t.Errorf("unmuted, the file reads:\n%s", back)
+		}
+	}
+}

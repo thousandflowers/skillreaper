@@ -15,10 +15,11 @@ Small, focused project. PRs welcome for:
 
 ## Releases
 
-Tagged automatically via GoReleaser on `v*` push. One step is by hand, before
-the tag: `plugins/skillreaper/.claude-plugin/plugin.json` must carry the
-version being tagged. The release workflow compares the two and stops
-before publishing anything when they differ.
+Tagged automatically via GoReleaser on `v*` push. Two things are by hand,
+before the tag. `CHANGELOG.md` must have a `## <version>` section (it becomes
+the release page), and `plugins/skillreaper/.claude-plugin/plugin.json` must carry the
+version being tagged. The release workflow checks both and stops before
+publishing anything when either is missing.
 
 ## Questions
 

@@ -122,3 +122,64 @@ func TestTheWarningLineIsRenamedLikeTheOtherHints(t *testing.T) {
 		t.Errorf("hint: %q", got)
 	}
 }
+
+// swapForNotes puts a folder with no SKILL.md where the skill was: what is
+// there now is somebody's folder, and not the item reap read.
+type swapForNotes struct {
+	t      *testing.T
+	folder string
+	done   bool
+}
+
+func (s *swapForNotes) Read(p []byte) (int, error) {
+	if s.done {
+		return 0, io.EOF
+	}
+	s.done = true
+	if err := os.Rename(s.folder, filepath.Join(s.t.TempDir(), "the-one-reap-read")); err != nil {
+		s.t.Fatal(err)
+	}
+	mustWriteFile(s.t, filepath.Join(s.folder, "notes.txt"), "my notes\n")
+	return copy(p, "y\n"), nil
+}
+
+// The check is on what a delete removes, the skill's folder, not only on the
+// file reap read in it: another folder of that name, with no SKILL.md, read as
+// "gone" and was deleted with what it held.
+func TestDeleteLeavesAFolderPutInTheItemsPlace(t *testing.T) {
+	home := deleteHome(t)
+	folder := filepath.Join(home, ".claude", "skills", "mine")
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"delete", "mine"}, &swapForNotes{t: t, folder: folder}, &out, &errOut)
+
+	if code == 0 || !strings.Contains(errOut.String(), "changed since reap read it") {
+		t.Errorf("exit %d:\n%s%s", code, out.String(), errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(folder, "notes.txt")); err != nil {
+		t.Errorf("the folder put there meanwhile is gone: %v", err)
+	}
+}
+
+// In --json a weight that was never measured is told apart from zero.
+func TestPruneJSONTellsAnUnmeasuredWeightFromZero(t *testing.T) {
+	home := deleteHome(t)
+	mustWriteFile(t, filepath.Join(home, ".claude.json"), `{"mcpServers":{"zzsrv":{"command":"x"}}}`)
+	var out, errOut bytes.Buffer
+
+	run([]string{"prune", "zzsrv", "--json"}, strings.NewReader(""), &out, &errOut)
+
+	if said := out.String(); !strings.Contains(said, `"weight_unknown": true`) || !strings.Contains(said, `"unmeasured": 1`) {
+		t.Errorf("prune --json:\n%s%s", said, errOut.String())
+	}
+}
+
+// NaN is not "below 0": the message says what it is.
+func TestPriceNaNIsCalledNotANumber(t *testing.T) {
+	deleteHome(t)
+	var out, errOut bytes.Buffer
+	run([]string{"--price", "NaN"}, strings.NewReader(""), &out, &errOut)
+	if said := errOut.String(); !strings.Contains(said, "--price must be a number") || strings.Contains(said, "at least 0") {
+		t.Errorf("--price NaN:\n%s", said)
+	}
+}

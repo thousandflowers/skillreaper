@@ -1,5 +1,5 @@
 ---
-description: Report how much of the context this agent loads is never used - unused skills, MCP servers, subagents, hooks and always-loaded prose - measured from real session transcripts. Use when asked why the context window is full, what is wasting tokens, or what is safe to remove.
+description: Report how much of the context this agent loads is never used - unused skills, MCP servers and subagents, measured from real session transcripts, with the hooks and always-loaded prose it also carries. Use when asked why the context window is full, what is wasting tokens, or what is safe to remove.
 ---
 
 # skillreaper - context utilization report

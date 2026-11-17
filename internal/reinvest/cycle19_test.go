@@ -125,10 +125,8 @@ func TestCycle20_a_rollback_leaves_a_folder_this_run_did_not_make(t *testing.T) 
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for name, text := range map[string]string{skillFile: c.Doc, "my-notes.txt": "mine"} {
-		if err := os.WriteFile(filepath.Join(home, name), []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.WriteFile(filepath.Join(home, skillFile), []byte(c.Doc), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	a := fakeApp(t)
 	a.runStep = func(cmd []string) error {
@@ -144,7 +142,7 @@ func TestCycle20_a_rollback_leaves_a_folder_this_run_did_not_make(t *testing.T) 
 	if applied || !strings.Contains(said, "linked fix-ui again") {
 		t.Errorf("applied %v:\n%s", applied, said)
 	}
-	if _, err := os.Stat(filepath.Join(home, "my-notes.txt")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, skillFile)); err != nil {
 		t.Errorf("the folder that was there before is gone: %v", err)
 	}
 	if _, err := os.Lstat(filepath.Join(skillsDir(), c.Slug)); err == nil {
@@ -178,5 +176,105 @@ func TestCycle20_a_registry_name_is_printed_without_control_characters(t *testin
 		if !strings.Contains(said, "needs manual setup") || strings.ContainsAny(said, "\x1b\a") {
 			t.Errorf("printed: %q", said)
 		}
+	}
+}
+
+// Calls of one step run side by side. One that answers does not take away the
+// reason of one that did not, and a reason does not outlive its step.
+func TestCycle21_a_sibling_call_that_answers_leaves_the_reason(t *testing.T) {
+	a := fakeApp(t)
+	a.runProcess = func(spec procSpec) procResult {
+		if strings.Contains(spec.stdin, "alpha") {
+			return procResult{code: 1, stderr: "Error: not logged in"}
+		}
+		return procResult{stdout: `{"ok": true}`}
+	}
+	_, _ = a.askClaude("p", "alpha", askOptions{})
+	if answer, _ := a.askClaude("p", "beta", askOptions{}); answer == nil {
+		t.Fatal("beta gave no answer")
+	}
+	a.failed("1 of 2 skills not written: no usable answer")
+	if said := termText(a); !strings.Contains(said, "not logged in") {
+		t.Errorf("the reason of the call that failed is gone:\n%s", said)
+	}
+
+	b := fakeApp(t)
+	b.runProcess = func(procSpec) procResult { return procResult{code: 1, stderr: "rate limit"} }
+	_, _ = b.askClaude("p", "x", askOptions{})
+	b.step("verifying 1 candidate", false) // the next step begins
+	b.failed("1 of 1 skills not written")
+	if said := termText(b); strings.Contains(said, "rate limit") {
+		t.Errorf("a reason from the step before:\n%s", said)
+	}
+}
+
+// What claude said is shown without the keys it may hold, and the log that
+// keeps it is the person's alone to read.
+func TestCycle21_the_reason_is_shown_without_secrets(t *testing.T) {
+	a := fakeApp(t)
+	a.runProcess = func(procSpec) procResult {
+		return procResult{code: 1, stdout: `{"note": "the key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789"}`}
+	}
+	_, _ = a.askClaude("p", "b", askOptions{})
+	a.failed("grouping your work got no answer")
+	if said := termText(a); strings.Contains(said, "abcdefghijklmnopqrstuvwxyz0123456789") {
+		t.Errorf("a key on the terminal:\n%s", said)
+	}
+	path := filepath.Join(t.TempDir(), "run.log")
+	log, err := createLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = log.Close()
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("run.log mode: %v %v", info.Mode().Perm(), err)
+	}
+}
+
+// A server that could not be noted down is not promised a later mute.
+func TestCycle21_a_server_not_remembered_is_not_promised_a_mute(t *testing.T) {
+	a := fakeApp(t)
+	a.runStep = func([]string) error { return nil }
+	a.remember = func(candidate) error { return errors.New("disk full") }
+	s := swap{Cands: []candidate{{Kind: kindMCP, Name: "fs", Server: jsObj(t, `{"name": "io.github.acme/fs",
+		"packages": [{"registryType": "npm", "identifier": "fs", "version": "1.0.0"}]}`)}}}
+
+	log, _ := a.carryOut(s)
+
+	if said := strings.Join(log, "\n"); strings.Contains(said, "reinvest offers the mute") || !strings.Contains(said, "will not offer a mute for it") {
+		t.Errorf("log:\n%s", said)
+	}
+}
+
+// Stopped after the new skill is in place, the text says how to finish by hand.
+func TestCycle21_a_stop_after_the_install_says_how_to_finish(t *testing.T) {
+	c := candidate{Kind: kindSkill, Name: "new", Slug: "new", Created: true}
+	lines := strings.Join(stoppedHalfway(c, false, []string{"  ✓  created new in /x"}, nil, "", []skill{{Name: "old-a", Path: "/s/old-a/SKILL.md"}, {Name: "old-b", Path: "/s/old-b/SKILL.md"}}), "\n")
+	if !strings.Contains(lines, "reap mute /s/old-a/SKILL.md") || !strings.Contains(lines, "reap mute /s/old-b/SKILL.md") {
+		t.Errorf("stop text:\n%s", lines)
+	}
+}
+
+// A folder left in skills-reinvest is linked again only when it is the skill
+// and nothing else: a file beside SKILL.md was never shown, and a folder with
+// no SKILL.md is not "another text".
+func TestCycle21_a_left_folder_is_linked_only_when_it_is_the_skill_alone(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	c := candidate{Slug: "fix-ui", Doc: "---\nname: fix-ui\ndescription: d\n---\nbody\n"}
+	home := filepath.Join(writtenDir(), c.Slug)
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := create(c); err == nil || !strings.Contains(err.Error(), "no SKILL.md") {
+		t.Errorf("an empty folder: %v", err)
+	}
+	for name, text := range map[string]string{skillFile: c.Doc, "run.sh": "echo never shown"} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := create(c); err == nil || !strings.Contains(err.Error(), "other files") {
+		t.Errorf("a folder with a file beside the skill: %v", err)
 	}
 }

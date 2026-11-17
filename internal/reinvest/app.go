@@ -123,7 +123,15 @@ var (
 	currentUser = user.Current
 	removeAll   = os.RemoveAll
 	executable  = os.Executable
-	createLog   = func(path string) (io.WriteCloser, error) { return os.Create(path) }
+	createLog   = func(path string) (io.WriteCloser, error) {
+		// The person's alone to read: it quotes what claude said, which can
+		// quote their sessions. Chmod too: a log from an older version was 0644.
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err == nil {
+			err = f.Chmod(0o600)
+		}
+		return f, err
+	}
 )
 
 // claudeDir is Claude Code's folder: CLAUDE_CONFIG_DIR when set, as Claude
@@ -278,6 +286,9 @@ func (a *app) failed(msg string) {
 
 // step announces a step (on a terminal) or reports it done.
 func (a *app) step(msg string, done bool) {
+	if !done {
+		a.noteAsk("") // a step begins: a reason left by the one before is not its own
+	}
 	switch {
 	case done:
 		fmt.Fprintf(a.term, "%s  ✓ %s\n", a.lineStart(), msg)

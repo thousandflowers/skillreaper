@@ -332,7 +332,7 @@ func TestBuildManifest(t *testing.T) {
 	if m.Skill != "myskill" || m.ClaudeCodeVersion != "1.2.3" {
 		t.Errorf("manifest = %+v", m)
 	}
-	if m.ToolSurface != "2 tool(s)" {
+	if m.ToolSurface != "2 tools" {
 		t.Errorf("tool surface = %q, want \"2 tool(s)\"", m.ToolSurface)
 	}
 	if m.UsageWindow.Uses != 5 || m.UsageWindow.Projects != 1 {

@@ -141,6 +141,7 @@ func (a *app) askClaude(prompt, body string, opts askOptions) (any, error) {
 		thinking = a.thinkTokens
 	}
 	spec := procSpec{argv: argv, stdin: body, env: []string{"MAX_THINKING_TOKENS=" + thinking}, dir: os.TempDir(), timeout: askTimeout}
+	why := "" // of this call alone: calls of one step run side by side
 	for range askTries {
 		res := a.runProcess(spec)
 		switch {
@@ -158,19 +159,18 @@ func (a *app) askClaude(prompt, body string, opts askOptions) (any, error) {
 				said = res.stdout
 			}
 			a.logf("claude -p exit %d: %s", res.code, lastRunes(said, stderrTail))
-			why := fmt.Sprintf("exit %d", res.code)
+			why = fmt.Sprintf("exit %d", res.code)
 			if line := lastLine(said); line != "" {
 				why += ": " + line
 			}
-			a.noteAsk(why)
 			continue
 		}
 		if answer := parse(res.stdout); answer != nil {
-			a.noteAsk("") // it answered: an earlier try's reason is no step's reason
-			return answer, nil
+			return answer, nil // it answered: an earlier try's reason is nobody's
 		}
-		a.noteAsk("an answer that could not be read")
+		why = "an answer that could not be read"
 	}
+	a.noteAsk(why)
 	return nil, nil
 }
 
@@ -186,7 +186,8 @@ func (a *app) noteAsk(why string) {
 // to print: the reason is usually there ("not logged in", a rate limit).
 func lastLine(text string) string {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
-	return printable(strings.TrimSpace(lastRunes(lines[len(lines)-1], stderrTail)))
+	// Without the keys it may hold: this goes to the terminal.
+	return printable(strings.TrimSpace(redact(lastRunes(lines[len(lines)-1], stderrTail))))
 }
 
 var wordRE = regexp.MustCompile(`[a-z]{4,}`)

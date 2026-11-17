@@ -63,7 +63,8 @@ On a narrow window the receipt's big figure gives way to a short one, as the
 header's does, so that the words beside it stay whole; a stray `ESC [`
 (Alt+[) ends at the next Esc or Enter, where it swallowed the arrow after
 it and let its last letter through as a key; a name made of accents alone
-is shown as `(no name)`; a name cut in its
+is shown as `(no name)`; a choice that could not be carried out stays chosen,
+so that the same key applies it again once its cause is put right; a name cut in its
 middle no longer leaves an accent on the `…`; where the locale cannot draw a
 wide character, the columns after it stay in line.
 
@@ -503,6 +504,24 @@ really injected, with multi-line descriptions read in full.
   fixed plural (`1 items never fired`, `1 uses`, `1 days ago`) agree in
   number; under `npx` the agent view's `run reap for details` names
   `npx skillreaper` too.
+- `reap gap` and the weekly reminder count as mutable what `reap mute`
+  takes: a heavy, rarely used skill inside a plugin was promised as
+  `recoverable with reap mute`, which then found nothing to mute.
+- Only a `---` at the start of a line closes a skill's header, for the
+  weight as for `reap mute`: an indented one inside a description is
+  text. The header ended there, and the description weighed a fraction of
+  what mute then took out.
+- A comment after a value in a header (`description: "x" # note`) is not
+  part of it, and `''` inside single quotes is one quote: both were
+  weighed and shown as written. The body of a file with CRLF line ends
+  is counted exactly.
+- A hook path with a space written `\ ` is followed.
+- The check before a delete is on what the delete takes, the skill's
+  folder, and not only on the file reap read in it: another folder of
+  that name with no `SKILL.md` read as `gone`, and was deleted.
+- `reap prune --json` marks a weight that was never measured
+  (`weight_unknown`, `unmeasured`), and the plan's table by source prints
+  `?` for it, not `~0 tok`; `--price NaN` is told it is not a number.
 
 ### Behaviour changes on the command line
 
@@ -664,6 +683,15 @@ the same cache files and the same checks. What to know before running it:
 - With `--online --mcp`, a server installed with nothing to mute is no
   longer listed as a swap still to make, and a registry name is printed
   without the control characters it may carry.
+- The reason on a failed step survives a call beside it that answered,
+  does not outlive its step, is shown without the keys it may hold, and
+  `run.log` is the person's alone to read. A call placing new sessions
+  that got no answer says so.
+- Stopped with Ctrl-C after the new skill is in place, reinvest prints the
+  `reap mute` commands that finish the swap by hand.
+- A folder left in `skills-reinvest` is linked again only when it holds
+  that skill and nothing else; a server that could not be noted down is
+  not promised a later mute.
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

@@ -51,7 +51,7 @@ func BuildManifest(r *Report, skillName, claudeDir, claudeVersion string) (Manif
 
 	surface := "all"
 	if row.ToolSurface != scan.ToolSurfaceAll {
-		surface = fmt.Sprintf("%d tool(s)", row.ToolSurface)
+		surface = toolSurface(row.ToolSurface)
 	}
 
 	return Manifest{
@@ -158,6 +158,9 @@ func RenderManifestMarkdown(w io.Writer, m Manifest) {
 	u := m.UsageWindow
 	fmt.Fprintln(w, usageLine(u))
 }
+
+// toolSurface is how many tools a skill may use, in words.
+func toolSurface(n int) string { return nOf(n, "tool") }
 
 // usageLine is the manifest's line of what was observed.
 func usageLine(u ManifestUsage) string {

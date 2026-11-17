@@ -519,7 +519,7 @@ func withDescription(current, backup []byte, backupPath string) ([]byte, error) 
 		return nil, fmt.Errorf("the file has changed and has no header to put the description in; it is saved in %s", backupPath)
 	}
 	for i := 1; i < len(lines); i++ {
-		if string(bytes.TrimSpace(lines[i])) == "---" {
+		if closesHeader(lines[i]) {
 			var out bytes.Buffer
 			out.Write(bytes.Join(lines[:i], nil))
 			out.Write(removed)
@@ -590,7 +590,7 @@ func splitKey(b []byte, anyIndent bool) (rest, removed []byte, found bool) {
 			}
 			dropping = false
 		}
-		if string(trimmed) == "---" {
+		if closesHeader(line) {
 			out.Write(bytes.Join(lines[i:], nil))
 			return out.Bytes(), taken.Bytes(), found
 		}
@@ -662,7 +662,7 @@ func closes(text []byte, quote byte) bool {
 func closesLater(lines [][]byte, quote byte) bool {
 	for _, line := range lines {
 		trimmed := bytes.TrimSpace(line)
-		if string(trimmed) == "---" {
+		if closesHeader(line) {
 			return false
 		}
 		if closes(trimmed, quote) {
@@ -670,4 +670,11 @@ func closesLater(lines [][]byte, quote byte) bool {
 		}
 	}
 	return false
+}
+
+// closesHeader says whether a line ends the frontmatter: "---" at the start of
+// the line, as the scanner reads it (scan.closesHeader). An indented one is
+// text inside a value.
+func closesHeader(line []byte) bool {
+	return string(bytes.TrimRight(line, " \t\r\n")) == "---"
 }

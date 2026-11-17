@@ -223,7 +223,7 @@ func RenderGapAgent(w io.Writer, r *Report) {
 		}
 		nt.flush()
 	} else if len(r.MCPPayload) > 0 {
-		fmt.Fprintf(w, "\n%d tools measured, none flagged noisy.\n", len(r.MCPPayload))
+		fmt.Fprintf(w, "\n%s measured, none flagged noisy.\n", nOf(len(r.MCPPayload), "tool"))
 	}
 
 	fmt.Fprintf(w, "\n%s\n", agentSignature)

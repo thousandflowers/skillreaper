@@ -113,9 +113,14 @@ func shellWords(command string) []string {
 	var words []string
 	var word strings.Builder
 	var quote rune
-	begun := false
+	begun, escaped := false, false
 	for _, c := range command {
 		switch {
+		case escaped: // the character after a backslash is itself
+			word.WriteRune(c)
+			escaped = false
+		case c == '\\' && quote != '\'':
+			escaped, begun = true, true
 		case quote != 0 && c == quote:
 			quote = 0
 		case quote != 0:

@@ -476,7 +476,9 @@ func (o pruneOutcome) writeJSON(w, stderr io.Writer, applied bool) int {
 		Category string `json:"category"`
 		Name     string `json:"name"`
 		Tokens   int    `json:"tokens"`
-		Path     string `json:"path,omitempty"`
+		// WeightUnknown tells a weight that was never measured from zero.
+		WeightUnknown bool   `json:"weight_unknown,omitempty"`
+		Path          string `json:"path,omitempty"`
 	}
 	type entry struct {
 		ID       string `json:"id"`
@@ -494,8 +496,10 @@ func (o pruneOutcome) writeJSON(w, stderr io.Writer, applied bool) int {
 		total = o.movedTokens
 	}
 	out := struct {
-		Candidates         []item        `json:"candidates"`
-		TotalTokens        int           `json:"total_tokens"`
+		Candidates  []item `json:"candidates"`
+		TotalTokens int    `json:"total_tokens"`
+		// Unmeasured counts the candidates total_tokens leaves out.
+		Unmeasured         int           `json:"unmeasured,omitempty"`
 		SkippedPluginItems int           `json:"skipped_plugin_items"`
 		Applied            bool          `json:"applied"`
 		Pruned             []entry       `json:"pruned"`
@@ -523,8 +527,11 @@ func (o pruneOutcome) writeJSON(w, stderr io.Writer, applied bool) int {
 	}
 	for _, row := range o.candidates {
 		out.Candidates = append(out.Candidates, item{
-			Category: string(row.Category), Name: row.Name, Tokens: row.Tokens, Path: row.Path,
+			Category: string(row.Category), Name: row.Name, Tokens: row.Tokens, WeightUnknown: row.WeightUnknown, Path: row.Path,
 		})
+		if row.WeightUnknown {
+			out.Unmeasured++
+		}
 	}
 	for _, e := range o.done {
 		out.Pruned = append(out.Pruned, entry{ID: e.ID, Name: e.Name, Category: e.Category})

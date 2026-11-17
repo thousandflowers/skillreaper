@@ -34,13 +34,13 @@ func parseFrontmatter(b []byte) (name, description string, bodyChars int) {
 		return "", "", len(b)
 	}
 
-	headerLen := len(sc.Text()) + 1
+	headerLines := 1
 	inHeader := true
 	var header []string
 	for inHeader && sc.Scan() {
 		line := sc.Text()
-		headerLen += len(line) + 1
-		if strings.TrimSpace(line) == "---" {
+		headerLines++
+		if closesHeader(line) {
 			inHeader = false
 			break
 		}
@@ -52,11 +52,28 @@ func parseFrontmatter(b []byte) (name, description string, bodyChars int) {
 	}
 	name, _ = topLevelValue(header, "name")
 	description, _ = topLevelValue(header, "description")
-	bodyChars = len(b) - headerLen
-	if bodyChars < 0 {
-		bodyChars = 0
+	return name, description, len(b) - lengthOfLines(b, headerLines)
+}
+
+// closesHeader says whether a line ends the frontmatter: "---" at the start of
+// the line. An indented one is text inside a value (a rule in Markdown), as
+// YAML reads it and as reap mute takes it.
+func closesHeader(line string) bool {
+	return strings.TrimRight(line, " \t\r") == "---"
+}
+
+// lengthOfLines is how many bytes the first n lines of b take, with whatever
+// ends each of them.
+func lengthOfLines(b []byte, n int) int {
+	at := 0
+	for ; n > 0 && at < len(b); n-- {
+		end := bytes.IndexByte(b[at:], '\n')
+		if end < 0 {
+			return len(b)
+		}
+		at += end + 1
 	}
-	return name, description, bodyChars
+	return at
 }
 
 // frontmatterValue returns the single-line value of key in a Markdown file's
@@ -120,10 +137,22 @@ func yamlValue(line, key string) (string, bool) {
 		return "", false
 	}
 	v := strings.TrimSpace(strings.TrimPrefix(line, key+":"))
+	if v != "" && (v[0] == '"' || v[0] == '\'') {
+		// A quote that closes on the line ends the value there: what follows
+		// is a comment, and was weighed and shown with the description.
+		if end := quoteEnd(v[1:], v[0]); end >= 0 {
+			v = v[:end+2]
+		}
+	} else if at := commentAt(v); at >= 0 {
+		v = strings.TrimSpace(v[:at])
+	}
 	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
 		if unquoted, err := strconv.Unquote(v); err == nil {
 			return unquoted, true
 		}
+	}
+	if len(v) >= 2 && v[0] == '\'' && v[len(v)-1] == '\'' {
+		return strings.ReplaceAll(v[1:len(v)-1], "''", "'"), true // two in a row write one
 	}
 	v = strings.Trim(v, `"'`)
 	return v, true
@@ -282,7 +311,7 @@ func frontmatterList(b []byte, key string) []string {
 	under, open := false, false // below the key reading its items; inside brackets not closed yet
 	for sc.Scan() {
 		line := sc.Text()
-		if strings.TrimSpace(line) == "---" {
+		if closesHeader(line) {
 			return out
 		}
 		topLevel := line == strings.TrimLeft(line, " \t")

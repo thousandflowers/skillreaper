@@ -47,7 +47,7 @@ measured by skillreaper · github.com/thousandflowers/skillreaper
   skillreaper finds the <b>unused skills, MCP servers and subagents</b>
   quietly filling your <b>context window</b> - proven from your own session
   transcripts - and prunes them reversibly. Hooks and always-loaded prose
-  are measured and reported.<br>
+  are listed in the report, not judged or pruned.<br>
   Runs locally against transcripts you already have. Nothing is ever uploaded.
 </p>
 

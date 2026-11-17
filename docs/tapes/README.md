@@ -5,7 +5,7 @@ so they can be rebuilt from source instead of re-recorded by hand.
 
     brew install vhs gifsicle
     mkdir -p docs/gifs
-    cd docs/tapes && vhs reap-prune.tape
+    (cd docs/tapes && vhs reap-prune.tape)
 
 `reap-prune.tape` writes into `docs/gifs/`, which is git-ignored - hence the
 `mkdir`. `hero.tape` writes `/tmp/skillreaper-hero.gif`, and `menu.tape` writes
@@ -37,7 +37,7 @@ mute and lock groups. `menu.tape` drives the menu through it and writes
 `docs/menu-demo.gif`, the one GIF the README embeds from a tape:
 
     go build -o /tmp/reap-menu ./cmd/reap
-    cd docs/tapes && REAP=/tmp/reap-menu vhs menu.tape
+    (cd docs/tapes && REAP=/tmp/reap-menu vhs menu.tape)
 
 Two tapes need a hand before they record again. `hero.tape` was written for
 0.5.0: it stops unless `reap version` says 0.5.0, and it does not set

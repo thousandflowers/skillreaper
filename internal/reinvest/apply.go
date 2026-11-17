@@ -112,8 +112,15 @@ func create(c candidate) error {
 	if left {
 		// Left by an earlier run whose link was deleted since. With the same
 		// text it is that skill: link it again. Another text is not replaced.
-		if was, readErr := os.ReadFile(filepath.Join(home, skillFile)); readErr != nil || string(was) != c.Doc {
+		was, readErr := os.ReadFile(filepath.Join(home, skillFile))
+		entries, _ := os.ReadDir(home)
+		switch {
+		case readErr != nil:
+			return fmt.Errorf("%s is left from an earlier run, with no SKILL.md that can be read: move it away and run reinvest again", home)
+		case string(was) != c.Doc:
 			return fmt.Errorf("%s is left from an earlier run, with another text: move it away and run reinvest again", home)
+		case len(entries) != 1: // loaded with the skill, and never shown
+			return fmt.Errorf("%s is left from an earlier run, with other files beside SKILL.md: move it away and run reinvest again", home)
 		}
 	} else {
 		if err := os.MkdirAll(writtenDir(), sharedDir); err != nil {
@@ -408,7 +415,9 @@ func (a *app) install(s swap) (lines []string, stop bool) {
 	lines = []string{"  ✓  installed " + c.Name}
 	if c.Kind == kindMCP && len(s.Mute) == 0 {
 		if err := a.remember(c); err != nil {
-			lines = append(lines, "  ✗  not remembered for a later mute: "+err.Error())
+			// Installed all the same, and done: but no mute can be promised.
+			return append(lines, "  ✗  not remembered for a later mute: "+err.Error(),
+				"  ·  nothing muted, and reinvest will not offer a mute for it later"), false
 		}
 		// Not a stop: with nothing to mute the swap is done, and no longer on offer.
 		return append(lines, "  ·  nothing muted yet: reinvest offers the mute once reap has weighed it"), false
@@ -498,14 +507,20 @@ func stoppedHalfway(c candidate, installing bool, log []string, muted []skill, i
 	if inHand != "" && (len(muted) == 0 || muted[len(muted)-1].Name != inHand) {
 		lines = append(lines, "  ?  "+inHand+": its mute was cut short (reap unmute lists what is muted)")
 	}
-	var rest []string
+	var rest, finish []string
 	for _, x := range all {
 		if !done[x.Name] {
 			rest = append(rest, x.Name)
+			finish = append(finish, reapLine("mute", x))
 		}
 	}
 	if len(rest) > 0 {
 		lines = append(lines, "  ·  not muted: "+strings.Join(rest, ", "))
+		if !installing { // the new one is in place: the swap can be finished by hand
+			for _, command := range finish {
+				lines = append(lines, "  →  to finish: "+command)
+			}
+		}
 	}
 	return lines
 }

@@ -228,7 +228,7 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 				ends := row.InstalledAt.AddDate(0, 0, in.GraceDays)
 				left = max(0, int(math.Ceil(ends.Sub(in.Now).Hours()/24)))
 			}
-			return fmt.Sprintf("wait — %d day(s) left in the %d-day grace period", left, in.GraceDays)
+			return graceLeft(left, in.GraceDays)
 		case ReasonNoEvidence:
 			return "judge it yourself: reap has no record of its use on this platform"
 		case ReasonUsedElsewhere:
@@ -294,6 +294,11 @@ func dateOrUnknown(t time.Time) string {
 // RenderWhyJSON writes the explanation as indented JSON (never colored).
 func RenderWhyJSON(w io.Writer, e Explanation) error {
 	return WriteJSON(w, e)
+}
+
+// graceLeft is the advice for an item still inside its grace period.
+func graceLeft(left, graceDays int) string {
+	return fmt.Sprintf("wait — %s left in the %d-day grace period", nOf(left, "day"), graceDays)
 }
 
 // RenderWhy writes the human-readable explanation block. The verdict line is

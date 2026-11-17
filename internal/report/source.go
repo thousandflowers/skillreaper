@@ -19,6 +19,8 @@ type SourceTotal struct {
 	Items     int    `json:"items"`
 	Removable int    `json:"removable"`
 	Tokens    int    `json:"tokens"`
+	// Unmeasured counts the items whose weight Tokens leaves out.
+	Unmeasured int `json:"unmeasured,omitempty"`
 }
 
 // SourceTotals groups rows by Source, heaviest first.
@@ -47,6 +49,9 @@ func SourceTotals(rows []Row) []SourceTotal {
 		}
 		t.Items++
 		t.Tokens += r.Tokens
+		if r.WeightUnknown {
+			t.Unmeasured++
+		}
 		if r.Removable {
 			t.Removable++
 		}
@@ -87,7 +92,14 @@ func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int) {
 	for _, t := range totals {
 		srcs = append(srcs, t.Source)
 		items = append(items, fmt.Sprintf("%d %s", t.Items, Plural(t.Items, "item")))
-		toks = append(toks, "~"+HumanCount(t.Tokens)+" tok")
+		switch {
+		case t.Unmeasured >= t.Items: // never measured: "~0" would be a number
+			toks = append(toks, "?")
+		case t.Unmeasured > 0:
+			toks = append(toks, "≥"+HumanCount(t.Tokens)+" tok")
+		default:
+			toks = append(toks, "~"+HumanCount(t.Tokens)+" tok")
+		}
 		if t.Removable == 0 {
 			// reap can see these and cannot touch them: they are registered by
 			// a plugin, and the host agent owns that registration.

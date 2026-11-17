@@ -305,6 +305,9 @@ func (m *Menu) receipt(p *Plan, unit string, onApplied func()) string {
 	for _, o := range outcomes {
 		if o.Err != nil {
 			failed = append(failed, o)
+			// Still chosen: with its cause put right, the same key applies it
+			// again, without the row having to be found and chosen once more.
+			p.set(o.Pick.Row, o.Pick.Verb)
 		} else {
 			done = append(done, o.Pick)
 		}

@@ -140,3 +140,60 @@ func TestAQuotedValueOverSeveralLinesIsReadWhole(t *testing.T) {
 		}
 	}
 }
+
+// A space written with a backslash before it is part of the word, as in a
+// shell: `my\ hooks/start.sh` is one path.
+func TestShellWordsTakeAnEscapedSpace(t *testing.T) {
+	if got := shellWords(`bash ~/.claude/my\ hooks/start.sh "a\"b c" 'd\e'`); len(got) != 4 || got[1] != "~/.claude/my hooks/start.sh" || got[2] != `a"b c` || got[3] != `d\e` {
+		t.Errorf("words: %q", got)
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".claude")
+	cycle19Write(t, filepath.Join(dir, "my hooks", "start.sh"), "cat ~/.claude/skills/alpha/SKILL.md\n")
+	cycle19Write(t, filepath.Join(dir, "settings.json"), `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":`+cycle19JSON(t, `bash ~/.claude/my\ hooks/start.sh`)+`}]}]}}`)
+	if !userHookLoadedSkills(dir)["alpha"] {
+		t.Error("the script was not read")
+	}
+}
+
+// A value is read as YAML reads it: without the comment after it, and with
+// two single quotes in a row as one. The comment was weighed with the
+// description, and shown with it.
+func TestAValueIsReadWithoutItsCommentAndWithItsQuotesResolved(t *testing.T) {
+	for line, want := range map[string]string{
+		`description: "foo" # comment`:         "foo",
+		`description: 'foo' # c`:               "foo",
+		`description: Use for foo # a comment`: "Use for foo",
+		`description: 'don''t'`:                "don't",
+		`description: C#tools and a#b`:         "C#tools and a#b",
+		`description: "a # b"`:                 "a # b",
+		`description: "say \"hi\""`:            `say "hi"`,
+	} {
+		if got, ok := yamlValue(line, "description"); !ok || got != want {
+			t.Errorf("%s: %q, want %q", line, got, want)
+		}
+	}
+}
+
+// Only a "---" at the start of a line closes the header: an indented one
+// inside a description is text (a rule in Markdown), and mute strips the whole
+// description. Ended there, the header gave a fraction of the weight.
+func TestAnIndentedRuleInADescriptionDoesNotCloseTheHeader(t *testing.T) {
+	doc := "---\nname: hr\ndescription: |\n  Use when the user wants the hr thing.\n  ---\n  Not for the other thing.\n---\nbody of hr\n"
+	name, description, body := parseFrontmatter([]byte(doc))
+	if name != "hr" || !strings.Contains(description, "Not for the other thing.") || body != len("body of hr\n") {
+		t.Errorf("name %q, description %q, body %d", name, description, body)
+	}
+	if got := frontmatterList([]byte("---\nskills:\n  - a\n---\n- b\n"), "skills"); len(got) != 1 || got[0] != "a" {
+		t.Errorf("a list ends where the header does: %q", got)
+	}
+}
+
+// The body is what follows the header, byte for byte, whatever ends the lines.
+func TestBodyOfAFileWithCRLFIsCountedExactly(t *testing.T) {
+	doc := "---\r\nname: x\r\ndescription: d\r\nlicense: MIT\r\n---\r\nbody\r\n"
+	if _, _, body := parseFrontmatter([]byte(doc)); body != len("body\r\n") {
+		t.Errorf("body = %d, want %d", body, len("body\r\n"))
+	}
+}

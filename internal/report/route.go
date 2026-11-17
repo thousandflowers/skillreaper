@@ -351,7 +351,7 @@ func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 	fmt.Fprintf(w, "_Proposed, never applied. %s a prune · %s · expose threshold %.0f%%._\n\n",
 		survivors(plan.TotalSkills), nOf(plan.Sessions, "session"), plan.ExposeThreshold*100)
 	if plan.BelowFloor {
-		fmt.Fprintf(w, "> ⓘ %d skills is below ~%d — native skill loading is usually enough. Prune first; route only if context is tight.\n\n", plan.TotalSkills, RouteAdviceFloor)
+		fmt.Fprintf(w, "> ⓘ %s is below ~%d — native skill loading is usually enough. Prune first; route only if context is tight.\n\n", nOf(plan.TotalSkills, "skill"), RouteAdviceFloor)
 	}
 
 	fmt.Fprintf(w, "## Exposed (stay top-level) — ~%s tok resident\n\n", HumanCount(plan.ExposedTok))

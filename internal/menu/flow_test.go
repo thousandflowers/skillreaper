@@ -269,7 +269,9 @@ func TestFailedPickIsNamedAndItsRowStays(t *testing.T) {
 	t.Run("the status line names it, and says what was done", func(t *testing.T) {
 		x := failing(t, space, applyKey, 'y')
 
-		mustEqual(t, "status", strings.TrimSpace(statusLine(x.final())), "✓ 1 gone · ⚠ 1 not done: srv: permission denied")
+		// the failed choice is still chosen, so the key that applies it is offered beside the result
+		mustContain(t, statusLine(x.final()), "✓ 1 gone · ⚠ 1 not done: srv: permission denied  ")
+		mustContain(t, statusLine(x.final()), "apply 1 change")
 	})
 
 	t.Run("its row stays in the list, the one that went does not", func(t *testing.T) {
@@ -277,7 +279,7 @@ func TestFailedPickIsNamedAndItsRowStays(t *testing.T) {
 
 		mustShow(t, x.final(), "suggest to prune", "srv")
 		mustNotShow(t, x.final(), "old-notes")
-		mustContain(t, lineWith(x.final(), "suggest to prune"), "1 of 1 unused")
+		mustContain(t, lineWith(x.final(), "suggest to prune"), "1 of 1 chosen")
 	})
 
 	t.Run("only what went counts as saved", func(t *testing.T) {
@@ -295,7 +297,8 @@ func TestFailedPickIsNamedAndItsRowStays(t *testing.T) {
 
 		x.press(space, applyKey, 'y').run()
 
-		mustEqual(t, "status", strings.TrimSpace(statusLine(x.final())), "⚠ 2 not done: srv: locked")
+		mustContain(t, strings.TrimSpace(statusLine(x.final())), "⚠ 2 not done: srv: locked  ")
+		mustEqual(t, "begins with the warning", strings.HasPrefix(strings.TrimSpace(statusLine(x.final())), "⚠"), true)
 		mustShow(t, x.final(), "2 of 2 unused")
 	})
 }

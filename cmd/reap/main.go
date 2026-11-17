@@ -486,6 +486,10 @@ func outOfRangeFlags(opts options) []string {
 
 	var msgs []string
 	for _, b := range bounds {
+		if math.IsNaN(b.val) {
+			msgs = append(msgs, b.name+" must be a number, got NaN")
+			continue
+		}
 		if b.ceiling > 0 && b.val > b.ceiling {
 			msgs = append(msgs, fmt.Sprintf("%s must be at most %s, got %s — %s",
 				b.name, trimFloat(b.ceiling), trimFloat(b.val), b.ceilingWhy))
@@ -1742,22 +1746,23 @@ func cmdNudge(opts options, stdout, stderr io.Writer) int {
 		return 0
 	}
 	now := time.Now()
-	toPrune := prunable(r.Rows) // not DeadCount: an unused item inside a plugin is not reap's to prune
-	if !hook.ShouldNudge(now, toPrune, r.MuteCount, st) {
-		if lower, changed := hook.Lowered(st, toPrune, r.MuteCount); changed {
+	toPrune := prunable(r.Rows)         // not DeadCount: an unused item inside a plugin is not reap's to prune
+	toMute, _ := report.Mutable(r.Rows) // as with prune: what reap mute would take
+	if !hook.ShouldNudge(now, toPrune, toMute, st) {
+		if lower, changed := hook.Lowered(st, toPrune, toMute); changed {
 			_ = hook.SaveNudgeState(opts.claudeDir, lower)
 		}
 		return 0
 	}
 	st.LastNudgeAt = now
 	st.LastReapCount = toPrune
-	st.LastMuteCount = r.MuteCount
+	st.LastMuteCount = toMute
 	if err := hook.SaveNudgeState(opts.claudeDir, st); err != nil {
 		// It is weekly because it writes down when it spoke. Where that cannot
 		// be written it would speak at the start of every session: quiet instead.
 		return 0
 	}
-	fmt.Fprintln(stderr, nudgeText(toPrune, r.MuteCount))
+	fmt.Fprintln(stderr, nudgeText(toPrune, toMute))
 	return 0
 }
 

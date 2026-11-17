@@ -6,6 +6,7 @@ package menu
 // for the big font, a project's own skill.
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -765,4 +766,18 @@ func TestANameThatTakesNoCellIsShownAsNoName(t *testing.T) {
 	if got := NewRow(raw("́̂")).Name; got != noName {
 		t.Errorf("name = %q", got)
 	}
+}
+
+// A choice that could not be carried out is still chosen after the apply: with
+// its cause put right, the same key applies it again. It used to be cleared,
+// and had to be found and chosen once more.
+func TestAFailedChoiceStaysChosen(t *testing.T) {
+	x := open(t, flowData())
+	x.a.fail = map[string]error{"srv": errors.New("permission denied")}
+	x.m.now = clockAt(0, 0, time.Second)
+
+	x.press(space, applyKey, 'y', 'y').run()
+
+	mustEqual(t, "applies", len(x.a.calls), 1)
+	mustContain(t, strings.Join(x.final(), "\n"), "apply 1 change")
 }

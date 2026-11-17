@@ -228,6 +228,10 @@ func chosenRoot(root, src string) string {
 
 // itemPath is what an item is on disk. A skill is its whole directory, not just
 // SKILL.md.
+// Target is what a prune or a delete of the item takes: a skill's folder, an
+// agent's file.
+func Target(it scan.Item) string { return itemPath(it) }
+
 func itemPath(it scan.Item) string {
 	// a skill's SKILL.md only: an agent file named SKILL.md is the agent, and its
 	// folder is every agent there

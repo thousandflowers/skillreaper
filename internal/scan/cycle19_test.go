@@ -197,3 +197,37 @@ func TestBodyOfAFileWithCRLFIsCountedExactly(t *testing.T) {
 		t.Errorf("body = %d, want %d", body, len("body\r\n"))
 	}
 }
+
+// Every reader of a header ends it at the same line: one key after an indented
+// "---" was seen by the weight and missed by the reader of single keys, so a
+// manual-only skill was weighed as if Claude loaded it.
+func TestEveryHeaderReaderEndsItAtTheSameLine(t *testing.T) {
+	doc := []byte("---\nname: x\ndescription: |\n  first\n  ---\n  second\ndisable-model-invocation: true\nallowed-tools: Read\n---\nbody\n")
+	if v, ok := frontmatterValue(doc, "disable-model-invocation"); !ok || v != "true" {
+		t.Errorf("disable-model-invocation = %q, %v", v, ok)
+	}
+	if v, ok := frontmatterValue(doc, "allowed-tools"); !ok || v != "Read" {
+		t.Errorf("allowed-tools = %q, %v", v, ok)
+	}
+}
+
+// A value that is only a comment is no value.
+func TestAValueThatIsOnlyACommentIsEmpty(t *testing.T) {
+	for _, line := range []string{"allowed-tools: # none yet", "allowed-tools: #", "allowed-tools:   #x"} {
+		if got, ok := yamlValue(line, "allowed-tools"); !ok || got != "" {
+			t.Errorf("%s: %q", line, got)
+		}
+	}
+	if got, _ := topLevelValue([]string{"description: # nothing"}, "description"); got != "" {
+		t.Errorf("description = %q", got)
+	}
+}
+
+// A backslash is an escape before a space, a quote or another backslash, and a
+// character of the path anywhere else: a Windows path keeps its separators.
+func TestShellWordsKeepAWindowsPath(t *testing.T) {
+	got := shellWords(`node "C:\Users\me\.claude\hooks\x.js" --a my\ dir\\x`)
+	if len(got) != 4 || got[1] != `C:\Users\me\.claude\hooks\x.js` || got[3] != `my dir\x` {
+		t.Errorf("words: %q", got)
+	}
+}

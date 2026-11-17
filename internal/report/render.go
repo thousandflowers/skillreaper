@@ -323,7 +323,7 @@ func headlineNotes(r *Report) []string {
 	// items whose weight could never be measured contribute 0 to it.
 	if r.DeadUnknownWeight > 0 {
 		out = append(out, fmt.Sprintf(
-			"a floor, not a total: %s (MCP servers, hooks) %s weight that was never measured",
+			"a floor, not a total: %s (MCP servers) %s weight that was never measured",
 			nOf(r.DeadUnknownWeight, "unused item"), map[bool]string{true: "carries", false: "carry"}[r.DeadUnknownWeight == 1]))
 	}
 	if r.DeadToolChars > 0 {
@@ -526,7 +526,7 @@ func renderWarnings(w io.Writer, r *Report, width int, paint func(code, s string
 // what running it buys.
 func renderActions(w io.Writer, r *Report, width int, paint func(code, s string) string) {
 	var muteNames []string
-	muteTokens, pruneCount, pruneTokens := 0, 0, 0
+	muteTokens, pruneCount, pruneTokens, pruneUnmeasured := 0, 0, 0, 0
 	for _, row := range r.Rows {
 		// What reap mute and a bare reap prune themselves take, so these lines
 		// and the commands agree: an unused link or plugin item is not prune's.
@@ -537,6 +537,9 @@ func renderActions(w io.Writer, r *Report, width int, paint func(code, s string)
 		if row.Verdict == VerdictReap && row.Removable {
 			pruneCount++
 			pruneTokens += row.Tokens
+			if row.WeightUnknown {
+				pruneUnmeasured++
+			}
 		}
 	}
 
@@ -545,8 +548,11 @@ func renderActions(w io.Writer, r *Report, width int, paint func(code, s string)
 		type action struct{ cmd, gain string }
 		var acts []action
 		if pruneCount > 0 {
-			acts = append(acts, action{"reap prune", fmt.Sprintf("%d %s · ~%s tok/session reclaimed",
-				pruneCount, Plural(pruneCount, "item"), HumanNum(pruneTokens))})
+			gain := "weight not measured" // as reap prune says it: "~0" would be a number
+			if pruneUnmeasured < pruneCount {
+				gain = atLeast(pruneUnmeasured) + "~" + HumanNum(pruneTokens) + " tok/session reclaimed"
+			}
+			acts = append(acts, action{"reap prune", nOf(pruneCount, "item") + " · " + gain})
 		}
 		if len(muteNames) > 0 {
 			acts = append(acts, action{"reap mute", fmt.Sprintf("%d %s · ~%s tok · %s",
@@ -609,7 +615,7 @@ func RenderMarkdown(w io.Writer, r *Report) {
 		if r.DeadUnknownWeight == 1 {
 			carry = "carries"
 		}
-		fmt.Fprintf(w, "\nA floor, not a total: %d unused %s (MCP servers, hooks) %s weight that was never measured.\n",
+		fmt.Fprintf(w, "\nA floor, not a total: %d unused %s (MCP servers) %s weight that was never measured.\n",
 			r.DeadUnknownWeight, Plural(r.DeadUnknownWeight, "item"), carry)
 	}
 

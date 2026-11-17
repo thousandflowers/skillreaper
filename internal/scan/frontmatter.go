@@ -84,10 +84,10 @@ func frontmatterValue(b []byte, key string) (string, bool) {
 		return "", false
 	}
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "---" {
+		if closesHeader(sc.Text()) { // where every reader of the header ends it
 			return "", false
 		}
+		line := strings.TrimSpace(sc.Text())
 		if v, ok := yamlValue(line, key); ok {
 			return v, true
 		}
@@ -143,6 +143,8 @@ func yamlValue(line, key string) (string, bool) {
 		if end := quoteEnd(v[1:], v[0]); end >= 0 {
 			v = v[:end+2]
 		}
+	} else if strings.HasPrefix(v, "#") {
+		v = "" // only a comment: no value
 	} else if at := commentAt(v); at >= 0 {
 		v = strings.TrimSpace(v[:at])
 	}
@@ -174,6 +176,9 @@ func topLevelValue(lines []string, key string) (string, bool) {
 			continue
 		}
 		raw := strings.TrimSpace(strings.TrimPrefix(line, key+":"))
+		if strings.HasPrefix(raw, "#") {
+			raw = "" // only a comment
+		}
 		cont := continuation(lines[i+1:])
 		if style, chomp, ok := blockHeader(raw); ok {
 			return blockScalar(cont, style, chomp), true

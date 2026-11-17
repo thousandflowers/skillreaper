@@ -20,11 +20,13 @@ type Explanation struct {
 	Summary      string `json:"summary"`
 
 	TokenWeight int `json:"token_weight"`
-	DescChars   int `json:"desc_chars"`
-	ListedChars int `json:"listed_chars,omitempty"`
-	Sessions    int `json:"sessions"`
-	Uses        int `json:"uses"`
-	Errors      int `json:"errors"`
+	// WeightUnknown tells a weight that was never measured from zero.
+	WeightUnknown bool `json:"weight_unknown,omitempty"`
+	DescChars     int  `json:"desc_chars"`
+	ListedChars   int  `json:"listed_chars,omitempty"`
+	Sessions      int  `json:"sessions"`
+	Uses          int  `json:"uses"`
+	Errors        int  `json:"errors"`
 
 	LastSeen         string `json:"last_seen"`
 	LastAttempt      string `json:"last_attempt,omitempty"`
@@ -101,24 +103,25 @@ func CanonicalName(row Row) string {
 // BuildExplanation assembles the full explanation for one row.
 func BuildExplanation(row Row, sessions int, in ExplainInput) Explanation {
 	e := Explanation{
-		Name:         CanonicalName(row),
-		Category:     string(row.Category),
-		Verdict:      row.Verdict,
-		Reason:       row.Reason,
-		VerdictLabel: verdictLabel(row),
-		Summary:      summaryFor(row),
-		TokenWeight:  row.Tokens,
-		DescChars:    row.DescChars,
-		ListedChars:  row.ListedChars,
-		Sessions:     sessions,
-		Uses:         row.Uses,
-		Errors:       row.ErrorCount,
-		LastSeen:     lastSeen(row),
-		Installed:    dateOrUnknown(row.InstalledAt),
-		GraceDays:    in.GraceDays,
-		KeepList:     row.Kept,
-		ClaudeMD:     in.ClaudeMDRef,
-		ToolSurface:  permDisplay(row),
+		Name:          CanonicalName(row),
+		Category:      string(row.Category),
+		Verdict:       row.Verdict,
+		Reason:        row.Reason,
+		VerdictLabel:  verdictLabel(row),
+		Summary:       summaryFor(row),
+		TokenWeight:   row.Tokens,
+		WeightUnknown: row.WeightUnknown,
+		DescChars:     row.DescChars,
+		ListedChars:   row.ListedChars,
+		Sessions:      sessions,
+		Uses:          row.Uses,
+		Errors:        row.ErrorCount,
+		LastSeen:      lastSeen(row),
+		Installed:     dateOrUnknown(row.InstalledAt),
+		GraceDays:     in.GraceDays,
+		KeepList:      row.Kept,
+		ClaudeMD:      in.ClaudeMDRef,
+		ToolSurface:   permDisplay(row),
 	}
 
 	if !row.InstalledAt.IsZero() {
@@ -217,6 +220,13 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 		}
 		return "safe to prune. run: reap prune"
 	case VerdictMute:
+		switch {
+		case row.ViaLink != "":
+			// reap mute edits files in the folders it knows, and refuses this one.
+			return "heavy and rarely used, but reached through a link to " + row.ViaLink + ": reap mute does not edit files there. shorten its description by hand, or leave it"
+		case IsPluginSource(row.Source):
+			return "run: reap mute " + scan.ShellArg(CanonicalName(row)) + " (a plugin update can bring the description back)"
+		}
 		return "run: reap mute " + scan.ShellArg(CanonicalName(row))
 	case VerdictKeep:
 		return "kept — nothing to do"
@@ -321,6 +331,8 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 		weight = "? (never seen loading in a session, so never measured)"
 	case e.ListedChars > 0 && e.ListedChars < e.DescChars:
 		weight = fmt.Sprintf("~%d tok  (%d of the description's %d chars, as the last session listed it)", e.TokenWeight, e.ListedChars, e.DescChars)
+	case e.Category == string(scan.CatProse): // a prose file has no description: all of it is loaded
+		weight = fmt.Sprintf("~%d tok  (the whole file: %d chars)", e.TokenWeight, e.DescChars)
 	case e.DescChars > 0 || e.TokenWeight > 0:
 		weight = fmt.Sprintf("~%d tok  (description: %d chars)", e.TokenWeight, e.DescChars)
 	}

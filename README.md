@@ -117,13 +117,13 @@ measurement side without changing a single file.
 | Read-only, changes nothing | Writes, always reversible |
 |---|---|
 | `reap` <sup>1</sup> | `reap prune` &nbsp;↔&nbsp; `reap restore --all` |
-| `reap gap` | `reap mute <name>` &nbsp;↔&nbsp; `reap unmute <name>` |
-| `reap by-project` | `reap keep <name>` &nbsp;↔&nbsp; `reap keep --remove <name>` |
-| `reap why <name>` | `reap install-hook` &nbsp;↔&nbsp; `reap uninstall-hook` |
-| `reap route` | `skillreaper` / `reap menu`: the same writes, chosen on one screen, undone from it with `u` |
-| `reap apm` | |
-| `reap manifest <name>` | |
-| `reap share` | |
+| `reap gap` <sup>1</sup> | `reap mute <name>` &nbsp;↔&nbsp; `reap unmute <name>` |
+| `reap by-project` <sup>1</sup> | `reap keep <name>` &nbsp;↔&nbsp; `reap keep --remove <name>` |
+| `reap why <name>` <sup>1</sup> | `reap install-hook` &nbsp;↔&nbsp; `reap uninstall-hook` |
+| `reap route` <sup>1</sup> | `skillreaper` / `reap menu`: the same writes, chosen on one screen, undone from it with `u` |
+| `reap apm` <sup>1</sup> | |
+| `reap manifest <name>` <sup>1</sup> | |
+| `reap share` <sup>1</sup> | |
 | `reap snapshot` <sup>1</sup> | |
 | `reap diff` | |
 
@@ -783,7 +783,7 @@ mistakenly mark a tool as dead.
 
 **Not a tool declaration fix.** Claude Code's deferred tools reduce the
 *init-time tool declaration* overhead. Skillreaper addresses a different
-problem: **always-loaded skill/agent/prose files.** If a skill description
+problem: **always-loaded skill and agent descriptions.** If a skill description
 is 248 characters, it is read into context every session - regardless of
 lazy tool loading. These two optimizations are complementary, not competing.
 

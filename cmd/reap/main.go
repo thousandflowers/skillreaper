@@ -943,7 +943,7 @@ func gather(opts options) (*report.Report, error) {
 		// Either way the items must not be REAP'd or MUTE'd against a session
 		// count that belongs to some other platform, so flag it and say why.
 		if !parsedAny {
-			reason := fmt.Sprintf("no session transcripts were found in the last %d days", opts.days)
+			reason := fmt.Sprintf("no session transcripts were found in the last %d %s", opts.days, report.Plural(opts.days, "day"))
 			switch {
 			case !p.HasTranscripts:
 				reason = "it exposes no session transcripts at all, so nothing can be observed about its items"
@@ -1190,7 +1190,7 @@ func retentionWarning(opts options, st *usage.Stats) (scan.Warning, bool) {
 		return scan.Warning{}, false
 	}
 	retention, explicit := scan.RetentionDays(opts.claudeDir)
-	setting := fmt.Sprintf("cleanupPeriodDays is not set, so Claude Code's default of %d days applies", retention)
+	setting := fmt.Sprintf("cleanupPeriodDays is not set, so Claude Code's default of %d %s applies", retention, report.Plural(retention, "day"))
 	if explicit {
 		setting = fmt.Sprintf("cleanupPeriodDays is set to %d", retention)
 	}
@@ -1200,8 +1200,8 @@ func retentionWarning(opts options, st *usage.Stats) (scan.Warning, bool) {
 		return scan.Warning{
 			Path: opts.claudeDir,
 			Msg: fmt.Sprintf(
-				"the requested %d-day window cannot be filled: %s, and transcripts older than that are deleted, so %d days is the furthest back any verdict here can reach.",
-				opts.days, setting, retention),
+				"the requested %d-day window cannot be filled: %s, and transcripts older than that are deleted, so %d %s is the furthest back any verdict here can reach.",
+				opts.days, setting, retention, report.Plural(retention, "day")),
 			Advisory: true,
 		}, true
 
@@ -1209,8 +1209,8 @@ func retentionWarning(opts options, st *usage.Stats) (scan.Warning, bool) {
 		return scan.Warning{
 			Path: opts.claudeDir,
 			Msg: fmt.Sprintf(
-				"the oldest transcript on disk is %d days old and %s, so the retention sweep is deleting evidence about as fast as it accumulates. Anything used less often than that is invisible here, not merely cold. Raise cleanupPeriodDays in settings.json to keep more history.",
-				st.CorpusSpanDays(), setting),
+				"the oldest transcript on disk is %d %s old and %s, so the retention sweep is deleting evidence about as fast as it accumulates. Anything used less often than that is invisible here, not merely cold. Raise cleanupPeriodDays in settings.json to keep more history.",
+				st.CorpusSpanDays(), report.Plural(st.CorpusSpanDays(), "day"), setting),
 			Advisory: true,
 		}, true
 	}
@@ -1432,7 +1432,7 @@ func cmdKeepList(opts options, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stdout, "Kept items (never pruned):")
 	for _, item := range items {
-		fmt.Fprintf(stdout, "  %s\n", item)
+		fmt.Fprintf(stdout, "  %s\n", scan.SafeText(item)) // a name can hold an escape sequence
 	}
 	return 0
 }

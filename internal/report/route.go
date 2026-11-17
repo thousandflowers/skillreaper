@@ -358,16 +358,16 @@ func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 	fmt.Fprintln(w, "| Skill | Uses | Rate | Reason |")
 	fmt.Fprintln(w, "|---|---|---|---|")
 	for _, s := range plan.Exposed {
-		fmt.Fprintf(w, "| %s | %d | %s | %s |\n", s.Name, s.Uses, ratePct(s.Rate), s.Reason)
+		fmt.Fprintf(w, "| %s | %d | %s | %s |\n", mdText(s.Name), s.Uses, ratePct(s.Rate), s.Reason)
 	}
 
 	fmt.Fprintf(w, "\n## Routed (loaded on demand) — ~%s tok deferred\n\n", HumanCount(plan.RoutedTok))
 	for _, c := range plan.Categories {
-		fmt.Fprintf(w, "### ▸ %s — ~%s tok\n\n", routeCatLabel(c), HumanCount(c.RoutedTok))
+		fmt.Fprintf(w, "### ▸ %s — ~%s tok\n\n", mdText(routeCatLabel(c)), HumanCount(c.RoutedTok))
 		fmt.Fprintln(w, "| Skill | Uses | Rate |")
 		fmt.Fprintln(w, "|---|---|---|")
 		for _, s := range c.Skills {
-			fmt.Fprintf(w, "| %s | %d | %s |\n", s.Name, s.Uses, ratePct(s.Rate))
+			fmt.Fprintf(w, "| %s | %d | %s |\n", mdText(s.Name), s.Uses, ratePct(s.Rate))
 		}
 		fmt.Fprintln(w)
 	}

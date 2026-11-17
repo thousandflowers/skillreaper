@@ -205,7 +205,9 @@ func renderMuteSavings(w io.Writer, r *Report, width int, paint func(code, s str
 	n, tokens := Mutable(r.Rows)
 	said := fmt.Sprintf("MUTE — %d heavy low-use %s, ~%s tok/session recoverable with reap mute", n, Plural(n, "skill"), HumanNum(tokens))
 	if n == 0 {
-		said = fmt.Sprintf("MUTE — %d heavy low-use %s inside plugins: reap cannot mute those, /plugin disables the plugin", r.MuteCount, Plural(r.MuteCount, "skill"))
+		// A bulk reap mute leaves these (a plugin's, or one reached through a
+		// link); what can be done differs for each, and reap why says it.
+		said = fmt.Sprintf("MUTE — %d heavy low-use %s a bulk reap mute leaves alone: reap why <name> says what can be done", r.MuteCount, Plural(r.MuteCount, "skill"))
 	}
 	fmt.Fprintln(w)
 	for _, l := range wrap(said, width, "  "+mark(VerdictMute)+"  ", "     ") {

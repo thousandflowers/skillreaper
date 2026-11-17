@@ -383,7 +383,7 @@ func printPrunePlan(opts options, stdout io.Writer, r *report.Report, candidates
 	}
 	for _, row := range candidates {
 		weight := fmt.Sprintf("~%d tok", row.Tokens)
-		if row.Category == scan.CatMCP || row.Category == scan.CatHook {
+		if row.WeightUnknown || row.Category == scan.CatHook { // a server that was measured shows its weight
 			weight = "?"
 		}
 		note := ""

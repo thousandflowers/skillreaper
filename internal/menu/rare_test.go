@@ -794,3 +794,31 @@ func TestAnApplyFromTheLastScreenShowsItsResult(t *testing.T) {
 
 	mustShow(t, x.frame("That was the last list.", "not done"), "srv: permission denied")
 }
+
+// After an apply started on the screen between two lists, that screen counts
+// what was just applied: it said "nothing chosen" over an empty bar, beside a
+// line saying "✓ 2 gone".
+func TestTheScreenBetweenListsCountsWhatWasApplied(t *testing.T) {
+	x := openSized(t, 26, 90, flowData())
+
+	x.press(space, right, down, enter, down, down, applyKey, 'y').run()
+
+	shown := x.frame("left to choose", "✓")
+	mustShow(t, shown, "2 of 2 chosen")
+	mustNotShow(t, shown, "nothing chosen")
+}
+
+// The result of an apply started there stops short of the apply label, as on
+// the list: the label was drawn over it and the text's tail showed after it.
+func TestTheResultOnTheScreenBetweenListsStopsBeforeTheLabel(t *testing.T) {
+	x := openSized(t, 26, 80, flowData())
+	x.a.fail = map[string]error{"srv": errors.New("another reap is changing this directory; wait for it to finish"), "old-notes": errors.New("another reap is changing this directory; wait for it to finish")}
+
+	x.press(space, right, down, enter, down, down, applyKey, 'y').run()
+
+	line := lineWith(x.frame("not done", "left to choose"), "not done")
+	at := strings.Index(line, "apply 2 changes")
+	if at < 0 || strings.TrimSpace(line[at+len("apply 2 changes"):]) != "" {
+		t.Errorf("the label is not the end of the line: %q", line)
+	}
+}

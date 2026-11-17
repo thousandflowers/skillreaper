@@ -66,7 +66,8 @@ it and let its last letter through as a key; a name made of accents alone
 is shown as `(no name)`; a choice that could not be carried out stays chosen,
 so that the same key applies it again once its cause is put right; an apply
 started from the screen after the last row shows what came of it, where it
-showed nothing; a name cut in its
+showed nothing, and that screen counts what was just applied; a delete of a
+row whose file the menu itself changed through another row is not refused; a name cut in its
 middle no longer leaves an accent on the `…`; where the locale cannot draw a
 wide character, the columns after it stay in line.
 
@@ -473,7 +474,7 @@ really injected, with multi-line descriptions read in full.
   says so; `agent:` and list items in a header take a comment after a tab.
 - Run through `npx`, a printed hint names `npx skillreaper`: neither
   `reap` nor `skillreaper` is on the PATH there.
-- No block of commands in the README, INSTALL.md or this file carries a
+- No block of commands in the README, INSTALL.md or the changelog carries a
   `# comment` after a command: pasted into zsh, where `#` is no comment,
   the words after it became arguments. The usage lists are tables; the
   three ways to install are three blocks.
@@ -524,6 +525,27 @@ really injected, with multi-line descriptions read in full.
 - `reap prune --json` marks a weight that was never measured
   (`weight_unknown`, `unmeasured`), and the plan's table by source prints
   `?` for it, not `~0 tok`; `--price NaN` is told it is not a number.
+- `reap delete` says in its question that a skill's whole folder goes, and
+  how many files are in it; a file put in that folder after reap read it
+  stops the delete, as a changed `SKILL.md` does.
+- What the report says can be done about a MUTE row is what reap does:
+  `reap why` no longer sends you to `reap mute` for a skill reached through
+  a link outside the folders reap edits, which `reap mute` refuses; and the
+  line of `reap gap` for skills a bulk `reap mute` leaves alone points at
+  `reap why` instead of saying reap cannot mute them.
+- The report's DO block and the plan of `reap prune` give a server's
+  measured weight, and say `weight not measured` or `at least` where it
+  was not: the DO block said `~0 tok/session reclaimed`, the plan `?` for
+  every server. `reap why --json` marks such a weight (`weight_unknown`).
+- Every reader of a skill's header ends it at the same line. A key written
+  after an indented `---` in the description was missed by one of them, so
+  a manual-only skill was weighed as if Claude loaded it. A value that is
+  only a comment (`allowed-tools: # none yet`) is no value.
+- A hook's Windows path keeps its backslashes; `reap keep --list` prints
+  names without control characters; `reap route --md` escapes names; the
+  warnings count `1 day`; the line on weight never measured names MCP
+  servers alone, since hooks are not judged; `reap why` on a prose file
+  gives the file's size, not a `description`.
 
 ### Behaviour changes on the command line
 
@@ -694,6 +716,15 @@ the same cache files and the same checks. What to know before running it:
 - A folder left in `skills-reinvest` is linked again only when it holds
   that skill and nothing else; a server that could not be noted down is
   not promised a later mute.
+- With `--online`, candidates that fit but have nothing unused to trade
+  for them are said to be that, not `nothing verified`.
+- A grouping answer that places no session is no answer: saved as one, it
+  gave `0 kinds of work` for a week with no call made. A key in what
+  `claude -p` said is masked before the line is cut, not after.
+- A folder left in `skills-reinvest` may hold the `.DS_Store` Finder
+  leaves, and any other file in it is named; the text after a stop tells
+  two skills of one name apart, and gives no command to finish a swap that
+  was being undone.
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

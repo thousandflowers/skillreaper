@@ -223,6 +223,7 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 		}
 		if err == nil {
 			notes[e.ID] = prune.Note{Tokens: row.Tokens, Platform: row.Platform, Source: row.Source}
+			a.seen.refresh(row) // a link to what was pruned is not "changed by someone else"
 		}
 		return ignoreGone(err)
 	case menu.Delete:
@@ -244,6 +245,9 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 	case menu.Unmute:
 		// The row's own file first: a name can be muted in several tools at once.
 		if _, err := mute.UnmutePath(a.dir, row.Path); !errors.Is(err, mute.ErrNotMuted) {
+			if err == nil {
+				a.seen.refresh(row)
+			}
 			return err
 		}
 		names, err := mute.List(a.dir)

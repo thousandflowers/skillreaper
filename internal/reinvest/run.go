@@ -140,6 +140,7 @@ type outcome struct {
 	gaps     []kind
 	swaps    []swap
 	rejected []rejection
+	fit      int // candidates that passed the check, swap or no swap
 }
 
 func (a *app) run(opts options) error {
@@ -233,7 +234,7 @@ func (a *app) pipeline(opts options) (outcome, error) {
 		pool = withoutSkills(pool, s.Mute)
 	}
 	swaps := append(settled, build(bestPerGap(passing, opts.max), passing, pool)...)
-	return outcome{state: state, gaps: gaps, swaps: swaps, rejected: rejected}, nil
+	return outcome{state: state, gaps: gaps, swaps: swaps, rejected: rejected, fit: len(passing)}, nil
 }
 
 type gapCandidates struct {
@@ -295,6 +296,9 @@ func (a *app) show(result outcome, dryRun bool) error {
 	switch {
 	case len(result.swaps) == 0:
 		line := "  no swaps: nothing verified for your gaps"
+		if result.fit > 0 { // verified, and no swap: nothing of theirs to put in their place
+			line = fmt.Sprintf("  no swaps: %d fit, but nothing unused of about their weight to trade for them", result.fit)
+		}
 		if len(told) == 0 {
 			line += " · details: " + a.reportPath()
 		}

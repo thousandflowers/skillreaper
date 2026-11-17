@@ -6,8 +6,8 @@
    [1m~$2.39[0m  per month, $3.00/M assumed
 [2m  371 of them marked REAP[0m
 [2m  monthly figures are extrapolated from 29 days of history[0m
-[2m  a floor, not a total: 11 unused items (MCP servers, hooks) carry weight that[0m
-[2m  was never measured[0m
+[2m  a floor, not a total: 11 unused items (MCP servers) carry weight that was[0m
+[2m  never measured[0m
 
   [1mutilization 1%[0m  7/378 items fired · ~278/22998 tok touched (30d)
 
@@ -72,7 +72,7 @@
 [2m      history.[0m
 
   [36m── DO ────────────────────────────────────────────────────────────────────────[0m
-    [1mreap prune[0m   371 items · ~22,720 tok/session reclaimed
+    [1mreap prune[0m   371 items · at least ~22,720 tok/session reclaimed
     [1mreap mute[0m    362 items · ~21,151 tok · import-timesheet, render-playlist, r…
 
 [2m  All estimates use chars/3.7 ≈ tokens. Prune is reversible: reap restore --all[0m

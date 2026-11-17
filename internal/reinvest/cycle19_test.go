@@ -278,3 +278,88 @@ func TestCycle21_a_left_folder_is_linked_only_when_it_is_the_skill_alone(t *test
 		t.Errorf("a folder with a file beside the skill: %v", err)
 	}
 }
+
+// "Nothing verified" is not said of candidates that were: with nothing unused
+// to trade for them there is no swap, and the line says that.
+func TestCycle22_no_swap_for_candidates_that_fit_says_why(t *testing.T) {
+	a := fakeApp(t)
+	if err := a.show(outcome{fit: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	if said := termText(a); strings.Contains(said, "nothing verified") || !strings.Contains(said, "1 fit, but nothing unused") {
+		t.Errorf("the line reads:\n%s", said)
+	}
+}
+
+// A key is masked before the line is cut to its tail: cut first, a key that
+// began before the cut was no longer a key to the mask.
+func TestCycle22_a_key_cut_by_the_tail_is_still_masked(t *testing.T) {
+	key := "sk-ant-api03-" + strings.Repeat("Ab3dEf9", 13)
+	line := lastLine("request failed for " + key + " " + strings.Repeat("z", 100))
+	if strings.Contains(line, "Ab3dEf9Ab3dEf9") {
+		t.Errorf("part of the key is shown: %q", line)
+	}
+}
+
+// What Finder leaves in a folder is not "other files"; anything else is, and
+// is named.
+func TestCycle22_a_left_folder_may_hold_what_finder_leaves(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	c := candidate{Slug: "fix-ui", Doc: "---\nname: fix-ui\ndescription: d\n---\nbody\n"}
+	home := filepath.Join(writtenDir(), c.Slug)
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, text := range map[string]string{skillFile: c.Doc, ".DS_Store": "x"} {
+		if err := os.WriteFile(filepath.Join(home, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := create(c); err != nil {
+		t.Errorf("a folder with a .DS_Store: %v", err)
+	}
+	if err := os.Remove(filepath.Join(skillsDir(), c.Slug)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "run.sh"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := create(c); err == nil || !strings.Contains(err.Error(), "run.sh") {
+		t.Errorf("a folder with another file: %v", err)
+	}
+}
+
+// Two skills of one name are two skills in the stop text too, and a swap that
+// was being undone is not told how to finish.
+func TestCycle22_the_stop_text_tells_skills_of_one_name_apart(t *testing.T) {
+	c := candidate{Kind: kindSkill, Name: "new", Slug: "new", Created: true}
+	a, b := skill{Name: "dup", Path: "/p/dup/SKILL.md"}, skill{Name: "dup", Path: "/s/dup/SKILL.md"}
+	lines := strings.Join(stoppedHalfway(c, false, nil, []skill{a}, "", []skill{a, b}), "\n")
+	if !strings.Contains(lines, "to finish: reap mute /s/dup/SKILL.md") {
+		t.Errorf("the second copy is not in the text:\n%s", lines)
+	}
+	if kept := withoutFinish([]string{"  ·  not muted: x", "  →  to finish: reap mute x"}); len(kept) != 1 {
+		t.Errorf("while undoing, the finish line stays: %q", kept)
+	}
+}
+
+// A grouping answer that is a list and places no session is no answer: saved
+// as one, it left a week of "0 kinds of work" with no call made.
+func TestCycle22_a_grouping_that_places_nothing_is_no_answer(t *testing.T) {
+	a := fakeApp(t)
+	a.runProcess = func(procSpec) procResult {
+		return procResult{stdout: `[{"name": "release work", "sessions": ["sess-0", "sess-1"], "delegable": true}]`}
+	}
+	sessions := []session{{ID: "a", Prompts: []string{"release it"}}, {ID: "b", Prompts: []string{"release again"}}}
+
+	groups, answered, err := a.groupSessions(sessions)
+
+	if err != nil || answered || len(groups) != 0 {
+		t.Errorf("groups %d, answered %v, err %v", len(groups), answered, err)
+	}
+	a.failed("grouping your work got no answer")
+	if said := termText(a); !strings.Contains(said, "claude -p: ") {
+		t.Errorf("no reason for an answer of the wrong shape:\n%s", said)
+	}
+}

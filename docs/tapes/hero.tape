@@ -1,6 +1,6 @@
 # hero.tape - `reap --agent` against the hero fixture, for posts and threads.
 #
-#   cd docs/tapes && vhs hero.tape
+#   (cd docs/tapes && vhs hero.tape)
 #
 # Writes /tmp/skillreaper-hero.gif, deliberately outside the repo: this GIF is
 # for posts, not for the README, and docs/gifs/ is gitignored anyway.

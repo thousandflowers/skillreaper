@@ -113,14 +113,20 @@ func create(c candidate) error {
 		// Left by an earlier run whose link was deleted since. With the same
 		// text it is that skill: link it again. Another text is not replaced.
 		was, readErr := os.ReadFile(filepath.Join(home, skillFile))
+		var others []string // beside the skill, and not what Finder leaves in a folder it was shown
 		entries, _ := os.ReadDir(home)
+		for _, e := range entries {
+			if e.Name() != skillFile && e.Name() != ".DS_Store" {
+				others = append(others, e.Name())
+			}
+		}
 		switch {
 		case readErr != nil:
 			return fmt.Errorf("%s is left from an earlier run, with no SKILL.md that can be read: move it away and run reinvest again", home)
 		case string(was) != c.Doc:
 			return fmt.Errorf("%s is left from an earlier run, with another text: move it away and run reinvest again", home)
-		case len(entries) != 1: // loaded with the skill, and never shown
-			return fmt.Errorf("%s is left from an earlier run, with other files beside SKILL.md: move it away and run reinvest again", home)
+		case len(others) > 0: // loaded with the skill, and never shown
+			return fmt.Errorf("%s is left from an earlier run, with other files beside SKILL.md (%s): move it away and run reinvest again", home, printable(strings.Join(others, ", ")))
 		}
 	} else {
 		if err := os.MkdirAll(writtenDir(), sharedDir); err != nil {
@@ -443,7 +449,7 @@ func (a *app) carryOut(s swap) (log []string, applied bool) {
 	defer setStopHook(func() {
 		lines := stoppedHalfway(c, installing, log, muted, inHand, s.Mute)
 		if undoing {
-			lines = append(lines, "  ↺  it was undoing the swap after a mute failed: what is listed here may or may not be undone yet")
+			lines = append(withoutFinish(lines), "  ↺  it was undoing the swap after a mute failed: what is listed here may or may not be undone yet")
 		}
 		for _, line := range lines {
 			fmt.Fprintln(a.term, line)
@@ -499,9 +505,14 @@ func stoppedHalfway(c candidate, installing bool, log []string, muted []skill, i
 		lines = append(lines, "  ?  "+c.Name+": its install was cut short (it may be half there)")
 	}
 	lines = append(lines, log...)
-	done := map[string]bool{inHand: true}
+	done := map[string]bool{} // by path: two skills can share a name
+	for _, x := range all {
+		if x.Name == inHand && inHand != "" {
+			done[x.target()] = true
+		}
+	}
 	for _, x := range muted {
-		done[x.Name] = true
+		done[x.target()] = true
 		lines = append(lines, "  ✓  muted "+x.Name+" ("+undoMute(x)+" undoes)")
 	}
 	if inHand != "" && (len(muted) == 0 || muted[len(muted)-1].Name != inHand) {
@@ -509,7 +520,7 @@ func stoppedHalfway(c candidate, installing bool, log []string, muted []skill, i
 	}
 	var rest, finish []string
 	for _, x := range all {
-		if !done[x.Name] {
+		if !done[x.target()] {
 			rest = append(rest, x.Name)
 			finish = append(finish, reapLine("mute", x))
 		}
@@ -591,4 +602,10 @@ func reapLine(verb string, x skill) string {
 		cmd = "CLAUDE_CONFIG_DIR=" + scan.ShellArg(dir) + " " + cmd
 	}
 	return cmd
+}
+
+// withoutFinish drops the lines that say how to finish a swap by hand: a swap
+// that was being undone is not to be finished.
+func withoutFinish(lines []string) []string {
+	return slices.DeleteFunc(lines, func(line string) bool { return strings.HasPrefix(line, "  →  to finish") })
 }

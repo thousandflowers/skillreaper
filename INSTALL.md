@@ -127,10 +127,12 @@ reap version
 copy), the descriptions `reap mute` took out, your keep list and the backups
 of `.claude.json`. Before you uninstall, put back what you want to keep. The
 third line is for those who ran `install-hook`: without it `settings.json`
-goes on calling a binary that is gone.
+goes on calling a binary that is gone. `--yes` is there so that the block
+can be pasted whole: without it the first command asks, and what was pasted
+after it is dropped.
 ```bash
-reap restore --all
-reap unmute --all
+reap restore --all --yes
+reap unmute --all --yes
 reap uninstall-hook
 ```
 After that the folder can go. Whatever is still in it goes for good.

@@ -67,7 +67,7 @@ func RemoveKeep(claudeDir, arg string) (string, error) {
 		if len(f.Keep) == 0 {
 			return "", fmt.Errorf("not kept: %s (the keep list is empty)", arg)
 		}
-		return "", fmt.Errorf("not kept: %s. Kept items: %s", arg, strings.Join(f.Keep, ", "))
+		return "", fmt.Errorf("not kept: %s. Kept items: %s", arg, scan.SafeText(strings.Join(f.Keep, ", ")))
 	case 1:
 	default:
 		return "", fmt.Errorf("%s matches %s; use the full key", arg, strings.Join(matches, ", "))

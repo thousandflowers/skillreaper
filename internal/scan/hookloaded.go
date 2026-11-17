@@ -104,6 +104,13 @@ func sessionStartCommands(installPath string) []string {
 
 var unquoted = strings.NewReplacer(`"`, "", "'", "")
 
+// escapes says whether the backslash at at escapes what follows it: a space, a
+// quote or another backslash. Before anything else it is a character of the
+// word, which keeps a Windows path (C:\Users\me) whole.
+func escapes(command string, at int) bool {
+	return at+1 < len(command) && strings.ContainsRune(" \t\"'\\", rune(command[at+1]))
+}
+
 // pluginRootWordRe reads a whole word as a path under the plugin root.
 var pluginRootWordRe = regexp.MustCompile(`^\$\{?(?:CLAUDE_)?PLUGIN_ROOT\}?/(.+)$`)
 
@@ -114,12 +121,12 @@ func shellWords(command string) []string {
 	var word strings.Builder
 	var quote rune
 	begun, escaped := false, false
-	for _, c := range command {
+	for at, c := range command {
 		switch {
 		case escaped: // the character after a backslash is itself
 			word.WriteRune(c)
 			escaped = false
-		case c == '\\' && quote != '\'':
+		case c == '\\' && quote != '\'' && escapes(command, at):
 			escaped, begun = true, true
 		case quote != 0 && c == quote:
 			quote = 0

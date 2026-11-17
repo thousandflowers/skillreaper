@@ -1,13 +1,13 @@
 # menu.tape - the interactive menu (`reap menu`) on a fake stack, for the README
 # and for posts.
 #
-#   cd docs/tapes && vhs menu.tape
+#   (cd docs/tapes && vhs menu.tape)
 #
 # or, while the reap on PATH is a release from before the menu, with a build of
 # this checkout that lives outside the repo:
 #
 #   go build -o /tmp/reap-menu ./cmd/reap           (from the repo root)
-#   cd docs/tapes && REAP=/tmp/reap-menu vhs menu.tape
+#   (cd docs/tapes && REAP=/tmp/reap-menu vhs menu.tape)
 #
 # Writes ../menu-demo.gif, which is docs/menu-demo.gif: tracked, next to
 # reap-demo.gif, because the README embeds it. About 22 seconds, under 1 MB.

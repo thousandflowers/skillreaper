@@ -78,13 +78,21 @@ func (m *Menu) sectionEnd(name string, items []*Row, nextName string, following 
 			}
 			continue
 		}
+		// Chosen, or applied a moment ago from this very screen: an apply
+		// spends the choices, and what it did still counts here.
+		verbOf := func(r *Row) string {
+			if verb := p.get(r); verb != "" {
+				return verb
+			}
+			return m.applied[r]
+		}
 		var done []*Row
 		for _, r := range items {
-			if p.has(r) {
+			if verbOf(r) != "" {
 				done = append(done, r)
 			}
 		}
-		tok, priced := m.weigh(done, func(r *Row) int { return saving(r, p.get(r)) })
+		tok, priced := m.weigh(done, func(r *Row) int { return saving(r, verbOf(r)) })
 		m.s.Erase()
 		h, wd := m.s.Size()
 		y := max(2, h/2-8)
@@ -113,7 +121,7 @@ func (m *Menu) sectionEnd(name string, items []*Row, nextName string, following 
 			m.put(h-2, 3, "esc back, then "+term.ApplyKeyName(m.s)+" to apply", dim)
 		}
 		if notice != "" { // what came of an apply started here, as the list and the card say it
-			m.put(h-3, 3, cut(notice, wd-6), bold)
+			m.put(h-3, 3, cut(notice, m.leftOfApplyLabel(wd, p.size(), 0)), bold)
 		}
 		m.drawApplyLabel(h, wd, p.size(), 0)
 		m.s.Refresh()

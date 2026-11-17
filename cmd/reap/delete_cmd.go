@@ -51,7 +51,12 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		fmt.Fprintf(stdout, "  This is a link: the link goes, and what it points to stays at %s\n", shown(row.LinkTarget))
 	}
 	printChosenNote(stdout, row)
-	if !opts.yes && !confirm(stdin, stderr, fmt.Sprintf("\nDelete %s for good? This cannot be restored, not even with reap restore. [y/N] ", row.Name)) {
+	what := row.Name
+	if _, files := insideOf(prune.Target(row.Item)); files > 0 && row.LinkTarget == "" {
+		// The folder goes, not only the file reap read in it.
+		what += fmt.Sprintf(", its whole folder, %d file%s,", files, map[bool]string{true: "", false: "s"}[files == 1])
+	}
+	if !opts.yes && !confirm(stdin, stderr, fmt.Sprintf("\nDelete %s for good? This cannot be restored, not even with reap restore. [y/N] ", what)) {
 		fmt.Fprintln(stdout, "aborted")
 		return exitNotDone
 	}

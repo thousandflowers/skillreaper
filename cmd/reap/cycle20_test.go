@@ -201,3 +201,109 @@ func TestMenuDeleteAfterItsOwnMuteOfTheSameFile(t *testing.T) {
 		t.Errorf("delete after the menu's own mute: %v", out[0].Err)
 	}
 }
+
+// One day is "1 day" in the warnings too.
+func TestWarningsCountOneDayAsOne(t *testing.T) {
+	deleteHome(t)
+	var out, errOut bytes.Buffer
+	run([]string{"--days", "1", "--no-banner"}, strings.NewReader(""), &out, &errOut)
+	if said := out.String() + errOut.String(); strings.Contains(said, "1 days") {
+		t.Errorf("--days 1:\n%s", said)
+	}
+}
+
+// rowOf finds a scanned row by tool, category and name.
+func rowOf(t *testing.T, rows []report.Row, tool, category, name string) *menu.Row {
+	t.Helper()
+	for _, r := range rows {
+		if string(r.Category) == category && r.Name == name && r.Platform == tool {
+			return menu.NewRow(r)
+		}
+	}
+	t.Fatalf("no %s %s named %s in the report", tool, category, name)
+	return nil
+}
+
+// One file can be two rows: a tool's own folder, and a link to it in another
+// tool's. What the menu itself did to the file through one row is not a change
+// by someone else when the other row is deleted.
+func TestMenuDeleteOfARowWhoseFileTheMenuChangedThroughAnother(t *testing.T) {
+	for _, verb := range []string{menu.Mute, menu.Prune} {
+		home := deleteHome(t)
+		dir := filepath.Join(home, ".claude")
+		rows := reportRows(t)
+		applier := &menuApplier{dir: dir, seen: stampsOf(rows)}
+
+		if out := applier.Apply([]menu.Pick{{Row: rowOf(t, rows, "codex", "skill", "shared"), Verb: verb}}); out[0].Err != nil {
+			t.Fatalf("%s of the codex row: %v", verb, out[0].Err)
+		}
+		if out := applier.Apply([]menu.Pick{{Row: rowOf(t, rows, "claude-code", "skill", "shared"), Verb: menu.Delete}}); out[0].Err != nil {
+			t.Errorf("delete of the link after the menu's own %s: %v", verb, out[0].Err)
+		}
+	}
+}
+
+// addThenYes drops a file into the skill's folder while the question waits.
+type addThenYes struct {
+	t      *testing.T
+	folder string
+	done   bool
+}
+
+func (s *addThenYes) Read(p []byte) (int, error) {
+	if s.done {
+		return 0, io.EOF
+	}
+	s.done = true
+	mustWriteFile(s.t, filepath.Join(s.folder, "sub", "notes.txt"), "precious\n")
+	return copy(p, "y\n"), nil
+}
+
+// A delete takes the skill's whole folder, so the question says so, and a file
+// put in the folder after reap read it stops the delete like a changed
+// SKILL.md does.
+func TestDeleteSaysItTakesTheFolderAndNoticesAFileAddedToIt(t *testing.T) {
+	home := deleteHome(t)
+	folder := filepath.Join(home, ".claude", "skills", "mine")
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"delete", "mine"}, &addThenYes{t: t, folder: folder}, &out, &errOut)
+
+	if said := out.String() + errOut.String(); !strings.Contains(said, "its whole folder, 2 files") {
+		t.Errorf("the question does not say what goes:\n%s", said)
+	}
+	if code == 0 || !strings.Contains(errOut.String(), "changed since reap read it") {
+		t.Errorf("exit %d:\n%s", code, errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(folder, "sub", "notes.txt")); err != nil {
+		t.Errorf("the file added meanwhile is gone: %v", err)
+	}
+}
+
+// The plan's weight column says "?" for a weight that was not measured, not
+// for every server: a measured one shows its tokens, as the total counts them.
+func TestPrunePlanShowsAMeasuredServerWeight(t *testing.T) {
+	var b bytes.Buffer
+	rows := []report.Row{
+		{Item: scan.Item{Category: scan.CatMCP, Name: "srv1", Removable: true}, Verdict: report.VerdictReap, Tokens: 17},
+		{Item: scan.Item{Category: scan.CatMCP, Name: "srv2", Removable: true}, Verdict: report.VerdictReap, WeightUnknown: true},
+	}
+	printPrunePlan(options{}, &b, &report.Report{}, rows, rows, false)
+	said := b.String()
+	if !strings.Contains(said, "~17 tok") || strings.Count(said, "?") != 1 {
+		t.Errorf("plan:\n%s", said)
+	}
+}
+
+// The keep list is printed like every other name: without control characters.
+func TestKeepListPrintsNoControlCharacters(t *testing.T) {
+	home := deleteHome(t)
+	mustWriteFile(t, filepath.Join(home, ".claude", "reaped", "overrides.json"), `{"keep":["skill:ev\u001b[31mil"]}`)
+	for _, args := range [][]string{{"keep", "--list"}, {"keep", "--remove", "zzz-not-kept"}} {
+		var out, errOut bytes.Buffer
+		run(args, strings.NewReader(""), &out, &errOut)
+		if said := out.String() + errOut.String(); strings.Contains(said, "\x1b") || !strings.Contains(said, "31mil") {
+			t.Errorf("%v:\n%q", args, said)
+		}
+	}
+}

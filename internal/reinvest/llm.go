@@ -187,7 +187,9 @@ func (a *app) noteAsk(why string) {
 func lastLine(text string) string {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
 	// Without the keys it may hold: this goes to the terminal.
-	return printable(strings.TrimSpace(redact(lastRunes(lines[len(lines)-1], stderrTail))))
+	// Masked before it is cut: cut first, a key that began before the cut
+	// was no longer a key to the mask.
+	return printable(strings.TrimSpace(lastRunes(redact(lines[len(lines)-1]), stderrTail)))
 }
 
 var wordRE = regexp.MustCompile(`[a-z]{4,}`)
@@ -383,10 +385,21 @@ func (a *app) groupSessions(sessions []session) (groups []*obj, answered bool, e
 	if err != nil {
 		return nil, false, err
 	}
-	if _, isList := out.([]any); !isList {
+	list, isList := out.([]any)
+	if !isList {
+		if out != nil { // an answer, of another shape: say so, the call itself said nothing
+			a.noteAsk("an answer that is not the list that was asked for")
+		}
 		return nil, false, nil
 	}
-	return newGroups(out, sessions, map[int]bool{}), true, nil
+	groups = newGroups(out, sessions, map[int]bool{})
+	if len(list) > 0 && len(groups) == 0 {
+		// Groups that place no session: saved as an answer, a week of "0 kinds
+		// of work" with no call made.
+		a.noteAsk("groups that place none of the sessions")
+		return nil, false, nil
+	}
+	return groups, true, nil
 }
 
 func valueText(o *obj, key string) string {

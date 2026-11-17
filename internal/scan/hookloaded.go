@@ -30,11 +30,23 @@ func hookLoadedSkills(installPath string) map[string]bool {
 	dirs := map[string]bool{"hooks": true}
 	var files []string // scripts at the plugin's root: read alone, not with the README beside them
 	for _, c := range commands {
+		// A path read two ways: cut at what ends a bare word in a shell, and
+		// whole as a quoted word, which may hold a space or a bracket. The
+		// reading that names no file is passed by when it is read.
+		var paths []string
 		for _, m := range pluginRootPathRe.FindAllStringSubmatch(c, -1) {
-			if dir := filepath.Dir(m[1]); dir != "." {
+			paths = append(paths, m[1])
+		}
+		for _, word := range shellWords(c) {
+			if m := pluginRootWordRe.FindStringSubmatch(word); m != nil {
+				paths = append(paths, m[1])
+			}
+		}
+		for _, path := range paths {
+			if dir := filepath.Dir(path); dir != "." {
 				dirs[dir] = true
 			} else {
-				files = append(files, m[1])
+				files = append(files, path)
 			}
 		}
 	}
@@ -92,6 +104,41 @@ func sessionStartCommands(installPath string) []string {
 
 var unquoted = strings.NewReplacer(`"`, "", "'", "")
 
+// pluginRootWordRe reads a whole word as a path under the plugin root.
+var pluginRootWordRe = regexp.MustCompile(`^\$\{?(?:CLAUDE_)?PLUGIN_ROOT\}?/(.+)$`)
+
+// shellWords splits a command at the whitespace outside its quotes and drops
+// the quotes, as a shell does: a quoted path with a space in it is one word.
+func shellWords(command string) []string {
+	var words []string
+	var word strings.Builder
+	var quote rune
+	begun := false
+	for _, c := range command {
+		switch {
+		case quote != 0 && c == quote:
+			quote = 0
+		case quote != 0:
+			word.WriteRune(c)
+		case c == '"' || c == '\'':
+			quote, begun = c, true
+		case c == ' ' || c == '\t' || c == '\n':
+			if begun {
+				words = append(words, word.String())
+				word.Reset()
+				begun = false
+			}
+		default:
+			word.WriteRune(c)
+			begun = true
+		}
+	}
+	if begun {
+		words = append(words, word.String())
+	}
+	return words
+}
+
 // hookWordRe finds what could be a path in a hook command.
 var hookWordRe = regexp.MustCompile(`[~$\w./{}-]+`)
 
@@ -115,7 +162,7 @@ func userHookLoadedSkills(dir string) map[string]bool {
 				text := h.Command
 				// A quote between a variable and the rest of a path ("$HOME"/x) is
 				// nothing to the shell: read the words without the quotes.
-				for _, word := range hookWordRe.FindAllString(unquoted.Replace(h.Command), -1) {
+				for _, word := range append(hookWordRe.FindAllString(unquoted.Replace(h.Command), -1), shellWords(h.Command)...) {
 					text += hookScripts(underHome(word, home, dir), dir)
 				}
 				for _, m := range skillFileRe.FindAllStringSubmatch(text, -1) {

@@ -101,7 +101,7 @@ func BuildAPM(r *Report, cwd string, lock map[string]string, declared map[string
 		}
 		uses := 0
 		for key := range repoKeys {
-			uses += repoUses(r, row.Name, key)
+			uses += repoUses(r, row.Item, key)
 		}
 		if uses == 0 {
 			continue // didn't fire in this repo within the window
@@ -371,17 +371,33 @@ func apmSiblingPath(diffPath, cwd string) string {
 	return ""
 }
 
-// repoUses sums a skill's firings in one repo bucket, under its full name and
-// bare slash-command suffix (mirrors lookupUses aliasing).
-func repoUses(r *Report, name, repoKey string) int {
+// repoUses sums a skill's firings in one repo bucket, under every name its
+// uses are filed under (as lookupUses reads them).
+func repoUses(r *Report, it scan.Item, repoKey string) int {
 	if repoKey == "" {
 		return 0
 	}
-	n := r.SkillProjects[name][repoKey]
-	if s := bareSuffix(name); s != "" {
-		n += r.SkillProjects[s][repoKey]
+	return projectUses(r, it)[repoKey]
+}
+
+// projectUses is where an item fired, by project: under each name its uses are
+// counted under, whatever case the transcript wrote it in. Read by one name as
+// written, a skill used as "foo" from the folder "Foo" had fired nowhere.
+func projectUses(r *Report, it scan.Item) map[string]int {
+	keys := map[string]bool{}
+	for _, key := range evidenceKeys(it) {
+		keys[foldKey(key)] = true
 	}
-	return n
+	out := map[string]int{}
+	for name, projects := range r.SkillProjects {
+		if !keys[foldKey(name)] {
+			continue
+		}
+		for project, n := range projects {
+			out[project] += n
+		}
+	}
+	return out
 }
 
 // projectEncodeRe matches every character Claude Code collapses when it names a

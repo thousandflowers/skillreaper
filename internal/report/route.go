@@ -114,7 +114,7 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 			plan.ExposedTok += rs.Tokens
 		default:
 			rs.Tier, rs.Reason = RouteTierRouted, routeReasonRare
-			name, src := routeCategory(r, row.Name)
+			name, src := routeCategory(r, row.Item)
 			key := src + ":" + name
 			c := cats[key]
 			if c == nil {
@@ -136,11 +136,12 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 // routeCategory derives a leaf-router name for a rarely-fired skill from
 // evidence: its namespace prefix ("ecc:plan" → "ecc"), else its dominant firing
 // project, else "misc".
-func routeCategory(r *Report, name string) (catName, source string) {
+func routeCategory(r *Report, it scan.Item) (catName, source string) {
+	name := it.Name
 	if i := strings.IndexByte(name, ':'); i > 0 {
 		return name[:i], "namespace"
 	}
-	if projs := skillProjects(r, name); len(projs) > 0 {
+	if projs := skillProjects(r, it); len(projs) > 0 {
 		top := sortedProjects(projs)
 		if len(top) > 0 {
 			return projectLabel(r, top[0].name), "project"
@@ -149,11 +150,10 @@ func routeCategory(r *Report, name string) (catName, source string) {
 	return "misc", "misc"
 }
 
-// skillProjects returns a skill's project-firing buckets. It is only reached for
-// non-namespaced names (routeCategory handles namespaced skills before calling),
-// so a plain name lookup is sufficient.
-func skillProjects(r *Report, name string) map[string]int {
-	return r.SkillProjects[name]
+// skillProjects returns a skill's project-firing buckets, under every name its
+// uses are counted under.
+func skillProjects(r *Report, it scan.Item) map[string]int {
+	return projectUses(r, it)
 }
 
 // sortRouteSkills orders skills by firing count desc, then tokens desc, then name.
@@ -199,8 +199,8 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 		width := termWidth(w)
 		fmt.Fprintf(w, "\n  %s\n", paint(cBold, "reap route"))
 		for _, l := range wrap(fmt.Sprintf(
-			"Only %d skills survive a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first.",
-			plan.TotalSkills, plan.MinSkills), width, "  ", "  ") {
+			"Only %s a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first.",
+			survivors(plan.TotalSkills), plan.MinSkills), width, "  ", "  ") {
 			fmt.Fprintln(w, paint(cDim, l))
 		}
 		return
@@ -344,7 +344,7 @@ func RenderRoutePlanJSON(w io.Writer, plan *RoutePlan) error {
 // RenderRoutePlanMarkdown writes the plan as Markdown.
 func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 	if plan.Skipped {
-		fmt.Fprintf(w, "# reap route\n\n_Only %d skills survive a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first._\n", plan.TotalSkills, plan.MinSkills)
+		fmt.Fprintf(w, "# reap route\n\n_Only %s a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first._\n", survivors(plan.TotalSkills), plan.MinSkills)
 		return
 	}
 	fmt.Fprintf(w, "# reap route — usage-informed lazy-load plan\n\n")

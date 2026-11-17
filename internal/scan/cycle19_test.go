@@ -97,3 +97,28 @@ func TestFrontmatterCommentAfterATab(t *testing.T) {
 		t.Errorf("skills = %q", got)
 	}
 }
+
+// A path in quotes is one word, whatever it holds: a space, a bracket, an "&".
+// Cut at those, the script was not found and the skill it loads was REAP.
+func TestHookPathInQuotesIsOneWord(t *testing.T) {
+	for _, folder := range []string{"my hooks", "my(dir)", "a&b"} {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		dir := filepath.Join(home, ".claude")
+		cycle19Write(t, filepath.Join(dir, folder, "start.sh"), "cat ~/.claude/skills/plain/SKILL.md\n")
+		cycle19Write(t, filepath.Join(dir, "settings.json"), `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":`+cycle19JSON(t, `bash "$HOME/.claude/`+folder+`/start.sh"`)+`}]}]}}`)
+		if !userHookLoadedSkills(dir)["plain"] {
+			t.Errorf("the user's hook in %q: the script was not read", folder)
+		}
+
+		plugin := t.TempDir()
+		cycle19Write(t, filepath.Join(plugin, folder, "a.sh"), "cat skills/zed/SKILL.md\n")
+		cycle19Write(t, filepath.Join(plugin, "hooks", "hooks.json"), `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":`+cycle19JSON(t, `bash "${CLAUDE_PLUGIN_ROOT}/`+folder+`/a.sh"`)+`}]}]}}`)
+		if !hookLoadedSkills(plugin)["zed"] {
+			t.Errorf("the plugin's hook in %q: the script was not read", folder)
+		}
+	}
+	if got := shellWords(`a "b c"'d' e  "g`); len(got) != 4 || got[1] != "b cd" || got[3] != "g" {
+		t.Errorf("words: %q", got)
+	}
+}

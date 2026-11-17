@@ -105,13 +105,7 @@ func manifestPath(row Row, claudeDir string) string {
 // manifestProjects counts projects across every name the skill fired under, as
 // the use count does.
 func manifestProjects(r *Report, it scan.Item) int {
-	projects := map[string]bool{}
-	for _, key := range rawKeys(it) {
-		for p := range r.SkillProjects[key] {
-			projects[p] = true
-		}
-	}
-	return len(projects)
+	return len(projectUses(r, it))
 }
 
 // findManifestSkill matches by exact key, then by bare suffix of a namespaced
@@ -162,6 +156,11 @@ func RenderManifestMarkdown(w io.Writer, m Manifest) {
 		fmt.Fprintf(w, "- **Hooks present:** none\n")
 	}
 	u := m.UsageWindow
-	fmt.Fprintf(w, "- **Observed usage (%dd):** %d sessions · %d uses · %d errors · %d project(s) · last used %s · verdict %s\n",
-		u.Days, u.Sessions, u.Uses, u.Errors, u.Projects, u.LastUsed, u.Verdict)
+	fmt.Fprintln(w, usageLine(u))
+}
+
+// usageLine is the manifest's line of what was observed.
+func usageLine(u ManifestUsage) string {
+	return fmt.Sprintf("- **Observed usage (%dd):** %s · %s · %s · %s · last used %s · verdict %s",
+		u.Days, nOf(u.Sessions, "session"), nOf(u.Uses, "use"), nOf(u.Errors, "error"), nOf(u.Projects, "project"), u.LastUsed, u.Verdict)
 }

@@ -152,9 +152,9 @@ func summaryFor(row Row) string {
 	case ReasonUnused:
 		return "zero uses in the evidence window"
 	case ReasonBroken:
-		return fmt.Sprintf("invoked but only ever errored (%d error(s)) — broken, not merely cold", row.ErrorCount)
+		return fmt.Sprintf("invoked but only ever errored (%s) — broken, not merely cold", nOf(row.ErrorCount, "error"))
 	case ReasonUsed:
-		return fmt.Sprintf("used %d time(s) in the window", row.Uses)
+		return fmt.Sprintf("used %s in the window", nOf(row.Uses, "time"))
 	case ReasonHeavyRare:
 		return "used, but heavy and fired in too few sessions to justify the per-session weight"
 	case ReasonTiny:
@@ -245,7 +245,7 @@ func recommendationFor(row Row, sessions int, in ExplainInput) string {
 			if need < 1 {
 				need = 1
 			}
-			return fmt.Sprintf("collect ~%d more session(s) until the verdict stabilizes", need)
+			return fmt.Sprintf("collect ~%d more %s until the verdict stabilizes", need, Plural(need, "session"))
 		}
 	default:
 		return "report-only item — no verdict"
@@ -330,12 +330,12 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 	field("last seen", e.LastSeen)
 
 	if e.Installed != "unknown" {
-		field("installed", fmt.Sprintf("%s (%d days ago)", e.Installed, e.InstalledAgeDays))
+		field("installed", fmt.Sprintf("%s (%s ago)", e.Installed, nOf(e.InstalledAgeDays, "day")))
 		grace := "within grace period"
 		if e.GraceExpired {
 			grace = "grace period expired"
 		}
-		field("", fmt.Sprintf("%s (grace: %d days)", grace, e.GraceDays))
+		field("", fmt.Sprintf("%s (grace: %s)", grace, nOf(e.GraceDays, "day")))
 	} else {
 		field("installed", "unknown")
 	}

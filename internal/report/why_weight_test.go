@@ -23,7 +23,7 @@ func TestWhyRareDoesNotAskForMoreSessions(t *testing.T) {
 	}
 	// Too few sessions is still the case where more of them change the verdict.
 	few := recommendationFor(Row{Verdict: VerdictReview, Reason: ReasonNeedsData}, 4, ExplainInput{MinSessions: 10})
-	if !strings.Contains(few, "collect ~6 more session(s)") {
+	if !strings.Contains(few, "collect ~6 more sessions") {
 		t.Errorf("needs-data hint = %q", few)
 	}
 }
@@ -95,11 +95,11 @@ func TestWhyCountsSessionsAgainstTheScaledMinimum(t *testing.T) {
 	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
 	in := ExplainInput{MinSessions: 60, WindowDays: 30, Now: now}
 	inside := Row{Item: scan.Item{Name: "x", Category: scan.CatSkill, InstalledAt: now.AddDate(0, 0, -20)}, Verdict: VerdictReview, Reason: ReasonNeedsData}
-	if got := recommendationFor(inside, 12, in); !strings.Contains(got, "collect ~8 more session(s)") {
+	if got := recommendationFor(inside, 12, in); !strings.Contains(got, "collect ~8 more sessions") {
 		t.Errorf("installed 20 days ago: %q", got)
 	}
 	before := Row{Item: scan.Item{Name: "x", Category: scan.CatSkill, InstalledAt: now.AddDate(0, 0, -200)}, Verdict: VerdictReview, Reason: ReasonNeedsData}
-	if got := recommendationFor(before, 12, in); !strings.Contains(got, "collect ~48 more session(s)") {
+	if got := recommendationFor(before, 12, in); !strings.Contains(got, "collect ~48 more sessions") {
 		t.Errorf("installed before the window: %q", got)
 	}
 }

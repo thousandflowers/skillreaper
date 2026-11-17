@@ -129,3 +129,48 @@ func TestRouteCountsItsSurvivors(t *testing.T) {
 		t.Errorf("one: %q", got)
 	}
 }
+
+// Where a skill fired is looked up as its uses are: whatever the case the
+// transcript wrote, and under the name in its header. apm told the person to
+// drop a skill that had fired in the repo; manifest said "0 projects".
+func TestProjectsOfASkillAreFoundAsItsUsesAre(t *testing.T) {
+	r := &Report{SkillProjects: map[string]map[string]int{"foo": {"projx": 1}, "fm-name": {"projx": 2}}}
+	cased := scan.Item{Category: scan.CatSkill, Name: "Foo"}
+	aliased := scan.Item{Category: scan.CatSkill, Name: "folder-name", FrontmatterName: "fm-name"}
+
+	if got := manifestProjects(r, cased); got != 1 {
+		t.Errorf("manifest: Foo fired in %d projects", got)
+	}
+	if got := repoUses(r, cased, "projx") + repoUses(r, aliased, "projx"); got != 3 {
+		t.Errorf("apm: %d uses in the repo, want 3", got)
+	}
+	if got := skillProjects(r, cased); got["projx"] != 1 {
+		t.Errorf("route: Foo's projects are %v", got)
+	}
+}
+
+// The counts that stood in a fixed plural.
+func TestOneOfAThingIsSingularInTheRemainingViews(t *testing.T) {
+	_, unit := Headline{KnowsFired: true, NeverFired: 1, Loaded: 1}.Figure()
+	mustHave := func(got, want string) {
+		t.Helper()
+		if !strings.Contains(got, want) {
+			t.Errorf("%q does not hold %q", got, want)
+		}
+	}
+	mustHave(unit, "item never fired")
+	_, unit = Headline{Reaped: 1}.Figure()
+	mustHave(unit, "item marked REAP")
+	var route, routeMD, why bytes.Buffer
+	plan := &RoutePlan{Skipped: true, TotalSkills: 1, MinSkills: 5}
+	RenderRoutePlan(&route, plan, false)
+	RenderRoutePlanMarkdown(&routeMD, plan)
+	mustHave(route.String(), "Only 1 skill survives a prune")
+	mustHave(routeMD.String(), "Only 1 skill survives a prune")
+	RenderWhy(&why, Explanation{Name: "x", Installed: "2026-11-16", InstalledAgeDays: 1, GraceDays: 1}, false)
+	mustHave(why.String(), "(1 day ago)")
+	mustHave(why.String(), "(grace: 1 day)")
+	mustHave(summaryFor(Row{Verdict: VerdictKeep, Reason: ReasonUsed, Uses: 1}), "used 1 time in the window")
+	mustHave(summaryFor(Row{Verdict: VerdictReap, Reason: ReasonBroken, ErrorCount: 1}), "(1 error)")
+	mustHave(usageLine(ManifestUsage{Days: 30, Sessions: 1, Uses: 1, Errors: 0, Projects: 1, LastUsed: "never", Verdict: "KEEP"}), "1 session · 1 use · 0 errors · 1 project ·")
+}

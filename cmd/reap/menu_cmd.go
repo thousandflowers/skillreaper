@@ -76,7 +76,7 @@ func cmdMenu(opts options, stdout, stderr io.Writer) int {
 		return 1
 	}
 	defer screen.Close() // a panic in the menu must not leave the shell a raw, blank screen
-	applier := &menuApplier{dir: opts.claudeDir, hold: screen.Hold}
+	applier := &menuApplier{dir: opts.claudeDir, hold: screen.Hold, seen: stampsOf(data.Report.Rows)}
 	runMenu(screen, data, applier)
 	screen.Close()
 	// Only now: a line printed over the menu would be lost with its screen.
@@ -135,6 +135,8 @@ type menuApplier struct {
 	// hold makes Ctrl-C wait for the item in hand; nil where there is no screen.
 	hold     func() (release func())
 	warnings []string
+	// seen is each item's file as the menu's report read it; nil checks nothing.
+	seen stamps
 }
 
 func (a *menuApplier) Apply(picks []menu.Pick) []menu.Outcome {
@@ -224,6 +226,9 @@ func (a *menuApplier) one(pk menu.Pick, notes map[string]prune.Note, disabled ma
 		}
 		return ignoreGone(err)
 	case menu.Delete:
+		if err := a.seen.changed(row); err != nil {
+			return err
+		}
 		if row.Category == scan.CatMCP {
 			return ignoreGone(prune.DeleteMCP(a.dir, row.Path, serverScope(row), row.DiskName()))
 		}

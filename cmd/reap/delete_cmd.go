@@ -38,6 +38,7 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 	row := rows[0]
+	seen := stampsOf(rows[:1]) // before the question: what is there when it is asked
 	if refuseKept(opts, row, stderr) {
 		return 1
 	}
@@ -67,6 +68,10 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 	}
 	if nowKept(row) {
 		fmt.Fprintf(stderr, "error: %s was %s\n", row.Name, keptMeanwhile)
+		return 1
+	}
+	if err := seen.changed(row); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
 	if row.Category == scan.CatMCP {

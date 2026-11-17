@@ -86,9 +86,12 @@ func TestNothingToReapPointsAtTheWarnings(t *testing.T) {
 	}
 	var out, errOut bytes.Buffer
 
-	run([]string{"prune", "--yes", "--no-cache"}, strings.NewReader(""), &out, &errOut)
+	for _, verb := range []string{"prune", "mute"} {
+		out.Reset()
+		run([]string{verb, "--yes", "--no-cache"}, strings.NewReader(""), &out, &errOut)
 
-	if !strings.Contains(out.String(), "run reap to see what is held back, and why") {
-		t.Errorf("nothing says the report has a warning:\n%s%s", out.String(), errOut.String())
+		if !strings.Contains(out.String(), "run reap to see what is held back, and why") {
+			t.Errorf("%s: nothing says the report has a warning:\n%s%s", verb, out.String(), errOut.String())
+		}
 	}
 }

@@ -80,15 +80,19 @@ Download from the
 
 Single static binary per archive. No dependencies.
 
+The example is macOS Apple Silicon: swap the filename for your row in the
+table above. `latest` resolves to the newest release, so the block cannot go
+stale. It is one chain: a download that fails, or a checksum that does not
+match, stops it there and installs nothing. The checksum line must say `OK`
+(on Linux write `sha256sum` in place of `shasum -a 256`). The archive ships
+the binary as `skillreaper`; the `mv` renames it to `reap`.
+
 ```bash
-# Example: macOS Apple Silicon. `latest` resolves to the newest release, so this
-# block cannot go stale — swap the filename for your row in the table above.
-set -e   # stop at the first line that fails: a failed download or a checksum that does not match installs nothing
-curl -fLO https://github.com/thousandflowers/skillreaper/releases/latest/download/skillreaper_darwin_arm64.tar.gz
-curl -fLO https://github.com/thousandflowers/skillreaper/releases/latest/download/checksums.txt
-shasum -a 256 -c --ignore-missing checksums.txt   # must say OK; on Linux: sha256sum -c --ignore-missing checksums.txt
-tar xzf skillreaper_darwin_arm64.tar.gz
-mv skillreaper /usr/local/bin/reap   # the archive ships the binary as skillreaper; rename to reap
+curl -fLO https://github.com/thousandflowers/skillreaper/releases/latest/download/skillreaper_darwin_arm64.tar.gz &&
+curl -fLO https://github.com/thousandflowers/skillreaper/releases/latest/download/checksums.txt &&
+shasum -a 256 -c --ignore-missing checksums.txt &&
+tar xzf skillreaper_darwin_arm64.tar.gz &&
+mv skillreaper /usr/local/bin/reap &&
 rm skillreaper_darwin_arm64.tar.gz checksums.txt
 ```
 

@@ -421,8 +421,8 @@ really injected, with multi-line descriptions read in full.
   A file that begins with a byte order mark and was edited while muted
   gets its description back.
 - `reap restore` of a server into a config whose `mcpServers` is `null` or
-  a list says so, where it said `not found`; `reap prune` with nothing to
-  reap says when the report has warnings.
+  a list says so, where it said `not found`; `reap prune` and `reap mute`
+  with nothing to do say when the report has warnings.
 - The README lists every reason a verdict can carry; INSTALL.md's download
   block stops at a failed download or checksum; the plugin's skill repeats
   `--claude-dir` on the prune it runs.

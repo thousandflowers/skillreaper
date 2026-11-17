@@ -87,6 +87,7 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		}
 		if !opts.quiet {
 			fmt.Fprintln(stdout, "Nothing to mute.")
+			warningNote(stdout, r)
 		}
 		return 0
 	}

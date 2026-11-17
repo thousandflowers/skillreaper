@@ -222,10 +222,7 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 			return 0
 		}
 		fmt.Fprintln(stdout, "Nothing to reap. Your stack is clean (or evidence is insufficient).")
-		if n := len(r.Warnings); n > 0 {
-			// Clean and "could not tell" are not the same: say which this may be.
-			fmt.Fprintf(stdout, "The report has %d %s: run reap to see what is held back, and why.\n", n, report.Plural(n, "warning"))
-		}
+		warningNote(stdout, r)
 		printNotes(stdout, "", notRemovable, refused)
 		if r.MutedCount > 0 {
 			// Muted items are not gone, and not "clean": they are still there and
@@ -688,4 +685,12 @@ func keptSince(opts options) (func(report.Row) bool, error) {
 	return func(row report.Row) bool {
 		return kept[override.ItemKey(string(row.Category), row.DiskName())]
 	}, nil
+}
+
+// warningNote follows a "nothing to do": clean and "could not tell" are not
+// the same, and a report with warnings may be the second.
+func warningNote(w io.Writer, r *report.Report) {
+	if n := len(r.Warnings); n > 0 {
+		fmt.Fprintf(w, "The report has %d %s: run reap to see what is held back, and why.\n", n, report.Plural(n, "warning"))
+	}
 }

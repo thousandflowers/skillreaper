@@ -303,3 +303,28 @@ func TestRemoveMCPRefusesCommentedConfigCleanly(t *testing.T) {
 		t.Errorf("config changed: %s", b)
 	}
 }
+
+// With nothing to put a server back into, the restore says what to fix: it
+// said "not found" and no more.
+func TestServerRestoreSaysWhatIsMissing(t *testing.T) {
+	for _, servers := range []string{"null", "[]"} {
+		home := t.TempDir()
+		claude := filepath.Join(home, ".claude")
+		if err := os.MkdirAll(claude, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cfg := filepath.Join(home, ".claude.json")
+		mustWrite(t, cfg, sampleConfig)
+		e, err := RemoveMCP(claude, cfg, "", "one")
+		if err != nil {
+			t.Fatal(err)
+		}
+		mustWrite(t, cfg, `{"mcpServers": `+servers+`, "a": 1}`)
+
+		err = Restore(claude, e.ID)
+
+		if err == nil || !strings.Contains(err.Error(), "has no mcpServers object to put one back into") {
+			t.Errorf("mcpServers %s: %v", servers, err)
+		}
+	}
+}

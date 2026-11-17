@@ -398,6 +398,31 @@ really injected, with multi-line descriptions read in full.
   after 30 seconds of a slow one.
 - Installed with npm into a folder you cannot write (`sudo npm i -g`), the
   binary goes to `~/.cache/skillreaper/<version>/` instead of failing.
+- The headline's numbers add up when a muted skill has fired: it was taken
+  off the never-fired, among which it never was, and "held back" came out
+  one short for each.
+- An agent that a plugin's own `settings.json` runs the session as is KEEP
+  (`main-agent`), and `settings.local.json` has the last word on which
+  agent that is.
+- A SessionStart hook of yours is followed into the scripts beside the one
+  it names, and through `$CLAUDE_CONFIG_DIR`; a hook path that is relative
+  is the project's and is not read against the folder reap runs in.
+- Three things no longer protect a skill or an agent that nothing uses: a
+  README at a plugin's root that lists the plugin's skills, the word
+  `agent:` inside a skill's description, and `skills: null` in an agent.
+- `reap unmute` after one that was cut short finds the description back
+  and clears the entry. It failed on the missing copy at every run, and
+  `unmute --all` could not finish.
+- `reap mute` takes all of a quoted description whose lines are not
+  indented; the first line alone left a header that no longer parsed.
+  A file that begins with a byte order mark and was edited while muted
+  gets its description back.
+- `reap restore` of a server into a config whose `mcpServers` is `null` or
+  a list says so, where it said `not found`; `reap prune` with nothing to
+  reap says when the report has warnings.
+- The README lists every reason a verdict can carry; INSTALL.md's download
+  block stops at a failed download or checksum; the plugin's skill repeats
+  `--claude-dir` on the prune it runs.
 
 ### Behaviour changes on the command line
 
@@ -534,6 +559,11 @@ the same cache files and the same checks. What to know before running it:
 - A candidate is weighed, and its description read, by reap's own reader of
   the header, so the two agree on every quirk (a byte-order mark, an unclosed
   header, a quoted or nested `disable-model-invocation`).
+- With `--online`, each kind of work gets its own searches. The limit was
+  on all of them together, in the order of the alphabet, and with several
+  kinds most were never searched.
+- The command `--dry-run` prints is quoted word by word, so pasting it
+  runs that command and nothing else.
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

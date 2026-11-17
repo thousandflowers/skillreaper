@@ -466,6 +466,15 @@ func restoreWithin(claudeDir string, e Entry) error {
 		return err
 	}
 	backup, err := resolveBackupExisting(claudeDir, e.Backup)
+	if errors.Is(err, os.ErrNotExist) {
+		// An unmute that was cut short put the file back and removed its copy
+		// before the entry came off the list. The description is there: done.
+		if now, readErr := os.ReadFile(path); readErr == nil {
+			if _, has := stripDescription(now); has {
+				return nil
+			}
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -505,7 +514,7 @@ func withDescription(current, backup []byte, backupPath string) ([]byte, error) 
 		return current, nil
 	}
 	lines := bytes.SplitAfter(current, []byte("\n"))
-	if len(lines) == 0 || string(bytes.TrimSpace(lines[0])) != "---" {
+	if len(lines) == 0 || string(bytes.TrimSpace(bytes.TrimPrefix(lines[0], []byte("\xef\xbb\xbf")))) != "---" {
 		return nil, fmt.Errorf("the file has changed and has no header to put the description in; it is saved in %s", backupPath)
 	}
 	for i := 1; i < len(lines); i++ {
@@ -556,10 +565,20 @@ func splitKey(b []byte, anyIndent bool) (rest, removed []byte, found bool) {
 	var out, taken bytes.Buffer
 	out.Write(lines[0])
 	dropping := false // dropping continuation lines of a removed description
+	var quote byte    // the quote a description opened and has not closed yet
 	keyIndent := 0
 	for i := 1; i < len(lines); i++ {
 		line := lines[i]
 		trimmed := bytes.TrimSpace(line)
+		if quote != 0 {
+			// Inside quotes a value runs on to the quote that closes it, however
+			// its lines are indented.
+			taken.Write(line)
+			if openQuotes(trimmed, quote)%2 == 1 {
+				quote = 0
+			}
+			continue
+		}
 		if dropping {
 			// A block/folded scalar's value sits on continuation lines
 			// indented deeper than the key (blank lines belong to it too).
@@ -579,6 +598,10 @@ func splitKey(b []byte, anyIndent bool) (rest, removed []byte, found bool) {
 			keyIndent = indentOf(string(line))
 			dropping = true // also drop any continuation lines that follow
 			taken.Write(line)
+			value := bytes.TrimSpace(trimmed[len("description:"):])
+			if len(value) > 0 && (value[0] == '"' || value[0] == '\'') && openQuotes(value, value[0])%2 == 1 {
+				quote = value[0]
+			}
 			continue
 		}
 		out.Write(line)
@@ -612,4 +635,22 @@ func legacyStripped(backup []byte) []byte {
 // indentOf returns the number of leading whitespace characters in line.
 func indentOf(line string) int {
 	return len(line) - len(strings.TrimLeft(line, " \t"))
+}
+
+// openQuotes counts the quotes of that kind in a line that open or close a
+// value: one escaped with a backslash inside double quotes does neither. An
+// odd count means the line ends inside the value, or closes one begun before.
+// (Two single quotes in a row write one inside single quotes, and count twice,
+// which leaves the count's parity as it should be.)
+func openQuotes(line []byte, quote byte) int {
+	n := 0
+	for i := 0; i < len(line); i++ {
+		switch {
+		case quote == '"' && line[i] == '\\':
+			i++ // the character after a backslash is itself
+		case line[i] == quote:
+			n++
+		}
+	}
+	return n
 }

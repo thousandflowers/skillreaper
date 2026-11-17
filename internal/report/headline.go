@@ -43,7 +43,11 @@ type Headline struct {
 // NewHeadline derives the opening figures from a finished report.
 func NewHeadline(r *Report) Headline {
 	h := Headline{Reaped: r.DeadCount, Muted: r.MutedCount}
+	mutedIdle := 0 // muted and never fired: the ones that are among the never-fired
 	for _, row := range r.Rows {
+		if row.Reason == ReasonMuted && row.Uses == 0 {
+			mutedIdle++
+		}
 		switch {
 		case row.Verdict != VerdictReap:
 		case row.Removable:
@@ -62,7 +66,7 @@ func NewHeadline(r *Report) Headline {
 	h.KnowsFired = true
 	// Clamped, not trusted: the two counts come from different passes, and a
 	// negative "held back" would be printed as a fact.
-	if held := h.NeverFired - h.Reaped - h.Muted; held > 0 {
+	if held := h.NeverFired - h.Reaped - mutedIdle; held > 0 {
 		h.HeldBack = held
 	}
 	return h

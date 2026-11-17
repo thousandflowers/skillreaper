@@ -763,7 +763,12 @@ func serverRestored(claudeDir string, e *Entry, b []byte, path []string) ([]byte
 	if !errors.Is(err, jsonedit.ErrNotFound) {
 		return nil, err
 	}
-	return jsonedit.Set(b, e.Payload, path...)
+	out, err := jsonedit.Set(b, e.Payload, path...)
+	if errors.Is(err, jsonedit.ErrNotFound) {
+		// There is no object to put it back into (mcpServers is null, or a list).
+		return nil, fmt.Errorf("%s has no %s object to put %s back into; fix it by hand, then run reap restore again", e.ConfigPath, strings.Join(path[:len(path)-1], "."), e.Name)
+	}
+	return out, err
 }
 
 func sameJSON(a, b []byte) bool {

@@ -266,7 +266,7 @@ func frontmatterList(b []byte, key string) []string {
 	var out []string
 	add := func(s string) {
 		for _, part := range strings.Split(strings.Trim(strings.TrimSpace(s), "[]"), ",") {
-			if part = strings.Trim(strings.TrimSpace(part), `"'`); part != "" {
+			if part = strings.Trim(strings.TrimSpace(part), `"'`); part != "" && part != "null" && part != "~" {
 				out = append(out, part)
 			}
 		}
@@ -308,8 +308,11 @@ func frontmatterList(b []byte, key string) []string {
 
 // skillAgent is the agent a skill's frontmatter names under `agent:`.
 func skillAgent(b []byte) string {
-	v, _ := frontmatterValue(b, "agent")
-	return strings.TrimSpace(v)
+	// The key at the top level: "agent:" inside a description is words.
+	if named := frontmatterList(b, "agent"); len(named) > 0 {
+		return named[0]
+	}
+	return ""
 }
 
 // SkillAgents names, by platform, the agents some skill runs in.

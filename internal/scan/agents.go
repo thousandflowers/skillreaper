@@ -26,7 +26,13 @@ func ScanAgents(dir, platformID string) ([]Item, []Warning) {
 			filepath.Join(p.InstallPath, "agents"),
 			p.Name+":", "plugin:"+p.FullName, p.InstalledAt, false, platformID)
 	}
-	if main := mainAgents(dir); len(main) > 0 {
+	main := mainAgents(dir)
+	for _, p := range plugins { // a plugin's own settings can name one of its agents
+		for name := range mainAgents(p.InstallPath) {
+			main[strings.ToLower(p.Name)+":"+name] = true
+		}
+	}
+	if len(main) > 0 {
 		for i := range items {
 			items[i].MainAgent = main[strings.ToLower(items[i].Name)] || items[i].FrontmatterName != "" && main[strings.ToLower(items[i].FrontmatterName)]
 		}
@@ -38,8 +44,8 @@ func ScanAgents(dir, platformID string) ([]Item, []Warning) {
 // (`"agent": "name"`, what `claude --agent name` does for one run). Such an
 // agent is the session, and no transcript records it as a use.
 func mainAgents(dir string) map[string]bool {
-	main := map[string]bool{}
-	for _, base := range []string{"settings.json", "settings.local.json"} {
+	agent := ""
+	for _, base := range []string{"settings.json", "settings.local.json"} { // the local file has the last word
 		b, err := readCapped(filepath.Join(dir, base))
 		if err != nil {
 			continue
@@ -48,8 +54,12 @@ func mainAgents(dir string) map[string]bool {
 			Agent string `json:"agent"`
 		}
 		if json.Unmarshal(b, &s) == nil && s.Agent != "" {
-			main[strings.ToLower(s.Agent)] = true
+			agent = s.Agent
 		}
+	}
+	main := map[string]bool{}
+	if agent != "" {
+		main[strings.ToLower(agent)] = true
 	}
 	return main
 }

@@ -358,3 +358,12 @@ func TestFrontmatterListReadsEveryWayAListIsWritten(t *testing.T) {
 		t.Errorf("a header that never closes gives %q", got)
 	}
 }
+
+// "skills: null" is no skill named null.
+func TestFrontmatterListTakesNoValueForNull(t *testing.T) {
+	for _, front := range []string{"skills: null\n", "skills: ~\n", "skills: []\n"} {
+		if got := frontmatterList([]byte("---\n"+front+"---\n"), "skills"); len(got) != 0 {
+			t.Errorf("%q gives %q", front, got)
+		}
+	}
+}

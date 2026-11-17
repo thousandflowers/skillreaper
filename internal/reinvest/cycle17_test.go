@@ -88,3 +88,40 @@ func TestCycle17_a_redirect_never_leaves_https(t *testing.T) {
 		t.Errorf("ten redirects: %v", err)
 	}
 }
+
+// The limit on searches is each gap's own. Taken over all the gaps together,
+// in the order of the alphabet, it left most gaps with no search at all.
+func TestCycle18_every_gap_gets_its_searches(t *testing.T) {
+	a := fakeApp(t)
+	searched := 0
+	a.skillsSh = func(url string) (any, error) {
+		searched++
+		return js(t, `{"skills": []}`), nil
+	}
+	var queries []string
+	for gap := range 6 {
+		for q := range 6 {
+			queries = append(queries, "gap"+string(rune('a'+gap))+" word"+string(rune('a'+q)))
+		}
+	}
+
+	a.searchSkills(queries, nil)
+
+	if searched != len(queries) {
+		t.Errorf("%d of %d queries searched", searched, len(queries))
+	}
+	if got := searchWords([]string{"Release Notes", "release notes"}); len(got) != 2 {
+		t.Errorf("two spellings of one query are told apart by the results, and one was dropped: %q", got)
+	}
+}
+
+// The line --dry-run prints is the command, one word per argument: pasted with
+// an address that holds "&" or "$(…)" it ran something else.
+func TestCycle18_the_dry_run_line_is_quoted(t *testing.T) {
+	server := netCovServerObj(t, `{"name": "io.github.x/h", "remotes": [{"type": "streamable-http", "url": "https://m.example/v1?t=a&x=1;y=$(id)"}]}`)
+	lines := strings.Join(dryRunLines(swap{Cands: []candidate{{Kind: kindMCP, Name: "h", Server: server}}}), "\n")
+
+	if !strings.Contains(lines, `'https://m.example/v1?t=a&x=1;y=$(id)'`) {
+		t.Errorf("the address is not one quoted word:\n%s", lines)
+	}
+}

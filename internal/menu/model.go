@@ -391,20 +391,24 @@ func anyExisting(rows []*Row) bool {
 func inUse(r *Row) bool { return r.Uses > 0 || suggestion(r) == suggestKeep }
 
 var why = map[string]string{
-	"unused":        "Never fired, with enough sessions to judge.",
-	"broken":        "Invoked, and it only ever errored.",
-	"heavy-rare":    "Used, but heavy and fired in too few sessions.",
-	"tiny":          "Weighs almost nothing, not worth removing.",
-	"grace":         "Installed too recently to judge.",
-	"needs-data":    "Not enough sessions yet.",
-	"no-transcript": "This platform keeps no transcripts, so there is no evidence.",
-	"rare":          "Fired before this window, on a longer cadence.",
-	"used":          "Used in this window.",
-	"keep":          "You protected it with reap keep.",
-	"claude-md-ref": "Named in your CLAUDE.md or rules.",
-	"hook-loaded":   "Its plugin injects it every session.",
-	"muted":         "You muted it, so its uses prove nothing.",
-	"pruned":        "In quarantine: u brings it back.",
+	"unused":         "Never fired, with enough sessions to judge.",
+	"broken":         "Invoked, and it only ever errored.",
+	"heavy-rare":     "Used, but heavy and fired in too few sessions.",
+	"tiny":           "Weighs almost nothing, not worth removing.",
+	"grace":          "Installed too recently to judge.",
+	"needs-data":     "Not enough sessions yet.",
+	"no-transcript":  "This platform keeps no transcripts, so there is no evidence.",
+	"rare":           "Fired before this window, on a longer cadence.",
+	"used":           "Used in this window.",
+	"keep":           "You protected it with reap keep.",
+	"claude-md-ref":  "Named in your CLAUDE.md or rules.",
+	"hook-loaded":    "A hook reads it into the session.",
+	"agent-loaded":   "An agent loads it when it starts.",
+	"main-agent":     "Your settings run the session as this agent.",
+	"skill-agent":    "A skill runs in this agent.",
+	"used-elsewhere": "Another tool used it from this folder.",
+	"muted":          "You muted it, so its uses prove nothing.",
+	"pruned":         "In quarantine: u brings it back.",
 }
 
 // whyLine is why reap says what it says about a row.

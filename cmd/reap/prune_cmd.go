@@ -222,6 +222,10 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 			return 0
 		}
 		fmt.Fprintln(stdout, "Nothing to reap. Your stack is clean (or evidence is insufficient).")
+		if n := len(r.Warnings); n > 0 {
+			// Clean and "could not tell" are not the same: say which this may be.
+			fmt.Fprintf(stdout, "The report has %d %s: run reap to see what is held back, and why.\n", n, report.Plural(n, "warning"))
+		}
 		printNotes(stdout, "", notRemovable, refused)
 		if r.MutedCount > 0 {
 			// Muted items are not gone, and not "clean": they are still there and

@@ -175,7 +175,7 @@ func summaryFor(row Row) string {
 	case ReasonMuted:
 		return "you muted it, so it cannot fire on its own and its uses prove nothing"
 	case ReasonHookLoaded:
-		return "injected every session by its plugin's hook — in use without being invoked"
+		return "read into the session by a hook — in use without being invoked"
 	case ReasonAgentLoaded:
 		return "an agent names it under `skills:` and loads it when it starts — in use without being invoked"
 	case ReasonMainAgent:
@@ -185,6 +185,9 @@ func summaryFor(row Row) string {
 	case ReasonUsedElsewhere:
 		return "another tool that loads this folder used it — Claude Code's sessions alone do not show it"
 	default:
+		if row.Reason == "" {
+			return "measured and reported, not judged"
+		}
 		return row.Reason
 	}
 }

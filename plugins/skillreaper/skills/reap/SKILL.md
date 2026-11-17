@@ -62,4 +62,9 @@ it, and say how many items that is before the yes. Either way, remind them of
 `reap restore --all`. If the request is at all ambiguous, hand them the plain
 `reap prune` command instead.
 
+If the report was made with `--claude-dir` or `--claude-json`, repeat the same
+flags on the prune and say the folder in your question: without them the prune
+acts on the default folder, not the one the report was about. Write a name as
+one quoted word, and after `--` if it begins with a dash.
+
 For the per-category breakdown, point them at `/skillreaper:gap`.

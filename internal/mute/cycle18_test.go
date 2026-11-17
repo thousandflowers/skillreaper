@@ -1,0 +1,98 @@
+package mute
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func cycle18Skill(t *testing.T, body string) (dir, path string) {
+	t.Helper()
+	dir = t.TempDir()
+	path = filepath.Join(dir, "skills", "x", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir, path
+}
+
+// An unmute that was cut short has put the file back and removed its copy, and
+// had not yet taken the entry off the list. The next unmute finds the
+// description there and has nothing left to do: it used to fail on the missing
+// copy, at every run, with no way to clear the entry.
+func TestUnmuteAfterOneThatWasCutShortClearsTheEntry(t *testing.T) {
+	const whole = "---\nname: x\ndescription: some words\n---\nbody\n"
+	dir, path := cycle18Skill(t, whole)
+	if err := Mute(dir, dir, "x", path); err != nil {
+		t.Fatal(err)
+	}
+	copies, _ := filepath.Glob(filepath.Join(dir, "reaped", "muted", "*.bak*"))
+	if len(copies) != 1 {
+		t.Fatalf("copies kept: %v", copies)
+	}
+	// What the run that died had done: the file is back, its copy is gone.
+	if err := os.WriteFile(path, []byte(whole), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(copies[0], filepath.Join(t.TempDir(), "gone")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Unmute(dir, "x"); err != nil {
+		t.Fatalf("unmute: %v", err)
+	}
+	if names, _ := List(dir); len(names) != 0 {
+		t.Errorf("still listed as muted: %v", names)
+	}
+}
+
+// A description in quotes can run on lines that are not indented. All of it is
+// the description: taking the first line alone left the rest in the header,
+// which no longer parsed.
+func TestMuteTakesAQuotedDescriptionWhoseLinesAreNotIndented(t *testing.T) {
+	for _, whole := range []string{
+		"---\nname: x\ndescription: \"Use this skill when the user asks about\nwidgets, gadgets and \\\"tests\\\"\"\nallowed-tools: Read\n---\nbody\n",
+		"---\nname: x\ndescription: 'Use this skill when the user asks about\nwidgets, it''s all here'\nallowed-tools: Read\n---\nbody\n",
+		"---\nname: x\ndescription: \"closed on its line\"\nallowed-tools: \"Read\"\n---\nbody\n",
+	} {
+		dir, path := cycle18Skill(t, whole)
+		if err := Mute(dir, dir, "x", path); err != nil {
+			t.Fatal(err)
+		}
+		muted, _ := os.ReadFile(path)
+		if got, want := string(muted), "---\nname: x\nallowed-tools: "; !strings.HasPrefix(got, want) {
+			t.Errorf("muted, the file reads:\n%s", got)
+		}
+		if _, err := Unmute(dir, "x"); err != nil {
+			t.Fatal(err)
+		}
+		if back, _ := os.ReadFile(path); string(back) != whole {
+			t.Errorf("unmuted, the file reads:\n%s", back)
+		}
+	}
+}
+
+// A file that begins with a byte order mark and was edited while muted gets its
+// description back like any other.
+func TestUnmuteOfAnEditedFileWithAByteOrderMark(t *testing.T) {
+	const whole = "\xef\xbb\xbf---\nname: x\ndescription: some words\n---\nbody\n"
+	dir, path := cycle18Skill(t, whole)
+	if err := Mute(dir, dir, "x", path); err != nil {
+		t.Fatal(err)
+	}
+	muted, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, append(muted, "one more line\n"...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Unmute(dir, "x"); err != nil {
+		t.Fatalf("unmute: %v", err)
+	}
+	if back, _ := os.ReadFile(path); string(back) != whole+"one more line\n" {
+		t.Errorf("unmuted, the file reads:\n%q", back)
+	}
+}

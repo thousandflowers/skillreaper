@@ -256,7 +256,7 @@ func (a *app) candidates(opts options, gaps []kind, sessions []session, state re
 	a.step("searching skills and MCP servers", false)
 	unique := map[string]bool{}
 	for _, g := range gaps {
-		for _, q := range g.Queries {
+		for _, q := range searchWords(g.Queries) { // each gap's own share of the searches
 			unique[q] = true
 		}
 	}

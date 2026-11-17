@@ -519,7 +519,11 @@ func dryRunLines(s swap) []string {
 		if !ok {
 			return []string{"  ✗  " + c.Name + ": needs manual setup, nothing muted · " + c.ID}
 		}
-		lines = append(lines, "  ·  "+strings.Join(command, " "))
+		words := make([]string, len(command))
+		for i, w := range command { // one word per argument: the line is there to be pasted
+			words[i] = scan.ShellArg(printable(w))
+		}
+		lines = append(lines, "  ·  "+strings.Join(words, " "))
 	}
 	for _, x := range s.Mute {
 		lines = append(lines, "  ·  reap mute "+scan.ShellArg(x.Name))

@@ -28,32 +28,41 @@ func hookLoadedSkills(installPath string) map[string]bool {
 		return nil
 	}
 	dirs := map[string]bool{"hooks": true}
+	var files []string // scripts at the plugin's root: read alone, not with the README beside them
 	for _, c := range commands {
 		for _, m := range pluginRootPathRe.FindAllStringSubmatch(c, -1) {
-			dirs[filepath.Dir(m[1])] = true
+			if dir := filepath.Dir(m[1]); dir != "." {
+				dirs[dir] = true
+			} else {
+				files = append(files, m[1])
+			}
 		}
 	}
 	loaded := map[string]bool{}
+	read := func(path string) {
+		b, err := readCapped(path)
+		if err != nil {
+			return // a command may name a path that is not there; nothing to read
+		}
+		for _, m := range skillFileRe.FindAllSubmatch(b, -1) {
+			loaded[string(m[1])] = true
+		}
+	}
 	for dir := range dirs {
 		abs, ok := resolveWithin(installPath, filepath.Join(installPath, dir))
 		if !ok {
 			continue
 		}
-		entries, err := os.ReadDir(abs)
-		if err != nil {
-			continue // a command may name a path that is not there; nothing to read
-		}
+		entries, _ := os.ReadDir(abs)
 		for _, e := range entries {
-			if !e.Type().IsRegular() {
-				continue
+			if e.Type().IsRegular() {
+				read(filepath.Join(abs, e.Name()))
 			}
-			b, err := readCapped(filepath.Join(abs, e.Name()))
-			if err != nil {
-				continue
-			}
-			for _, m := range skillFileRe.FindAllSubmatch(b, -1) {
-				loaded[string(m[1])] = true
-			}
+		}
+	}
+	for _, f := range files {
+		if abs, ok := resolveWithin(installPath, filepath.Join(installPath, f)); ok {
+			read(abs)
 		}
 	}
 	return loaded
@@ -85,7 +94,8 @@ func sessionStartCommands(installPath string) []string {
 var hookWordRe = regexp.MustCompile(`[~$\w./{}-]+`)
 
 // userHookLoadedSkills names the skills the person's own SessionStart hooks
-// read: named in the command itself, or in a script the command names.
+// read: named in the command itself, in a script the command names, or in a
+// script beside that one in the config folder (a wrapper often calls it).
 func userHookLoadedSkills(dir string) map[string]bool {
 	loaded := map[string]bool{}
 	home, _ := os.UserHomeDir()
@@ -102,9 +112,7 @@ func userHookLoadedSkills(dir string) map[string]bool {
 			for _, h := range g.Hooks {
 				text := h.Command
 				for _, word := range hookWordRe.FindAllString(h.Command, -1) {
-					if script, err := readCapped(underHome(word, home)); err == nil {
-						text += "\n" + string(script)
-					}
+					text += hookScripts(underHome(word, home, dir), dir)
 				}
 				for _, m := range skillFileRe.FindAllStringSubmatch(text, -1) {
 					loaded[m[1]] = true
@@ -115,11 +123,42 @@ func userHookLoadedSkills(dir string) map[string]bool {
 	return loaded
 }
 
-// underHome writes out the home folder a hook command names as ~ or $HOME.
-func underHome(word, home string) string {
-	for _, short := range []string{"~/", "$HOME/", "${HOME}/"} {
+// hookScripts is the text of the script at path and, when it lies in a folder
+// of the config folder, of the scripts beside it. A path that is not absolute
+// is the project's, wherever reap happens to run, and is not read.
+func hookScripts(path, dir string) string {
+	if !filepath.IsAbs(path) {
+		return ""
+	}
+	script, err := readCapped(path)
+	if err != nil {
+		return ""
+	}
+	text := "\n" + string(script)
+	folder := filepath.Dir(path)
+	if rel, err := filepath.Rel(dir, folder); err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return text // outside the config folder, or the folder itself: the script alone
+	}
+	entries, _ := os.ReadDir(folder)
+	for _, e := range entries {
+		if e.Type().IsRegular() {
+			if b, err := readCapped(filepath.Join(folder, e.Name())); err == nil {
+				text += "\n" + string(b)
+			}
+		}
+	}
+	return text
+}
+
+// underHome writes out the folders a hook command names by a variable: the
+// home as ~ or $HOME, the config folder as $CLAUDE_CONFIG_DIR.
+func underHome(word, home, dir string) string {
+	for short, full := range map[string]string{
+		"~/": home, "$HOME/": home, "${HOME}/": home,
+		"$CLAUDE_CONFIG_DIR/": dir, "${CLAUDE_CONFIG_DIR}/": dir,
+	} {
 		if rest, ok := strings.CutPrefix(word, short); ok {
-			return filepath.Join(home, rest)
+			return filepath.Join(full, rest)
 		}
 	}
 	return word

@@ -33,3 +33,33 @@ func TestMarkdownTextEscapesABackslash(t *testing.T) {
 		t.Errorf("mdText = %s, want %s", got, want)
 	}
 }
+
+// The headline's three numbers add up: never fired is what reap condemns plus
+// what it holds back. A muted skill that fired in the window was never among
+// the never-fired, and is not taken off them.
+func TestHeadlineAddsUpWithAMutedSkillThatFired(t *testing.T) {
+	r := &Report{
+		DeadCount: 1, MutedCount: 1,
+		Gap: &Gap{Loaded: 4, Fired: 1},
+		Rows: []Row{
+			{Item: scan.Item{Category: scan.CatSkill, Name: "dead"}, Verdict: VerdictReap},
+			{Item: scan.Item{Category: scan.CatSkill, Name: "muted-and-used"}, Verdict: VerdictInfo, Reason: ReasonMuted, Uses: 2},
+			{Item: scan.Item{Category: scan.CatSkill, Name: "held-1"}, Verdict: VerdictReview},
+			{Item: scan.Item{Category: scan.CatSkill, Name: "held-2"}, Verdict: VerdictKeep},
+		},
+	}
+
+	h := NewHeadline(r)
+
+	if h.NeverFired != 3 || h.Reaped+h.HeldBack != h.NeverFired {
+		t.Errorf("never fired %d, REAP %d, held back %d", h.NeverFired, h.Reaped, h.HeldBack)
+	}
+}
+
+// An item reap only reports (a hook, a prose file) has no reason: its line
+// says so, where it stood empty.
+func TestWhyOfAReportOnlyItemHasNoEmptyReason(t *testing.T) {
+	if got := summaryFor(Row{Item: scan.Item{Category: scan.CatHook, Name: "SessionStart#0"}, Verdict: VerdictInfo}); got == "" {
+		t.Error("the reason line is empty")
+	}
+}

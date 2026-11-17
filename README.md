@@ -172,19 +172,44 @@ reap prune                 # 3. act: quarantine the dead ones, interactive
 
 Or all three on one screen: `skillreaper`, [the menu](#the-menu).
 
-**1. `reap`** prints the report at the top of this page. Every row carries a
-verdict:
+With `npx` and nothing installed there is no `reap` on your PATH: write
+`npx skillreaper` where these lines say `reap` (`npx skillreaper why <name>`).
+
+**1. `reap`** prints the report: the same rows as the block at the top of this
+page (that one is `reap --agent`), grouped by verdict, with the reason in each
+group's title and in a NOTE column. Every row carries a verdict:
 
 | Label | Meaning |
 |---|---|
 | **`REAP(broken)`** | Invoked but errored - broken, not just cold |
 | **`REAP`** | Zero uses - safe to quarantine |
 | **`MUTE`** | Used rarely + heavy - description stripped, skill stays available |
-| **`KEEP`** | Used, tiny, or manually protected |
-| **`REVIEW`** | Too new or not enough sessions |
+| **`KEEP`** | Used, tiny, manually protected, or at work with no use of its own |
+| **`REVIEW`** | Too new, not enough sessions, or used in a way reap cannot weigh |
+| **`-`** | Not judged: something you muted, a hook, a prose file |
 
 Every verdict includes a reason suffix explaining *why*, and an item whose
-evidence was incomplete stays `REVIEW` rather than being flagged.
+evidence was incomplete stays `REVIEW` rather than being flagged. The reasons:
+
+| Reason | With | It means |
+|---|---|---|
+| `unused` | REAP | never fired, with enough sessions to judge |
+| `broken` | REAP | invoked, and it only ever errored |
+| `heavy-rare` | MUTE | used, but heavy and in too few sessions |
+| `used` | KEEP | used in this window |
+| `tiny` | KEEP | weighs almost nothing |
+| `keep` | KEEP | you protected it with `reap keep` |
+| `claude-md-ref` | KEEP | named in your CLAUDE.md or rules |
+| `hook-loaded` | KEEP | a SessionStart hook reads it into the session |
+| `agent-loaded` | KEEP | an agent names it under `skills:` and loads it when it starts |
+| `main-agent` | KEEP | your settings run the session as this agent |
+| `skill-agent` | KEEP | a skill names it under `agent:` and runs in it |
+| `grace` | REVIEW | installed too recently to judge |
+| `needs-data` | REVIEW | not enough sessions yet |
+| `rare` | REVIEW | fired before this window, on a longer cadence |
+| `no-transcript` | REVIEW | this tool's sessions cannot be read, so there is no evidence |
+| `used-elsewhere` | REVIEW | another tool that loads the same folder used it |
+| `muted` | `-` | you muted it, so its uses prove nothing |
 
 **2. `reap why <name>`** is how you argue with a verdict before acting on it.
 It shows the whole case for one item, so you are not trusting a label:

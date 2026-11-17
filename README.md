@@ -44,9 +44,10 @@ measured by skillreaper · github.com/thousandflowers/skillreaper
   Most of what your AI agent loads, it never uses.
 </h1>
 <p align="center">
-  skillreaper finds the <b>unused skills, MCP servers, subagents, hooks and
-  always-loaded prose</b> quietly filling your <b>context window</b> - proven
-  from your own session transcripts - and prunes them reversibly.<br>
+  skillreaper finds the <b>unused skills, MCP servers and subagents</b>
+  quietly filling your <b>context window</b> - proven from your own session
+  transcripts - and prunes them reversibly. Hooks and always-loaded prose
+  are measured and reported.<br>
   Runs locally against transcripts you already have. Nothing is ever uploaded.
 </p>
 

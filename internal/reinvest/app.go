@@ -34,8 +34,11 @@ type app struct {
 	termTTY bool
 	stderr  io.Writer
 	logMu   sync.Mutex
-	askWhy  string    // why the last call to Claude gave nothing; under logMu
-	log     io.Writer // everything else: the run log
+	askWhy  string // why the last call to Claude gave nothing; under logMu
+	// linkedAgain names the written skills this run only linked: their folder
+	// was there before, and is not this run's to remove.
+	linkedAgain map[string]bool
+	log         io.Writer // everything else: the run log
 
 	now   func() time.Time
 	sleep func(time.Duration)

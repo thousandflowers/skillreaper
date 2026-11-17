@@ -149,7 +149,15 @@ func topLevelValue(lines []string, key string) (string, bool) {
 		if style, chomp, ok := blockHeader(raw); ok {
 			return blockScalar(cont, style, chomp), true
 		}
-		if raw == "" || raw[0] == '"' || raw[0] == '\'' {
+		if raw != "" && (raw[0] == '"' || raw[0] == '\'') {
+			// A quote left open runs on to the line that closes it, however
+			// those lines are indented: all of it is the value, as mute takes it.
+			if whole, ok := quotedOver(raw[1:], lines[i+1:], raw[0]); ok {
+				return whole, true
+			}
+			return v, true
+		}
+		if raw == "" {
 			return v, true
 		}
 		parts := []string{v}
@@ -350,6 +358,47 @@ func commentAt(line string) int {
 	for i := 1; i < len(line); i++ {
 		if line[i] == '#' && (line[i-1] == ' ' || line[i-1] == '\t') {
 			return i - 1
+		}
+	}
+	return -1
+}
+
+// quotedOver reads a quoted value that does not close on its own line: first
+// is what follows the opening quote there, rest the header's later lines. The
+// lines are joined with a space, as YAML folds them. False when the quote
+// closes on its line, or never closes: then the value is that one line.
+func quotedOver(first string, rest []string, quote byte) (string, bool) {
+	if quoteEnd(first, quote) >= 0 {
+		return "", false
+	}
+	parts := []string{strings.TrimSpace(first)}
+	for _, line := range rest {
+		text := strings.TrimSpace(line)
+		if end := quoteEnd(text, quote); end >= 0 {
+			if last := strings.TrimSpace(text[:end]); last != "" {
+				parts = append(parts, last)
+			}
+			return strings.Join(parts, " "), true
+		}
+		if text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return "", false
+}
+
+// quoteEnd is where the quote that opened a value closes in text, or -1.
+// Inside double quotes a backslash makes the next character itself; inside
+// single quotes two in a row write one.
+func quoteEnd(text string, quote byte) int {
+	for i := 0; i < len(text); i++ {
+		switch {
+		case quote == '"' && text[i] == '\\':
+			i++
+		case text[i] == quote && quote == '\'' && i+1 < len(text) && text[i+1] == '\'':
+			i++
+		case text[i] == quote:
+			return i
 		}
 	}
 	return -1

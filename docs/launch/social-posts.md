@@ -23,12 +23,12 @@ actually used, and quarantines the rest:
 
 ```
 brew install thousandflowers/tap/skillreaper
-reap         # see everything loaded + verdicts
-reap prune   # quarantine unused items (reversible)
+reap
+reap prune
 ```
 
-The output groups items by verdict (REAP -> REVIEW -> KEEP) with token weight
-bars, dead token costs, and monthly spend - all from your own transcript data.
+The output groups items by verdict (REAP -> REVIEW -> KEEP) with token
+weights, dead token costs, and monthly spend - all from your own transcript data.
 
 `reap prune` deletes nothing. `reap restore --all` undoes everything.
 

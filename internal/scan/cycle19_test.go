@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -120,5 +121,22 @@ func TestHookPathInQuotesIsOneWord(t *testing.T) {
 	}
 	if got := shellWords(`a "b c"'d' e  "g`); len(got) != 4 || got[1] != "b cd" || got[3] != "g" {
 		t.Errorf("words: %q", got)
+	}
+}
+
+// A quoted description that runs over several lines is read whole, as mute
+// strips it whole: read as its first line alone, a heavy skill weighed a few
+// tokens, never came out MUTE, and the saving claimed for it was a hundredth.
+func TestAQuotedValueOverSeveralLinesIsReadWhole(t *testing.T) {
+	for _, c := range []struct{ header, want string }{
+		{"name: x\ndescription: \"first line\n  second line\n  third \\\"quoted\\\" end\"\nlicense: MIT", `first line second line third \"quoted\" end`},
+		{"description: 'first\nsecond, it''s here'\nlicense: MIT", "first second, it''s here"},
+		{"description: \"closed here\"\nlicense: \"MIT\"", "closed here"},
+		{"description: \"never closed\nlicense: MIT", "never closed"},
+	} {
+		got, ok := topLevelValue(strings.Split(c.header, "\n"), "description")
+		if !ok || got != c.want {
+			t.Errorf("%q: description = %q, want %q", c.header, got, c.want)
+		}
 	}
 }

@@ -112,7 +112,7 @@ func prose(s string) string {
 func cleanRow(raw report.Row) *Row {
 	r := &Row{Row: raw, raw: raw}
 	r.Name = term.Visible(raw.Name)
-	if r.Name == "" {
+	if cells(r.Name) == 0 { // empty, or marks alone: a row nobody could read
 		r.Name = noName
 	}
 	r.Platform = term.Visible(raw.Platform)

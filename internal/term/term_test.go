@@ -549,3 +549,35 @@ func TestGlyphsKeepTheWidthOfWhatTheyReplace(t *testing.T) {
 		}
 	}
 }
+
+// A stray "ESC [" (Alt+[) ends at the next key that no sequence can hold: an
+// Esc or an Enter is a key of its own. Taken into the sequence, the arrow after
+// it lost its Esc and its letter came out as a key: Up chose "auto", Left
+// marked the list for delete.
+func TestAStraySequenceEndsAtAControlKey(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want []Key
+	}{
+		{"\x1b[\x1b[Aq", []Key{KeyUp, 'q'}},
+		{"\x1b[\x1b[Dq", []Key{KeyLeft, 'q'}},
+		{"\x1bO\x1b[Aq", []Key{KeyUp, 'q'}},
+		{"\x1b[\rq", []Key{KeyEnter, 'q'}},
+	} {
+		src := &paused{after: []byte(c.in)}
+		d := &decoder{src: src, escWait: escWaitLocal}
+		var keys []Key
+		for {
+			b, st := src.next(time.Hour)
+			if st != gotByte {
+				break
+			}
+			if k, ok := d.decode(b); ok {
+				keys = append(keys, k)
+			}
+		}
+		if string(keysText(keys)) != string(keysText(c.want)) {
+			t.Errorf("%q: keys = %v, want %v", c.in, keys, c.want)
+		}
+	}
+}

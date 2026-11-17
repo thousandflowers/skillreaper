@@ -1003,7 +1003,7 @@ func gather(opts options) (*report.Report, error) {
 			readers[string(platform.ClaudeCode)] = append(readers[string(platform.ClaudeCode)], string(p.ID))
 		}
 	}
-	return report.Build(items, st, uniqueWarnings(warns), report.Opts{
+	built := report.Build(items, st, uniqueWarnings(warns), report.Opts{
 		SkillFolderReaders: readers,
 		PlatformNames:      names,
 		PriceBasis:         priceBasis,
@@ -1040,7 +1040,12 @@ func gather(opts options) (*report.Report, error) {
 		Muted:         muted,
 		MuteLost:      muteLost,
 		PruneLost:     prunedPluginItems(opts.claudeDir),
-	}), nil
+	})
+	if _, err := mute.Entries(opts.claudeDir); err != nil {
+		// Without the list a muted skill reads as any other, and its uses as proof.
+		built.Warnings = append(built.Warnings, scan.Warning{Path: filepath.Join(opts.claudeDir, "reaped", "muted", "state.json"), Msg: err.Error()})
+	}
+	return built, nil
 }
 
 // mutedSet sorts the items reap has muted by what is true of the file now: still
@@ -1737,21 +1742,22 @@ func cmdNudge(opts options, stdout, stderr io.Writer) int {
 		return 0
 	}
 	now := time.Now()
-	if !hook.ShouldNudge(now, r.DeadCount, r.MuteCount, st) {
-		if lower, changed := hook.Lowered(st, r.DeadCount, r.MuteCount); changed {
+	toPrune := prunable(r.Rows) // not DeadCount: an unused item inside a plugin is not reap's to prune
+	if !hook.ShouldNudge(now, toPrune, r.MuteCount, st) {
+		if lower, changed := hook.Lowered(st, toPrune, r.MuteCount); changed {
 			_ = hook.SaveNudgeState(opts.claudeDir, lower)
 		}
 		return 0
 	}
 	st.LastNudgeAt = now
-	st.LastReapCount = r.DeadCount
+	st.LastReapCount = toPrune
 	st.LastMuteCount = r.MuteCount
 	if err := hook.SaveNudgeState(opts.claudeDir, st); err != nil {
 		// It is weekly because it writes down when it spoke. Where that cannot
 		// be written it would speak at the start of every session: quiet instead.
 		return 0
 	}
-	fmt.Fprintln(stderr, nudgeText(r.DeadCount, r.MuteCount))
+	fmt.Fprintln(stderr, nudgeText(toPrune, r.MuteCount))
 	return 0
 }
 
@@ -1948,7 +1954,7 @@ func cmdShare(opts options, stdout, stderr io.Writer) int {
 	if scanFailed(r, stderr) {
 		return 1
 	}
-	could := r.DeadTokensPerSession + r.MuteTokensPerSession
+	could := report.ShareCould(r)
 	cut := 0
 	if entries, err := prune.LoadManifest(opts.claudeDir); err == nil {
 		for _, e := range entries {

@@ -174,3 +174,33 @@ func TestOneOfAThingIsSingularInTheRemainingViews(t *testing.T) {
 	mustHave(summaryFor(Row{Verdict: VerdictReap, Reason: ReasonBroken, ErrorCount: 1}), "(1 error)")
 	mustHave(usageLine(ManifestUsage{Days: 30, Sessions: 1, Uses: 1, Errors: 0, Projects: 1, LastUsed: "never", Verdict: "KEEP"}), "1 session · 1 use · 0 errors · 1 project ·")
 }
+
+// A weight that was never measured is not "~0": the line after a prune of MCP
+// servers alone says so, and with a measured item among them says "at least".
+func TestValueFeedbackDoesNotCallAnUnmeasuredWeightZero(t *testing.T) {
+	var none, some, all bytes.Buffer
+	RenderValueFeedback(&none, "pruned", 2, 2, 0, 0, 3, false)
+	RenderValueFeedback(&some, "pruned", 2, 1, 120, 1200, 3, false)
+	RenderValueFeedback(&all, "pruned", 2, 0, 120, 1200, 3, false)
+	if said := none.String(); !strings.Contains(said, "weight not measured") || strings.Contains(said, "~0") {
+		t.Errorf("nothing measured: %q", said)
+	}
+	if said := some.String(); !strings.Contains(said, "saving at least ~120 tok/session") {
+		t.Errorf("one of two measured: %q", said)
+	}
+	if said := all.String(); !strings.Contains(said, "saving ~120 tok/session") || strings.Contains(said, "at least") {
+		t.Errorf("all measured: %q", said)
+	}
+	if got := ReclaimSaid("0", 1, 1); got != "weight not measured" {
+		t.Errorf("header for one unmeasured item: %q", got)
+	}
+}
+
+// What share calls dead is what the report calls dead: a skill that fired and
+// is only heavy is not "dead context" in a line meant to be posted.
+func TestShareCountsDeadContextAsTheReportDoes(t *testing.T) {
+	r := &Report{DeadTokensPerSession: 115, MuteTokensPerSession: 218}
+	if got := ShareCould(r); got != 115 {
+		t.Errorf("share could cut %d, the report says 115 dead", got)
+	}
+}

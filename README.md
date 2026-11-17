@@ -167,9 +167,11 @@ writes anything, and it prints its own undo line.
 
 ```bash
 reap
-reap why <name>
+reap why import-timesheet
 reap prune
 ```
+
+`import-timesheet` stands for any name in your own report.
 
 Or all three on one screen: `skillreaper`, [the menu](#the-menu).
 
@@ -494,7 +496,7 @@ are there for anything that wants to post it automatically.
 
 <!-- readme-share:start -->
 ```
-skillreaper says I could cut ~22.8k tokens/session of dead context from my AI agent.
+skillreaper says I could cut ~22.7k tokens/session of dead context from my AI agent.
 One read-only command, 100% local:
 
   brew install thousandflowers/tap/skillreaper
@@ -553,9 +555,11 @@ This is the **real** gap between what your agent carries and what it fires -
 complementary to the report's REAP count (which only counts items that are safe
 to prune right now).
 
-<pre>reap gap          # text breakdown
-reap gap --json   # JSON output
-reap gap --md     # markdown table</pre>
+| Command | What it gives |
+|---|---|
+| `reap gap` | Text breakdown |
+| `reap gap --json` | JSON output |
+| `reap gap --md` | Markdown table |
 
 The gap view also scores **payload quality** for MCP tools: when a tool fires,
 is the result signal or noise? A fetch/screenshot tool can fire 80× and return
@@ -590,8 +594,10 @@ per-repo tool should not be read as global dead weight.
 capture is one of the files <code>make renders-check</code> verifies, so it
 cannot drift from what the binary prints.</sub></p>
 
-<pre>reap by-project          # text table
-reap by-project --json   # JSON output</pre>
+| Command | What it gives |
+|---|---|
+| `reap by-project` | Text table |
+| `reap by-project --json` | JSON output |
 
 <br>
 
@@ -607,11 +613,13 @@ else dominant firing project) loaded on demand. It is strictly opt-in and
 secondary to pruning - and below ~150 skills, native loading is usually enough,
 so the plan says so. The output is a **plan**: proposed, never auto-applied.
 
-<pre>reap route                      # text plan
-reap route --json               # JSON
-reap route --md                 # markdown
-reap route --route-threshold 0.05   # route skills firing in <5% of sessions
-reap route --route-min-skills 200   # only show a plan past 200 surviving skills</pre>
+| Command | What it gives |
+|---|---|
+| `reap route` | Text plan |
+| `reap route --json` | JSON |
+| `reap route --md` | Markdown |
+| `reap route --route-threshold 0.05` | Route skills firing in under 5% of sessions |
+| `reap route --route-min-skills 200` | Only show a plan past 200 surviving skills |
 
 <br>
 
@@ -624,10 +632,12 @@ include, REAP → omit, REVIEW → never auto-omit. Upstream coordinates are
 recovered from `apm.lock.yaml` when present; otherwise the skill becomes a clearly
 marked `TODO` comment rather than an invented coordinate.
 
-<pre>reap apm                        # propose apm.yml (yaml)
-reap apm --json                 # JSON
-reap apm --md                   # markdown
-reap apm --diff apm.yml         # reconcile: add fired-but-undeclared, drop declared-but-cold</pre>
+| Command | What it gives |
+|---|---|
+| `reap apm` | Propose apm.yml (yaml) |
+| `reap apm --json` | JSON |
+| `reap apm --md` | Markdown |
+| `reap apm --diff apm.yml` | Reconcile: add fired-but-undeclared, drop declared-but-cold |
 
 <br>
 
@@ -648,10 +658,12 @@ snapshots, so it says "this tool removed it and it returned" rather than
 "something is different". An item you restored yourself is not reported, since
 that was deliberate.
 
-<pre>reap snapshot            # save this run
-reap diff                # newest vs previous
-reap diff &lt;a&gt; &lt;b&gt;        # two named snapshots
-reap diff --json         # structured output</pre>
+| Command | What it gives |
+|---|---|
+| `reap snapshot` | Save this run |
+| `reap diff` | Newest vs previous |
+| `reap diff <a> <b>` | Two named snapshots |
+| `reap diff --json` | Structured output |
 
 Snapshots are never taken automatically: state nobody asked for is the disease
 this tool treats. Take one with `reap snapshot` when you want a point to compare

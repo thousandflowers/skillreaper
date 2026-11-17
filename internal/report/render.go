@@ -59,11 +59,17 @@ func RenderStarCta(w io.Writer, deadTokens int, color bool) {
 // operation, showing real savings with a conservative monthly money estimate.
 // tokensPerMonth is each moved row's tokens times the sessions a month of its
 // own tool: a tool with no session on record adds nothing to the money.
-func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, tokensPerMonth int, price float64, color bool) {
+func RenderValueFeedback(w io.Writer, verb string, items, unmeasured, tokensPerSession, tokensPerMonth int, price float64, color bool) {
 	if items == 0 {
 		return
 	}
 	paint := painter(color)
+	if unmeasured >= items {
+		// An MCP server's or a hook's weight was never measured: "~0" would
+		// be a number, and a wrong one.
+		fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ")+paint(cDim, fmt.Sprintf("%s %s · weight not measured", verb, nOf(items, "item"))))
+		return
+	}
 	tokStr := fmt.Sprintf("%d", tokensPerSession)
 	if tokensPerSession >= 1000 {
 		tokStr = fmt.Sprintf("%.1fk", float64(tokensPerSession)/1000)
@@ -84,7 +90,7 @@ func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, toke
 			money = fmt.Sprintf(" (≈$%.2f/month at your usage)", mPerM)
 		}
 	}
-	fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ")+paint(cDim, fmt.Sprintf("%s %d %s · saving ~%s tok/session%s", verb, items, Plural(items, "item"), tokStr, money)))
+	fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ")+paint(cDim, fmt.Sprintf("%s %d %s · saving %s~%s tok/session%s", verb, items, Plural(items, "item"), atLeast(unmeasured), tokStr, money)))
 }
 
 // RenderShareHint prints a single sober line pointing users at reap share.
@@ -135,6 +141,11 @@ func RenderShareJSON(w io.Writer, cut, could int) error {
 		Install:               "brew install thousandflowers/tap/skillreaper",
 	})
 }
+
+// ShareCould is what share says could be cut: the dead context, as the report
+// counts it. What MUTE would give back belongs to skills that fired, and is
+// not "dead" in a line meant to be posted.
+func ShareCould(r *Report) int { return r.DeadTokensPerSession }
 
 // shareMessage builds the human-readable share text. It claims a cut only for
 // what was cut. Without a prune, the same figure is what could be cut.
@@ -795,6 +806,22 @@ func MalformedSummary(r *Report) string {
 // produces exactly one warning, which is the moment the tool is asking to be
 // trusted about evidence.
 // Plural returns word, with an "s" unless n is 1.
+// atLeast marks a total that leaves out items whose weight is not known.
+func atLeast(unmeasured int) string {
+	if unmeasured > 0 {
+		return "at least "
+	}
+	return ""
+}
+
+// ReclaimSaid is what a prune would give back, in the plan's opening line.
+func ReclaimSaid(figure string, unmeasured, items int) string {
+	if items > 0 && unmeasured >= items {
+		return "weight not measured"
+	}
+	return "reclaim " + atLeast(unmeasured) + "~" + figure + " tok/session"
+}
+
 // nOf is a count with its word: "1 day", "30 days".
 func nOf(n int, word string) string { return fmt.Sprintf("%d %s", n, Plural(n, word)) }
 

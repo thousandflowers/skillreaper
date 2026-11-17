@@ -66,6 +66,13 @@ func (d *decoder) get() (byte, bool) {
 // as keys nobody typed, and the letter ending an arrow marked a row.
 func (d *decoder) rest() (byte, bool) {
 	b, st := d.src.next(pasteWait)
+	if st == gotByte && b < 0x20 {
+		// No sequence holds a control character: this is a key of its own (an
+		// Esc, an Enter) and what came before was a stray start (Alt+[). Taken
+		// in, the arrow after it lost its Esc and its letter came out as a key.
+		d.src.unread(b)
+		return 0, false
+	}
 	return b, st == gotByte
 }
 

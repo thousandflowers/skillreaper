@@ -758,3 +758,11 @@ func TestReceiptFigureFitsItsWords(t *testing.T) {
 	mustEqual(t, "narrow", m.fitBig("810,000", "810k", words, 54), "810k")
 	mustEqual(t, "wide", m.fitBig("810,000", "810k", words, 120), "810,000")
 }
+
+// A name of marks alone takes no cell: it is shown as a row with no name, not
+// as a blank one that can be chosen unread.
+func TestANameThatTakesNoCellIsShownAsNoName(t *testing.T) {
+	if got := NewRow(raw("́̂")).Name; got != noName {
+		t.Errorf("name = %q", got)
+	}
+}

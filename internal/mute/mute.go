@@ -156,7 +156,7 @@ func loadState(claudeDir string) (*State, error) {
 	}
 	var s State
 	if err := json.Unmarshal(b, &s); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("the mute list at %s cannot be read: %w. Fix or remove that file, then run this again", statePath(claudeDir), err)
 	}
 	if s.Muted == nil {
 		s.Muted = map[string]Entry{}

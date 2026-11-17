@@ -89,7 +89,7 @@ func TestConfigDir_a_relative_folder_is_read_as_an_absolute_one(t *testing.T) {
 		t.Errorf("the link written for the skill leads nowhere: %v", err)
 	}
 	t.Chdir(home) // reinvest itself stays where it was started
-	if err := removeWritten(c); err != nil {
+	if err := removeWritten(c, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Lstat(link); err == nil {

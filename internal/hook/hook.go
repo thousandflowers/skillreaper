@@ -140,7 +140,8 @@ func Installed(settingsPath, command string, dryRun bool) ([]byte, Change, error
 		}
 	}
 	if dryRun {
-		return out, change, nil
+		_, err := settingsTarget(settingsPath) // what the real run would stop at
+		return out, change, err
 	}
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
 		return nil, Unchanged, err
@@ -212,13 +213,24 @@ func Uninstalled(settingsPath string) (removed bool, err error) {
 // writeSettings writes through a link: settings.json is often a link into a
 // dotfiles repo, and a rename onto the link would cut it off from there.
 func writeSettings(path string, b []byte, perm os.FileMode) error {
-	target := path
-	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		if target, err = filepath.EvalSymlinks(path); err != nil {
-			return fmt.Errorf("%s is a link that leads nowhere: %w", path, err)
-		}
+	target, err := settingsTarget(path)
+	if err != nil {
+		return err
 	}
 	return atomicfile.Write(target, b, perm)
+}
+
+// settingsTarget is the file a write to path lands in: what a link leads to.
+func settingsTarget(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return path, nil
+	}
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("%s is a link that leads nowhere: %w", path, err)
+	}
+	return target, nil
 }
 
 // dropIfEmpty removes the container at path when nothing is left in it.

@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/thousandflowers/skillreaper/internal/menu"
+	"github.com/thousandflowers/skillreaper/internal/report"
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 // swapThenYes answers the delete question with y, after putting another folder
@@ -75,5 +77,48 @@ func TestMenuDeleteLeavesAnItemThatChangedSinceItWasRead(t *testing.T) {
 	other := menuRow(t, rows, "skill", "copied")
 	if out := applier.Apply([]menu.Pick{{Row: other, Verb: menu.Delete}}); out[0].Err != nil {
 		t.Errorf("delete of an unchanged item: %v", out[0].Err)
+	}
+}
+
+// A mute list that cannot be read stops mute once, before any plan or
+// question, and the report says it cannot tell what is muted.
+func TestACorruptMuteListStopsMuteOnce(t *testing.T) {
+	home := deleteHome(t)
+	state := filepath.Join(home, ".claude", "reaped", "muted", "state.json")
+	mustWriteFile(t, state, "{bad")
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"mute", "--yes"}, strings.NewReader(""), &out, &errOut)
+
+	if said := out.String() + errOut.String(); code != 1 || strings.Count(said, "invalid character") != 1 || !strings.Contains(said, state) {
+		t.Errorf("exit %d:\n%s", code, said)
+	}
+	out.Reset()
+	errOut.Reset()
+	run([]string{"--no-banner"}, strings.NewReader(""), &out, &errOut)
+	if said := out.String() + errOut.String(); !strings.Contains(said, "mute list") {
+		t.Errorf("the report says nothing of the mute list it could not read:\n%s", said)
+	}
+}
+
+// The weekly reminder counts what reap prune would take: an unused item inside
+// a plugin is not "to prune".
+func TestNudgeCountsWhatPruneWouldTake(t *testing.T) {
+	rows := []report.Row{
+		{Item: scan.Item{Name: "a", Removable: true}, Verdict: report.VerdictReap},
+		{Item: scan.Item{Name: "p:b", Source: "plugin:p@m"}, Verdict: report.VerdictReap},
+		{Item: scan.Item{Name: "c", Removable: true}, Verdict: report.VerdictKeep},
+	}
+	if got := prunable(rows); got != 1 {
+		t.Errorf("%d items to prune, want 1", got)
+	}
+}
+
+// Under npx the agent view's last line names the command that works there, as
+// every other hint does.
+func TestTheWarningLineIsRenamedLikeTheOtherHints(t *testing.T) {
+	rewrite := hintRewriterAs("skillreaper", "npx skillreaper", nil)
+	if got := string(rewrite([]byte("1 warning — run reap for details.\n"))); got != "1 warning — run npx skillreaper for details.\n" {
+		t.Errorf("hint: %q", got)
 	}
 }

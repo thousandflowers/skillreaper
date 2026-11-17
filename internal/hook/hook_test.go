@@ -408,3 +408,18 @@ func TestInstallWhenSessionStartIsNull(t *testing.T) {
 		}
 	}
 }
+
+// A dry run says what a real run would: with settings.json a link that leads
+// nowhere, that is an error, not "would write".
+func TestInstallDryRunOnALinkThatLeadsNowhere(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.Symlink(filepath.Join(t.TempDir(), "missing.json"), path); err != nil {
+		t.Skip(err)
+	}
+
+	_, err := Install(path, Command("reap"), true)
+
+	if err == nil || !strings.Contains(err.Error(), "leads nowhere") {
+		t.Errorf("dry run: %v", err)
+	}
+}

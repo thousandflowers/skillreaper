@@ -25,7 +25,7 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		return 1
 	}
 	named := len(args) == 1
-	if !keepListReadable(opts, stderr) {
+	if !keepListReadable(opts, stderr) || !muteListReadable(opts, stderr) {
 		return 1
 	}
 
@@ -230,7 +230,7 @@ func (o muteOutcome) printSummary(opts options, stdout, stderr io.Writer, r *rep
 		fmt.Fprintf(stdout, "\nmuted %d %s · ~%s tok/session reclaimed\n", len(o.muted), report.Plural(len(o.muted), "item"), report.HumanCount(o.tokens))
 	}
 	col := colorEnabled(opts, stdout)
-	report.RenderValueFeedback(stdout, "muted", len(o.muted), o.tokens, o.monthly, r.PricePerToken*1e6, col)
+	report.RenderValueFeedback(stdout, "muted", len(o.muted), 0, o.tokens, o.monthly, r.PricePerToken*1e6, col)
 	tryShowShareHint(opts, stdout, col)
 }
 

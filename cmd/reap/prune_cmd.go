@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/thousandflowers/skillreaper/internal/mute"
 	"github.com/thousandflowers/skillreaper/internal/override"
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/report"
@@ -311,6 +312,9 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 			out.done = append(out.done, e)
 			out.movedTokens += row.Tokens
 			out.movedMonthly += row.Tokens * r.SessionsPerMonthOf(row.Platform)
+			if row.WeightUnknown {
+				out.movedUnmeasured++
+			}
 			notes[e.ID] = prune.Note{Tokens: row.Tokens, Platform: row.Platform, Source: row.Source}
 			if !machine {
 				fmt.Fprintf(stdout, "reaped %s %s (id %s)\n", row.Category, row.Name, e.ID)
@@ -353,18 +357,21 @@ func printChosenNote(stdout io.Writer, row report.Row) {
 
 // printPrunePlan shows what the run proposes.
 func printPrunePlan(opts options, stdout io.Writer, r *report.Report, candidates, dead []report.Row, named bool) {
-	total := 0
+	total, unmeasured := 0, 0
 	for _, row := range candidates {
 		total += row.Tokens
+		if row.WeightUnknown {
+			unmeasured++
+		}
 	}
 	if named {
 		said := fmt.Sprintf("says %s (%s)", candidates[0].Verdict, candidates[0].Reason)
 		if candidates[0].Verdict == report.VerdictInfo { // muted, or a kind reap does not judge
 			said = fmt.Sprintf("gives it no verdict (%s)", candidates[0].Reason)
 		}
-		fmt.Fprintf(stdout, "\n🧹  reap %s · reclaim ~%s tok/session\n\n", said, report.HumanNum(total))
+		fmt.Fprintf(stdout, "\n🧹  reap %s · %s\n\n", said, report.ReclaimSaid(report.HumanNum(total), unmeasured, len(candidates)))
 	} else {
-		fmt.Fprintf(stdout, "\n🧹  %d %s unused · reclaim ~%s tok/session\n\n", len(candidates), report.Plural(len(candidates), "item"), report.HumanCount(total))
+		fmt.Fprintf(stdout, "\n🧹  %d %s unused · %s\n\n", len(candidates), report.Plural(len(candidates), "item"), report.ReclaimSaid(report.HumanCount(total), unmeasured, len(candidates)))
 	}
 	// A list of N dead items reads as N decisions. Grouped by where they
 	// came from it usually is not: one plugin tends to account for most of
@@ -412,9 +419,11 @@ type pruneOutcome struct {
 	done         []prune.Entry
 	movedTokens  int
 	movedMonthly int // moved tokens times the sessions a month of each row's own tool
-	gone         []itemProblem
-	failed       []itemProblem
-	interrupted  int // items not reached because of a signal
+	// movedUnmeasured counts the moved rows whose weight was never measured.
+	movedUnmeasured int
+	gone            []itemProblem
+	failed          []itemProblem
+	interrupted     int // items not reached because of a signal
 }
 
 func (o pruneOutcome) exitCode() int {
@@ -450,7 +459,7 @@ func (o pruneOutcome) printSummary(opts options, stdout, stderr io.Writer, r *re
 	col := colorEnabled(opts, stdout)
 	// What moved, not what was planned: the saving claimed has to be the saving
 	// actually made.
-	report.RenderValueFeedback(stdout, "pruned", len(o.done), o.movedTokens, o.movedMonthly, r.PricePerToken*1e6, col)
+	report.RenderValueFeedback(stdout, "pruned", len(o.done), o.movedUnmeasured, o.movedTokens, o.movedMonthly, r.PricePerToken*1e6, col)
 	tryShowShareHint(opts, stdout, col)
 	tryShowStarCta(opts, stdout, r, col)
 	return o.exitCode()
@@ -687,6 +696,27 @@ func keptSince(opts options) (func(report.Row) bool, error) {
 	return func(row report.Row) bool {
 		return kept[override.ItemKey(string(row.Category), row.DiskName())]
 	}, nil
+}
+
+// muteListReadable stops a mute before any plan or question when the list of
+// what is muted cannot be read: each item would fail on it in turn.
+func muteListReadable(opts options, stderr io.Writer) bool {
+	if _, err := mute.Entries(opts.claudeDir); err != nil {
+		fmt.Fprintf(stderr, "error: %v\nNothing was changed.\n", err)
+		return false
+	}
+	return true
+}
+
+// prunable counts what reap prune would take: unused, and removable by reap.
+func prunable(rows []report.Row) int {
+	n := 0
+	for _, row := range rows {
+		if row.Verdict == report.VerdictReap && row.Removable {
+			n++
+		}
+	}
+	return n
 }
 
 // warningNote follows a "nothing to do": clean and "could not tell" are not

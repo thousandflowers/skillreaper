@@ -169,7 +169,7 @@ func hintRewriterAs(invoked, shown string, args []string) func([]byte) []byte {
 	}
 	// After the name: a subcommand or a "[", a flag, the word "to", or the
 	// backquote that closes a bare `reap`.
-	re := regexp.MustCompile(`(^|[\s\x60(])reap( (?:` + strings.Join(names, "|") + `|--|to )|\x60)`)
+	re := regexp.MustCompile(`(^|[\s\x60(])reap( (?:` + strings.Join(names, "|") + `|--|to |for )|\x60)`)
 	with := []byte("${1}" + shown + "${2}")
 	pad := []byte(strings.Repeat(" ", len(shown)-len("reap")))
 	return func(p []byte) []byte {

@@ -153,11 +153,20 @@ func (a *app) askClaude(prompt, body string, opts askOptions) (any, error) {
 			a.noteAsk(res.err.Error())
 			return nil, nil
 		case res.code != 0:
-			a.logf("claude -p exit %d: %s", res.code, lastRunes(res.stderr, stderrTail))
-			a.noteAsk(fmt.Sprintf("exit %d: %s", res.code, lastLine(res.stderr)))
+			said := res.stderr // claude may say why on either: stderr first
+			if strings.TrimSpace(said) == "" {
+				said = res.stdout
+			}
+			a.logf("claude -p exit %d: %s", res.code, lastRunes(said, stderrTail))
+			why := fmt.Sprintf("exit %d", res.code)
+			if line := lastLine(said); line != "" {
+				why += ": " + line
+			}
+			a.noteAsk(why)
 			continue
 		}
 		if answer := parse(res.stdout); answer != nil {
+			a.noteAsk("") // it answered: an earlier try's reason is no step's reason
 			return answer, nil
 		}
 		a.noteAsk("an answer that could not be read")

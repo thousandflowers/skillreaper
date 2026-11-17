@@ -439,14 +439,14 @@ func TestAppCov_a_written_skill_that_cannot_be_removed_says_so(t *testing.T) {
 		t.Fatal(err)
 	}
 	ttyCovReadOnly(t, filepath.Join(home, ".claude", "skills"))
-	if err := removeWritten(c); !errors.Is(err, os.ErrPermission) {
+	if err := removeWritten(c, false); !errors.Is(err, os.ErrPermission) {
 		t.Errorf("a link in a read-only folder gave %v", err)
 	}
 	if !exists(filepath.Join(home, ".claude", "skills-reinvest", c.Slug)) {
 		t.Error("the folder went although its link stayed")
 	}
 	tempHome(t)
-	if err := removeWritten(c); !errors.Is(err, os.ErrNotExist) {
+	if err := removeWritten(c, false); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("a written skill that is not there gave %v", err)
 	}
 }

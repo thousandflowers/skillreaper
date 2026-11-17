@@ -144,3 +144,22 @@ func TestUnmuteWithItsCopyGoneSaysWhatToDo(t *testing.T) {
 		t.Errorf("unmute: %v", err)
 	}
 }
+
+// A mute list that cannot be read is named, with what to do about it: the bare
+// "invalid character" of the JSON reader named no file.
+func TestACorruptMuteListIsNamed(t *testing.T) {
+	dir, path := cycle18Skill(t, "---\nname: x\ndescription: some words\n---\nbody\n")
+	state := filepath.Join(dir, "reaped", "muted", "state.json")
+	if err := os.MkdirAll(filepath.Dir(state), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(state, []byte("{bad"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Mute(dir, dir, "x", path)
+
+	if err == nil || !strings.Contains(err.Error(), state) || !strings.Contains(err.Error(), "Fix or remove that file") {
+		t.Errorf("mute with a corrupt list: %v", err)
+	}
+}

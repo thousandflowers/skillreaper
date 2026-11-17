@@ -60,7 +60,10 @@ whole: its tail could read as a key, and the letter that ends an arrow marked
 the row to delete. Keys pressed while an apply is at work are dropped: a `q`
 pressed during a slow one left the menu before its failures could be read.
 On a narrow window the receipt's big figure gives way to a short one, as the
-header's does, so that the words beside it stay whole; a name cut in its
+header's does, so that the words beside it stay whole; a stray `ESC [`
+(Alt+[) ends at the next Esc or Enter, where it swallowed the arrow after
+it and let its last letter through as a key; a name made of accents alone
+is shown as `(no name)`; a name cut in its
 middle no longer leaves an accent on the `…`; where the locale cannot draw a
 wide character, the columns after it stay in line.
 
@@ -467,10 +470,39 @@ really injected, with multi-line descriptions read in full.
   says so; `agent:` and list items in a header take a comment after a tab.
 - Run through `npx`, a printed hint names `npx skillreaper`: neither
   `reap` nor `skillreaper` is on the PATH there.
-- No block in the README, INSTALL.md or this file carries a `# comment`
-  after a command: pasted into zsh, where `#` is no comment, the words
-  after it became arguments. The usage list is a table; the three ways to
-  install are three blocks.
+- No block of commands in the README, INSTALL.md or this file carries a
+  `# comment` after a command: pasted into zsh, where `#` is no comment,
+  the words after it became arguments. The usage lists are tables; the
+  three ways to install are three blocks.
+- `reap delete`, from the command line and from the menu, leaves an item
+  whose file is another one, or was written, since reap read it: a pull or
+  a reinstall can put a different skill under the same name while the
+  question waits, and a delete cannot be undone.
+- A quoted description that runs over several lines is weighed whole, as
+  `reap mute` strips it whole. Weighed as its first line, a heavy skill
+  came out a few tokens, never MUTE, and the saving claimed for muting it
+  was a hundredth of the real one.
+- A hook script whose path is in quotes is followed whatever the path
+  holds (a space, a bracket, an `&`).
+- `reap apm`, `reap manifest` and `reap route` find where a skill fired
+  the way its uses are counted: whatever case the transcript wrote, and
+  under the name in its header. `apm --diff` told you to drop a skill that
+  had fired in the repo.
+- A mute list that cannot be read is named, once, with what to do, before
+  any plan or question; the report warns that it cannot tell what is
+  muted. `reap mute` printed the JSON reader's error once per item.
+- After a prune of MCP servers alone the line says `weight not measured`,
+  not `saving ~0 tok/session`; with a measured item among them it says
+  `at least`.
+- The weekly reminder counts what `reap prune` would take: unused items
+  inside a plugin were counted as `to prune`.
+- `reap share` counts as dead what the report counts as dead: the weight
+  of skills that fired and are only heavy was in its `dead context`.
+- `install-hook --dry-run` on a `settings.json` that is a link leading
+  nowhere says so, as the real run does; the counts that still stood in a
+  fixed plural (`1 items never fired`, `1 uses`, `1 days ago`) agree in
+  number; under `npx` the agent view's `run reap for details` names
+  `npx skillreaper` too.
 
 ### Behaviour changes on the command line
 
@@ -623,6 +655,15 @@ the same cache files and the same checks. What to know before running it:
 - The mute line of `--dry-run` names the item's path and the config folder
   the run was pointed at; with no terminal to choose on, the list of swaps
   ends by saying that nothing was changed.
+- The reason on a failed step is that step's own: one left by a call that
+  failed and then answered is not shown, and what `claude -p` said on
+  stdout is read when stderr is empty.
+- A swap that fails after linking again a folder that was already in
+  `skills-reinvest` takes the link away and leaves the folder: it removed
+  the folder, with whatever else was in it, under `nothing changed`.
+- With `--online --mcp`, a server installed with nothing to mute is no
+  longer listed as a swap still to make, and a registry name is printed
+  without the control characters it may carry.
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

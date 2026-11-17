@@ -157,12 +157,15 @@ func pointsAt(link, target string) bool {
 
 // removeWritten undoes create(): the link, then the folder, only when the
 // link points at the folder reinvest wrote.
-func removeWritten(c candidate) error {
+func removeWritten(c candidate, linkOnly bool) error {
 	link, home := filepath.Join(skillsDir(), c.Slug), filepath.Join(writtenDir(), c.Slug)
 	if pointsAt(link, home) {
 		if err := os.Remove(link); err != nil {
 			return err
 		}
+	}
+	if linkOnly { // the folder was there before this run: it stays as it was
+		return nil
 	}
 	if _, err := os.Lstat(home); err != nil {
 		return err
@@ -337,7 +340,7 @@ func (a *app) rollBack(c candidate, muted []skill) []string {
 	switch {
 	case c.Installed: // installed by an earlier run: it stays, only this run's mutes are undone
 	case c.Created:
-		err = removeWritten(c)
+		err = removeWritten(c, a.linkedAgain[c.Slug])
 	default:
 		err = a.runStep(uninstallCommand(c))
 	}
@@ -356,16 +359,25 @@ func (a *app) install(s swap) (lines []string, stop bool) {
 	}
 	switch {
 	case c.Created:
+		home := filepath.Join(writtenDir(), c.Slug)
+		left, _ := present(home) // there before this run: linked again, not made
 		if err := create(c); err != nil {
 			return fail(err.Error())
 		}
-		return []string{"  ✓  created " + c.Name + " in " + filepath.Join(writtenDir(), c.Slug)}, false
+		if left {
+			if a.linkedAgain == nil {
+				a.linkedAgain = map[string]bool{}
+			}
+			a.linkedAgain[c.Slug] = true
+			return []string{"  ✓  linked " + c.Name + " again, from " + home}, false
+		}
+		return []string{"  ✓  created " + c.Name + " in " + home}, false
 	case c.Installed:
 		return nil, false
 	}
 	command, ok := installCommand(c)
 	if !ok {
-		return []string{"  ✗  " + c.Name + ": needs manual setup, nothing muted · " + c.ID}, true
+		return []string{"  ✗  " + c.Name + ": needs manual setup, nothing muted · " + printable(c.ID)}, true
 	}
 	if c.Kind == kindSkill { // the user's: never replaced, never rolled back
 		if taken, err := present(filepath.Join(skillsDir(), c.Slug)); err != nil {
@@ -398,7 +410,8 @@ func (a *app) install(s swap) (lines []string, stop bool) {
 		if err := a.remember(c); err != nil {
 			lines = append(lines, "  ✗  not remembered for a later mute: "+err.Error())
 		}
-		return append(lines, "  ·  nothing muted yet: reinvest offers the mute once reap has weighed it"), true
+		// Not a stop: with nothing to mute the swap is done, and no longer on offer.
+		return append(lines, "  ·  nothing muted yet: reinvest offers the mute once reap has weighed it"), false
 	}
 	return lines, false
 }
@@ -523,7 +536,7 @@ func dryRunLines(s swap) []string {
 	case !c.Installed:
 		command, ok := installCommand(c)
 		if !ok {
-			return []string{"  ✗  " + c.Name + ": needs manual setup, nothing muted · " + c.ID}
+			return []string{"  ✗  " + c.Name + ": needs manual setup, nothing muted · " + printable(c.ID)}
 		}
 		words := make([]string, len(command))
 		for i, w := range command { // one word per argument: the line is there to be pasted

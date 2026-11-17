@@ -177,7 +177,7 @@ func continuation(lines []string) []string {
 // blockHeader recognises a block scalar indicator: "|" or ">", then an
 // optional chomping sign and indentation digit, in either order.
 func blockHeader(raw string) (style, chomp byte, ok bool) {
-	if i := strings.Index(raw, " #"); i >= 0 {
+	if i := commentAt(raw); i >= 0 {
 		raw = strings.TrimSpace(raw[:i])
 	}
 	if raw == "" || (raw[0] != '|' && raw[0] != '>') {
@@ -278,7 +278,7 @@ func frontmatterList(b []byte, key string) []string {
 			return out
 		}
 		topLevel := line == strings.TrimLeft(line, " \t")
-		if at := strings.Index(line, " #"); at >= 0 {
+		if at := commentAt(line); at >= 0 {
 			line = line[:at] // a comment, to the end of the line
 		}
 		text := strings.TrimSpace(line)
@@ -342,4 +342,15 @@ func AgentLoaded(items []Item) map[string]map[string]bool {
 		}
 	}
 	return loaded
+}
+
+// commentAt is where a comment begins in a line: at the space or tab before a
+// "#". -1 when there is none.
+func commentAt(line string) int {
+	for i := 1; i < len(line); i++ {
+		if line[i] == '#' && (line[i-1] == ' ' || line[i-1] == '\t') {
+			return i - 1
+		}
+	}
+	return -1
 }

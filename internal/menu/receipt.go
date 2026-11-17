@@ -297,6 +297,7 @@ func (m *Menu) receipt(p *Plan, unit string, onApplied func()) string {
 	}
 	rc.draw("working…")
 	outcomes := m.apply.Apply(picks)
+	m.s.FlushInput() // a key pressed while it worked was not about what is shown next
 	m.settle(outcomes)
 	onApplied()
 	var done []Pick
@@ -446,10 +447,12 @@ func (v *receiptView) draw(question string) bool {
 	m.put(y+1, x, cut(summary, pw), bold)
 	if v.tok > 0 {
 		above, beside, figure := "", "tokens saved every session", m.tokens(v.tok)
+		short := m.short(float64(v.tok))
 		if v.unit == unitMoney {
 			above, beside = m.bigMoneyWords("saved every month")
-			figure = m.money(v.priced)
+			figure, short = m.money(v.priced), m.cur.Sym+m.short(v.priced*m.price*m.cur.Rate)
 		}
+		figure = m.fitBig(figure, short, beside, pw)
 		m.put(y+2, x, above, dim)
 		end := m.big(y+3, x, figure, 0) // green: what you get back, not what you waste
 		m.put(y+4, end+2, beside, asBold(m.tint(tintGreen)))
@@ -474,4 +477,13 @@ func causeOf(err error) string {
 		return path.Err.Error()
 	}
 	return err.Error()
+}
+
+// fitBig is the figure to draw big with words beside it in room cells: the
+// short one when the whole one would push the words off the edge.
+func (m *Menu) fitBig(figure, short, words string, room int) string {
+	if bigWidth(figure) > room-2-cells(words) {
+		return short
+	}
+	return figure
 }

@@ -310,6 +310,7 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 		case err == nil:
 			out.done = append(out.done, e)
 			out.movedTokens += row.Tokens
+			out.movedMonthly += row.Tokens * r.SessionsPerMonthOf(row.Platform)
 			notes[e.ID] = prune.Note{Tokens: row.Tokens, Platform: row.Platform, Source: row.Source}
 			if !machine {
 				fmt.Fprintf(stdout, "reaped %s %s (id %s)\n", row.Category, row.Name, e.ID)
@@ -408,11 +409,12 @@ type pruneOutcome struct {
 	refused      []itemProblem
 	planTokens   int
 
-	done        []prune.Entry
-	movedTokens int
-	gone        []itemProblem
-	failed      []itemProblem
-	interrupted int // items not reached because of a signal
+	done         []prune.Entry
+	movedTokens  int
+	movedMonthly int // moved tokens times the sessions a month of each row's own tool
+	gone         []itemProblem
+	failed       []itemProblem
+	interrupted  int // items not reached because of a signal
 }
 
 func (o pruneOutcome) exitCode() int {
@@ -448,7 +450,7 @@ func (o pruneOutcome) printSummary(opts options, stdout, stderr io.Writer, r *re
 	col := colorEnabled(opts, stdout)
 	// What moved, not what was planned: the saving claimed has to be the saving
 	// actually made.
-	report.RenderValueFeedback(stdout, "pruned", len(o.done), o.movedTokens, r.SessionsPerMonth, r.PricePerToken*1e6, col)
+	report.RenderValueFeedback(stdout, "pruned", len(o.done), o.movedTokens, o.movedMonthly, r.PricePerToken*1e6, col)
 	tryShowShareHint(opts, stdout, col)
 	tryShowStarCta(opts, stdout, r, col)
 	return o.exitCode()
@@ -528,9 +530,9 @@ func (o pruneOutcome) writeJSON(w, stderr io.Writer, applied bool) int {
 // pruneNameMiss says why a name cannot be pruned or muted. Only an item with a
 // plugin source is said to be inside a plugin.
 func pruneNameMiss(opts options, r *report.Report, name string, muting bool) string {
-	_, cat, bare := splitSelector(name) // a selector in front does not change what the item is
+	plat, cat, bare := splitSelector(name) // a selector in front does not change what the item is
 	for _, row := range r.Rows {
-		selected := (cat == "" || string(row.Category) == cat) && (row.Name == bare || strings.HasSuffix(row.Name, ":"+bare))
+		selected := (plat == "" || row.Platform == plat) && (cat == "" || string(row.Category) == cat) && (row.Name == bare || strings.HasSuffix(row.Name, ":"+bare))
 		if row.Name != name && !selected {
 			continue
 		}
@@ -542,7 +544,7 @@ func pruneNameMiss(opts options, r *report.Report, name string, muting bool) str
 		}
 		return fmt.Sprintf("error: %s %s cannot be removed by reap; edit %s by hand", row.Category, row.Name, shown(row.Path))
 	}
-	return fmt.Sprintf("error: no skill, agent or MCP server found: %s", name)
+	return fmt.Sprintf("error: no skill, agent or MCP server found: %s", name) + warningLine(r, "\n")
 }
 
 func cmdRestore(opts options, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -690,7 +692,17 @@ func keptSince(opts options) (func(report.Row) bool, error) {
 // warningNote follows a "nothing to do": clean and "could not tell" are not
 // the same, and a report with warnings may be the second.
 func warningNote(w io.Writer, r *report.Report) {
-	if n := len(r.Warnings); n > 0 {
-		fmt.Fprintf(w, "The report has %d %s: run reap to see what is held back, and why.\n", n, report.Plural(n, "warning"))
+	if line := warningLine(r, ""); line != "" {
+		fmt.Fprintln(w, line)
 	}
+}
+
+// warningLine is that note after lead, or nothing for a report with no warning.
+// A file reap could not read holds items it then cannot find by name.
+func warningLine(r *report.Report, lead string) string {
+	n := len(r.Warnings)
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%sThe report has %d %s: run reap to see what it could not read or judge.", lead, n, report.Plural(n, "warning"))
 }

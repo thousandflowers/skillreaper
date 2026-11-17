@@ -84,7 +84,7 @@ func PruneLostKey(platform, category, source, name string) string {
 type Row struct {
 	scan.Item
 	Uses     int
-	LastUsed time.Time
+	LastUsed time.Time `json:",omitzero"` // absent for an item never used, not year 1
 	Verdict  string
 	Reason   string // why this verdict was assigned
 	Tokens   int    // estimated per-session weight
@@ -100,7 +100,7 @@ type Row struct {
 	// listing carried, when that is what its weight was taken from.
 	ListedChars int       `json:",omitempty"`
 	ErrorCount  int       // invocations that errored in the window
-	LastAttempt time.Time // most recent attempt (success or error)
+	LastAttempt time.Time `json:",omitzero"` // most recent attempt (success or error)
 	// EvidenceNote says why a platform has no usage evidence, for a no-transcript
 	// row. One text for every surface.
 	EvidenceNote string `json:",omitempty"`
@@ -631,6 +631,15 @@ func MuteEligible(row Row) bool {
 // SessionsOf is how many sessions an item of that platform is judged against:
 // its own platform's, as its verdict is, and every session when the platforms
 // were not counted apart.
+// SessionsPerMonthOf is the same, scaled to a month: what a row of that
+// platform is priced with.
+func (r *Report) SessionsPerMonthOf(platformID string) int {
+	if r.PlatformSessionsPerMonth == nil || platformID == "" {
+		return r.SessionsPerMonth
+	}
+	return r.PlatformSessionsPerMonth[platformID]
+}
+
 func (r *Report) SessionsOf(platformID string) int {
 	if len(r.PlatformSessions) == 0 || platformID == "" {
 		return r.Sessions

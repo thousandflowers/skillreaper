@@ -147,6 +147,15 @@ func CutMid(s string, n int) string {
 		}
 		start -= size
 	}
+	// The tail begins on a whole character: a mark that belongs to the one
+	// just left out would land on the "…".
+	for start < len(s) {
+		c, size := utf8.DecodeRuneInString(s[start:])
+		if cellWidth(c) > 0 {
+			break
+		}
+		start += size
+	}
 	return head + "…" + s[start:]
 }
 
@@ -190,7 +199,7 @@ func Glyphs(s string) string {
 		case known:
 			b.WriteString(plain)
 		case cellWidth(c) > 0:
-			b.WriteByte('?')
+			b.WriteString(strings.Repeat("?", cellWidth(c))) // as wide as what it stands for
 		}
 	}
 	return b.String()

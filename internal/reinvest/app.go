@@ -34,6 +34,7 @@ type app struct {
 	termTTY bool
 	stderr  io.Writer
 	logMu   sync.Mutex
+	askWhy  string    // why the last call to Claude gave nothing; under logMu
 	log     io.Writer // everything else: the run log
 
 	now   func() time.Time
@@ -262,6 +263,13 @@ func (a *app) lineStart() string {
 
 // failed tells the person a step did not happen.
 func (a *app) failed(msg string) {
+	a.logMu.Lock()
+	why := a.askWhy
+	a.askWhy = ""
+	a.logMu.Unlock()
+	if why != "" { // "got no answer" alone hid a login that had run out
+		msg += " · claude -p: " + why + " · log: " + a.cachePath(logFile)
+	}
 	fmt.Fprintf(a.term, "%s  ✗ %s\n", a.lineStart(), msg)
 }
 

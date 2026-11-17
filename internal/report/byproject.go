@@ -13,7 +13,7 @@ func RenderByProject(w io.Writer, r *Report, color bool) {
 	paint := painter(color)
 	width := termWidth(w)
 	fmt.Fprintf(w, "\n  %s\n", paint(cCyan,
-		rule(fmt.Sprintf("skills by project · last %d days · %d sessions", r.WindowDays, r.Sessions), width-2)))
+		rule("skills by project · "+windowOf(r.WindowDays, r.Sessions), width-2)))
 
 	if len(r.SkillProjects) == 0 {
 		fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, "no skill firings attributed to a project."))

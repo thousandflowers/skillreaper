@@ -59,8 +59,15 @@ func LookupPrice(modelID string) (float64, bool) {
 	if p, ok := ModelPricing[modelID]; ok {
 		return p, true
 	}
-	p, ok := ModelPricing[datedSuffix.ReplaceAllString(modelID, "")]
+	p, ok := ModelPricing[undated(modelID)]
 	return p, ok
+}
+
+// undated is a model id without what a transcript or a person may put after
+// it: a context window ("[1m]") and a release date.
+func undated(modelID string) string {
+	id, _, _ := strings.Cut(modelID, "[")
+	return datedSuffix.ReplaceAllString(id, "")
 }
 
 var datedSuffix = regexp.MustCompile(`-\d{8}$`)
@@ -98,6 +105,9 @@ func Tokens(chars int) int {
 // the model is empty or has no entry in TokenRatios.
 func TokensFor(modelID string, chars int) int {
 	ratio, ok := TokenRatios[modelID]
+	if !ok {
+		ratio, ok = TokenRatios[undated(modelID)]
+	}
 	if !ok {
 		ratio = charsPerTokenX10
 	}

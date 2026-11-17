@@ -55,9 +55,17 @@ type decoder struct {
 	mouse   Mouse
 }
 
-// get is the next byte of a sequence already begun.
+// get is the byte after an Esc, if one comes soon enough to belong to it.
 func (d *decoder) get() (byte, bool) {
 	b, st := d.src.next(d.escWait)
+	return b, st == gotByte
+}
+
+// rest is the next byte of a sequence a terminal has begun (ESC [, ESC O). It
+// is waited for like a paste: given up early, the bytes still to come arrived
+// as keys nobody typed, and the letter ending an arrow marked a row.
+func (d *decoder) rest() (byte, bool) {
+	b, st := d.src.next(pasteWait)
 	return b, st == gotByte
 }
 
@@ -91,7 +99,7 @@ func (d *decoder) afterEsc() (Key, bool) {
 	case b == '[':
 		return d.csi()
 	case b == 'O':
-		final, ok := d.get()
+		final, ok := d.rest()
 		if !ok {
 			return 0, false
 		}
@@ -115,20 +123,14 @@ func (d *decoder) afterEsc() (Key, bool) {
 
 func (d *decoder) csi() (Key, bool) {
 	var body []byte
-	wait := d.escWait
 	for {
-		b, st := d.src.next(wait)
-		if st != gotByte {
+		b, ok := d.rest()
+		if !ok {
 			return 0, false
 		}
 		body = append(body, b)
 		if b >= 0x40 && b <= 0x7e {
 			break
-		}
-		if b == '<' {
-			// A mouse report: only a terminal writes one, so it is waited for
-			// like a paste. Given up early, its tail arrived as keys.
-			wait = pasteWait
 		}
 	}
 	text := string(body)
@@ -136,7 +138,7 @@ func (d *decoder) csi() (Key, bool) {
 	case text == "M": // X10 mouse: three raw bytes follow
 		var raw [3]int
 		for i := range raw {
-			b, ok := d.get()
+			b, ok := d.rest()
 			if !ok {
 				return 0, false
 			}

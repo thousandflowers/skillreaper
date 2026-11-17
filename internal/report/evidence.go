@@ -52,7 +52,13 @@ func foldKey(s string) string { return strings.ToLower(s) }
 
 // rawKeys is every name an item's firings may be recorded under, as written.
 func rawKeys(it scan.Item) []string {
-	return dedupe(append([]string{it.Name}, aliasKeys(it)...))
+	keys := append([]string{it.Name}, aliasKeys(it)...)
+	// A use is filed under the name as it can be printed (usage.record), so a
+	// name holding a character that is rewritten for printing is found there.
+	for _, k := range keys[:len(keys):len(keys)] {
+		keys = append(keys, scan.SafeText(k))
+	}
+	return dedupe(keys)
 }
 
 // evidenceKeys is rawKeys in the form a canonicalStats holds them.

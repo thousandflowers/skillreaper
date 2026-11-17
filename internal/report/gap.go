@@ -40,7 +40,7 @@ func utilPct(fired, loaded, sessions int) (int, string) {
 		return 0, "n/a"
 	}
 	pct := fired * 100 / loaded
-	return pct, fmt.Sprintf("%d%%", pct)
+	return pct, PctOf(fired, loaded) // "<1%" for a few in very many, as the agent view writes it
 }
 
 // utilBar renders a 10-segment bar filled proportionally to pct.
@@ -128,7 +128,7 @@ func RenderGap(w io.Writer, r *Report, color bool) {
 	g := r.Gap
 
 	fmt.Fprintf(w, "\n  %s\n", paint(cCyan,
-		rule(fmt.Sprintf("loaded vs fired · last %d days · %d sessions", r.WindowDays, r.Sessions), width-2)))
+		rule("loaded vs fired · "+windowOf(r.WindowDays, r.Sessions), width-2)))
 
 	if g == nil || g.Loaded == 0 {
 		fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, "no inventory found."))
@@ -237,7 +237,7 @@ func renderBrokenSkills(w io.Writer, r *Report, width int, paint func(code, s st
 func RenderGapMarkdown(w io.Writer, r *Report) {
 	g := r.Gap
 	fmt.Fprintf(w, "# loaded vs fired\n\n")
-	fmt.Fprintf(w, "Window: last %d days · %d sessions\n\n", r.WindowDays, r.Sessions)
+	fmt.Fprintf(w, "Window: %s\n\n", windowOf(r.WindowDays, r.Sessions))
 	if g == nil || g.Loaded == 0 {
 		fmt.Fprintln(w, "_No inventory found._")
 		return

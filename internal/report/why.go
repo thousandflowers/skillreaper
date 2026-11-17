@@ -163,6 +163,8 @@ func summaryFor(row Row) string {
 		return "installed too recently — still inside the grace period"
 	case ReasonNeedsData:
 		return "not enough sessions yet to make a confident call"
+	case ReasonRare:
+		return "used before this window, on a longer cadence than it covers — held, not condemned"
 	case ReasonNoEvidence:
 		if row.EvidenceNote != "" {
 			return "no usage evidence: " + row.EvidenceNote

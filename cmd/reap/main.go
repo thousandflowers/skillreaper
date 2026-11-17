@@ -156,8 +156,9 @@ type options struct {
 
 func main() {
 	invoked := typedName(os.Args[0], os.Getenv(wrapperEnv))
-	out := &stdoutTracker{f: os.Stdout, rewrite: hintRewriter(invoked, os.Args[1:])}
-	errOut := &stdoutTracker{f: os.Stderr, rewrite: hintRewriter(invoked, nil)}
+	shown := shownName(invoked, os.Getenv(wrapperEnv))
+	out := &stdoutTracker{f: os.Stdout, rewrite: hintRewriterAs(invoked, shown, os.Args[1:])}
+	errOut := &stdoutTracker{f: os.Stderr, rewrite: hintRewriterAs(invoked, shown, nil)}
 	args := os.Args[1:]
 	if opensMenu(invoked, args) {
 		args = []string{menuCommand}
@@ -186,7 +187,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.IntVar(&opts.graceDays, "grace-days", 14, "items installed this recently → REVIEW(grace)")
 	fs.IntVar(&opts.minTokens, "min-tokens", 3, "items below this token weight → KEEP(tiny)")
 	fs.Float64Var(&opts.muteThreshold, "mute-threshold", 0.20, "MUTE used skills whose uses number fewer than this fraction of the sessions: uses ÷ sessions, so 5 uses in one session count 5 (0 disables)")
-	fs.IntVar(&opts.muteMinTokens, "mute-min-tokens", 50, "only MUTE skills heavier than this token weight")
+	fs.IntVar(&opts.muteMinTokens, "mute-min-tokens", 50, "only MUTE skills heavier than this token weight (0 disables)")
 	fs.StringVar(&opts.source, "source", "", "prune, mute: act only on items from this source (see the by-source summary)")
 	fs.Float64Var(&opts.routeThreshold, "route-threshold", 0.10, "route: skills fired in fewer than this fraction of sessions get routed behind a leaf router")
 	fs.IntVar(&opts.routeMinSkills, "route-min-skills", 0, "route: skip the plan unless at least this many skills survive a prune (0 = always show)")
@@ -1873,6 +1874,7 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 	matches := report.MatchItems(r, args[0])
 	if len(matches) == 0 {
 		fmt.Fprintf(stderr, "no item found: %s\n", args[0])
+		warningNote(stderr, r)
 		return 1
 	}
 	if !sameItemOnPlatforms(matches) {

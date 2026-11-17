@@ -214,17 +214,17 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 	width := termWidth(w)
 	fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule("reap route · usage-informed lazy-load plan", width-2)))
 	for _, l := range wrap(fmt.Sprintf(
-		"Proposed, never applied. %d skills survive a prune · %d sessions · expose threshold %.0f%%.",
-		plan.TotalSkills, plan.Sessions, plan.ExposeThreshold*100), width, "  ", "  ") {
+		"Proposed, never applied. %s a prune · %s · expose threshold %.0f%%.",
+		survivors(plan.TotalSkills), nOf(plan.Sessions, "session"), plan.ExposeThreshold*100), width, "  ", "  ") {
 		fmt.Fprintln(w, paint(cDim, l))
 	}
 
 	if plan.BelowFloor {
 		fmt.Fprintln(w)
 		for _, l := range wrap(fmt.Sprintf(
-			"%d skills is below ~%d — native skill loading is usually enough here. Routing trades a "+
+			"%s is below ~%d — native skill loading is usually enough here. Routing trades a "+
 				"little selection accuracy for token savings. Prune first; route only if context is tight.",
-			plan.TotalSkills, RouteAdviceFloor), width, "  !  ", "     ") {
+			nOf(plan.TotalSkills, "skill"), RouteAdviceFloor), width, "  !  ", "     ") {
 			fmt.Fprintln(w, paint(cBold, l))
 		}
 	}
@@ -348,8 +348,8 @@ func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 		return
 	}
 	fmt.Fprintf(w, "# reap route — usage-informed lazy-load plan\n\n")
-	fmt.Fprintf(w, "_Proposed, never applied. %d skills survive a prune · %d sessions · expose threshold %.0f%%._\n\n",
-		plan.TotalSkills, plan.Sessions, plan.ExposeThreshold*100)
+	fmt.Fprintf(w, "_Proposed, never applied. %s a prune · %s · expose threshold %.0f%%._\n\n",
+		survivors(plan.TotalSkills), nOf(plan.Sessions, "session"), plan.ExposeThreshold*100)
 	if plan.BelowFloor {
 		fmt.Fprintf(w, "> ⓘ %d skills is below ~%d — native skill loading is usually enough. Prune first; route only if context is tight.\n\n", plan.TotalSkills, RouteAdviceFloor)
 	}
@@ -372,4 +372,12 @@ func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 		fmt.Fprintln(w)
 	}
 	fmt.Fprintf(w, "**Net: ~%s tok/session moved out of resident context.** Pair with `reap mute` to strip routed skills' descriptions.\n", HumanCount(plan.RoutedTok))
+}
+
+// survivors is "6 skills survive", "1 skill survives".
+func survivors(n int) string {
+	if n == 1 {
+		return "1 skill survives"
+	}
+	return nOf(n, "skill") + " survive"
 }

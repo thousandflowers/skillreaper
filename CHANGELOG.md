@@ -13,8 +13,10 @@ report, and every command still works from the command line.**
 ### The menu
 
 ```bash
-skillreaper        # or: reap menu
+skillreaper
 ```
+
+`reap menu` opens the same screen.
 
 The number at the top is what you re-send in every session. It falls as you
 choose, in tokens or in money. Rows are grouped by what reap suggests (prune,
@@ -53,8 +55,14 @@ A first Ctrl-C while the menu applies stops it after the item in hand and
 shows what was done; a second one ends it at once. A crash gives the terminal
 back as it was.
 
-A mouse report that arrives in two pieces on a slow link is read whole; its
-tail could read as the key that marks the row to mute.
+A key or a mouse report that arrives in two pieces on a slow link is read
+whole: its tail could read as a key, and the letter that ends an arrow marked
+the row to delete. Keys pressed while an apply is at work are dropped: a `q`
+pressed during a slow one left the menu before its failures could be read.
+On a narrow window the receipt's big figure gives way to a short one, as the
+header's does, so that the words beside it stay whole; a name cut in its
+middle no longer leaves an accent on the `…`; where the locale cannot draw a
+wide character, the columns after it stay in line.
 
 ### reap delete
 
@@ -426,6 +434,43 @@ really injected, with multi-line descriptions read in full.
 - The README lists every reason a verdict can carry; INSTALL.md's download
   block stops at a failed download or checksum; the plugin's skill repeats
   `--claude-dir` on the prune it runs.
+- An item whose name holds a character reap rewrites to print it (a
+  direction mark, a control character) is found under the name its uses
+  are filed under. It read as never used, and came out REAP.
+- A hook's script is followed when punctuation is glued to its path
+  (`start.sh;`, `start.sh&`), when a quote stands between the variable and
+  the rest (`"$HOME"/.claude/hooks/x.sh`), and when the script beside it
+  is a link to a file. The skill each of them loads was REAP.
+- `reap mute` reads a quote that closes on the description's own line as
+  the end of the value: an apostrophe inside single quotes, or a comment
+  holding a quote, made it say the file had no description, or take the
+  next key along.
+- `reap unmute` with its copy of the description gone says what to do
+  (write one back, run it again) in place of the system's `no such file`.
+- A `platform:category:name` that matches nothing is `not found`; it was
+  answered with a line about another tool's item of that name. A name not
+  found beside a report with warnings points at them: a file reap could
+  not read holds items it cannot find.
+- The money after `reap prune` and `reap mute` is priced with the sessions
+  of each moved item's own tool. An item of a tool with no session on
+  record claimed a monthly saving from Claude Code's.
+- One day is `1 day` and one session `1 session` in every view; a few
+  items fired among very many is `<1%` in every view, not `0%` in some;
+  the muted line says how many of the muted never fired, so that the
+  headline's figures close; the masthead puts what does not fit on a
+  second line, where it was cut before the words `warnings below`.
+- `reap why` has a sentence for `rare`; `reap apm` says its session count
+  is of all projects; `--json` leaves out the date of an item never used
+  or with no install date, where it wrote year 1.
+- `--model` takes an id with a date or `[1m]` after it for the weight and
+  for the price alike; `--mute-min-tokens 0` turns MUTE off, and the help
+  says so; `agent:` and list items in a header take a comment after a tab.
+- Run through `npx`, a printed hint names `npx skillreaper`: neither
+  `reap` nor `skillreaper` is on the PATH there.
+- No block in the README, INSTALL.md or this file carries a `# comment`
+  after a command: pasted into zsh, where `#` is no comment, the words
+  after it became arguments. The usage list is a table; the three ways to
+  install are three blocks.
 
 ### Behaviour changes on the command line
 
@@ -445,9 +490,12 @@ really injected, with multi-line descriptions read in full.
 
 ### reap reinvest (experimental)
 
+With `--dry-run` you pick swaps and it prints what would run, changing
+nothing; without it, it asks before creating and muting.
+
 ```bash
-reap reinvest --dry-run    # pick swaps, print what would run, change nothing
-reap reinvest              # the same, then ask before creating and muting
+reap reinvest --dry-run
+reap reinvest
 ```
 
 `reap` finds what you never use. `reinvest` looks at the work you actually do,
@@ -567,6 +615,14 @@ the same cache files and the same checks. What to know before running it:
   kinds most were never searched.
 - The command `--dry-run` prints is quoted word by word, so pasting it
   runs that command and nothing else.
+- A step that got no answer says what `claude -p` said and where the log
+  is: `got no answer` alone hid a login that had run out.
+- A written skill whose link was deleted is linked again when offered with
+  the same text. It was shown in full, accepted and then refused, at every
+  run.
+- The mute line of `--dry-run` names the item's path and the config folder
+  the run was pointed at; with no terminal to choose on, the list of swaps
+  ends by saying that nothing was changed.
 - It has run on macOS. On Linux it builds and has not been run.
 
 It is not in the menu yet.

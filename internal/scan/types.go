@@ -41,7 +41,7 @@ type Item struct {
 	Description     string    // text injected into context (skills/agents) or display string
 	DescChars       int       // chars injected every session
 	BodyChars       int       // chars loaded on invocation (SKILL.md body)
-	InstalledAt     time.Time // zero when unknown
+	InstalledAt     time.Time `json:",omitzero"` // zero when unknown
 	Removable       bool      // safe to prune automatically
 	// HookLoaded is set on a plugin skill its SessionStart hook injects: it
 	// works in every session and no transcript records an invocation.

@@ -56,8 +56,10 @@ func RenderStarCta(w io.Writer, deadTokens int, color bool) {
 }
 
 // RenderValueFeedback prints a single line after a successful prune or mute
-// operation, showing real savings with a conservative annualised money estimate.
-func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, sessionsPerMonth int, price float64, color bool) {
+// operation, showing real savings with a conservative monthly money estimate.
+// tokensPerMonth is each moved row's tokens times the sessions a month of its
+// own tool: a tool with no session on record adds nothing to the money.
+func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, tokensPerMonth int, price float64, color bool) {
 	if items == 0 {
 		return
 	}
@@ -74,8 +76,8 @@ func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, sess
 	// destructive action, where it carries the most weight. Every other
 	// surface that shows money shows it per month; this one now agrees.
 	money := ""
-	if sessionsPerMonth > 0 && price > 0 {
-		mPerM := cost.MoneyPerMonth(tokensPerSession, sessionsPerMonth, price)
+	if tokensPerMonth > 0 && price > 0 {
+		mPerM := cost.MoneyPerMonth(tokensPerMonth, 1, price)
 		if mPerM < 0.01 {
 			money = " (< $0.01/month at your usage)"
 		} else {
@@ -205,14 +207,17 @@ func RenderText(w io.Writer, r *Report, color bool) {
 	// These are one thought — how far the numbers below can be trusted — and a
 	// reader who discovers four warnings only after scrolling past the
 	// verdicts has already read the verdicts wrong.
-	head := fmt.Sprintf("skillreaper · last %d days · %d sessions", r.WindowDays, r.Sessions)
+	var caveats []string
 	if r.MalformedLines > 0 {
-		head += " · " + MalformedSummary(r)
+		caveats = append(caveats, MalformedSummary(r))
 	}
 	if n := len(r.Warnings); n > 0 {
-		head += fmt.Sprintf(" · %d %s below", n, Plural(n, "warning"))
+		caveats = append(caveats, nOf(n, "warning")+" below")
 	}
-	fmt.Fprintf(w, "\n  %s\n", paint(cBold, truncate(head, width-2)))
+	fmt.Fprintln(w)
+	for _, line := range mastheadLines("skillreaper · "+windowOf(r.WindowDays, r.Sessions), caveats, width-2) {
+		fmt.Fprintf(w, "  %s\n", paint(cBold, line))
+	}
 
 	if r.Sessions == 0 {
 		fmt.Fprintln(w)
@@ -290,7 +295,7 @@ func headlineNotes(r *Report) []string {
 		out = append(out, m)
 	}
 	if r.MonthlyBasisDays > 0 && r.MonthlyBasisDays < r.WindowDays && r.Sessions > 0 {
-		out = append(out, fmt.Sprintf("monthly figures are extrapolated from %d days of history", r.MonthlyBasisDays))
+		out = append(out, "monthly figures are extrapolated from "+nOf(r.MonthlyBasisDays, "day")+" of history")
 	}
 	// The figures above are an estimate, per session and per item. This is
 	// neither: it is what the provider billed, and the only place the cache
@@ -300,15 +305,15 @@ func headlineNotes(r *Report) []string {
 	// always asserted and never measured.
 	if r.Measured.Messages > 0 && r.Measured.CacheRead > 0 {
 		out = append(out, fmt.Sprintf(
-			"measured over the window: %s tokens re-read from cache across %d messages, against %s of fresh input",
-			humanBig(r.Measured.CacheRead), r.Measured.Messages, humanBig(r.Measured.Input)))
+			"measured over the window: %s tokens re-read from cache across %s, against %s of fresh input",
+			humanBig(r.Measured.CacheRead), nOf(int(r.Measured.Messages), "message"), humanBig(r.Measured.Input)))
 	}
 	// Without this line the total reads as the whole bill. It is not: the dead
 	// items whose weight could never be measured contribute 0 to it.
 	if r.DeadUnknownWeight > 0 {
 		out = append(out, fmt.Sprintf(
-			"a floor, not a total: %d unused %s (MCP servers, hooks) carry weight that was never measured",
-			r.DeadUnknownWeight, Plural(r.DeadUnknownWeight, "item")))
+			"a floor, not a total: %s (MCP servers, hooks) %s weight that was never measured",
+			nOf(r.DeadUnknownWeight, "unused item"), map[bool]string{true: "carries", false: "carry"}[r.DeadUnknownWeight == 1]))
 	}
 	if r.DeadToolChars > 0 {
 		// DeadToolChars is a total summed across every session; divide to show
@@ -585,7 +590,7 @@ func permDisplay(row Row) string {
 // RenderMarkdown writes the report as a shareable Markdown document.
 func RenderMarkdown(w io.Writer, r *Report) {
 	fmt.Fprintf(w, "# skillreaper report\n\n")
-	fmt.Fprintf(w, "Window: last %d days · %d sessions analyzed\n\n", r.WindowDays, r.Sessions)
+	fmt.Fprintf(w, "Window: %s analyzed\n\n", windowOf(r.WindowDays, r.Sessions))
 	fmt.Fprintf(w, "**%s · ~%d dead tokens/session · ~$%.2f/month**\n",
 		NewHeadline(r).Line(), r.DeadTokensPerSession, r.MoneyPerMonth)
 	if r.DeadUnknownWeight > 0 {
@@ -790,6 +795,28 @@ func MalformedSummary(r *Report) string {
 // produces exactly one warning, which is the moment the tool is asking to be
 // trusted about evidence.
 // Plural returns word, with an "s" unless n is 1.
+// nOf is a count with its word: "1 day", "30 days".
+func nOf(n int, word string) string { return fmt.Sprintf("%d %s", n, Plural(n, word)) }
+
+// windowOf says what a report was measured over.
+func windowOf(days, sessions int) string {
+	return "last " + nOf(days, "day") + " · " + nOf(sessions, "session")
+}
+
+// mastheadLines is the opening line with its caveats beside it, or under it
+// when they do not fit: cut short, the line lost the words that say warnings
+// follow.
+func mastheadLines(head string, caveats []string, width int) []string {
+	if len(caveats) == 0 {
+		return []string{truncate(head, width)}
+	}
+	rest := strings.Join(caveats, " · ")
+	if one := head + " · " + rest; utf8.RuneCountInString(one) <= width {
+		return []string{one}
+	}
+	return append([]string{truncate(head, width)}, wrap(rest, width, "", "")...)
+}
+
 func Plural(n int, word string) string {
 	if n == 1 {
 		return word

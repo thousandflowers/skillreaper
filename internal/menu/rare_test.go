@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/prune"
 	"github.com/thousandflowers/skillreaper/internal/report"
@@ -734,4 +735,26 @@ func TestQuitFromAnEmptyPlatformAsksAboutPendingChoices(t *testing.T) {
 
 	mustEqual(t, "stays after n", stay, true)
 	mustEqual(t, "choices kept", l.p.size(), 1)
+}
+
+// Keys typed while an apply is at work are thrown away: a q pressed to give up
+// on a slow one left the menu the moment it ended, before its failures could
+// be read.
+func TestKeysTypedWhileApplyingAreThrownAway(t *testing.T) {
+	x := open(t, flowData())
+	x.m.now = clockAt(0, 0, time.Second)
+
+	x.press(space, applyKey, 'y', 'y').run()
+
+	mustEqual(t, "flushes", x.s.Flushes, 2)
+}
+
+// The receipt's big figure gives way to a short one when the words beside it
+// would not fit, as the header's does: at 58 columns they were cut.
+func TestReceiptFigureFitsItsWords(t *testing.T) {
+	m, _, _ := newMenu(t, one(raw("alpha", tokens(810_000))))
+	words := "tokens saved every session"
+
+	mustEqual(t, "narrow", m.fitBig("810,000", "810k", words, 54), "810k")
+	mustEqual(t, "wide", m.fitBig("810,000", "810k", words, 120), "810,000")
 }

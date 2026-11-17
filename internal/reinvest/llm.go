@@ -146,19 +146,38 @@ func (a *app) askClaude(prompt, body string, opts askOptions) (any, error) {
 		switch {
 		case res.timedOut: // one stuck call costs its candidate, not the whole run
 			a.logf("claude -p: no answer in %s", askTimeout)
+			a.noteAsk("no answer in " + askTimeout.String())
 			return nil, nil
 		case res.err != nil:
 			a.logf("claude -p: %v", res.err)
+			a.noteAsk(res.err.Error())
 			return nil, nil
 		case res.code != 0:
 			a.logf("claude -p exit %d: %s", res.code, lastRunes(res.stderr, stderrTail))
+			a.noteAsk(fmt.Sprintf("exit %d: %s", res.code, lastLine(res.stderr)))
 			continue
 		}
 		if answer := parse(res.stdout); answer != nil {
 			return answer, nil
 		}
+		a.noteAsk("an answer that could not be read")
 	}
 	return nil, nil
+}
+
+// noteAsk keeps why the last call to Claude gave nothing, for the line that
+// tells the person a step did not happen.
+func (a *app) noteAsk(why string) {
+	a.logMu.Lock()
+	defer a.logMu.Unlock()
+	a.askWhy = why
+}
+
+// lastLine is the last line of what a program wrote that says something, fit
+// to print: the reason is usually there ("not logged in", a rate limit).
+func lastLine(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	return printable(strings.TrimSpace(lastRunes(lines[len(lines)-1], stderrTail)))
 }
 
 var wordRE = regexp.MustCompile(`[a-z]{4,}`)

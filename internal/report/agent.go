@@ -63,7 +63,7 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 	if top <= 0 {
 		top = AgentMaxRows
 	}
-	fmt.Fprintf(w, "skillreaper · last %dd · %d sessions\n", r.WindowDays, r.Sessions)
+	fmt.Fprintf(w, "skillreaper · last %dd · %s\n", r.WindowDays, nOf(r.Sessions, "session"))
 
 	if r.Gap != nil && r.Gap.Loaded > 0 {
 		fmt.Fprintf(w, "%d/%d items fired · %s utilization\n",
@@ -184,7 +184,7 @@ func RenderGapAgent(w io.Writer, r *Report) {
 
 	g := r.Gap
 	if r.Sessions == 0 {
-		fmt.Fprintf(w, "no sessions in the last %d days: nothing was read, so nothing is measured\n", r.WindowDays)
+		fmt.Fprintf(w, "no sessions in the last %s: nothing was read, so nothing is measured\n", nOf(r.WindowDays, "day"))
 	}
 	fmt.Fprintf(w, "%d/%d items fired · %s utilization\n", g.Fired, g.Loaded, pctSeen(g.Fired, g.Loaded, r.Sessions))
 	fmt.Fprintf(w, "%d/%d tokens touched · %s token reach\n", g.FiredTok, g.LoadedTok, pctSeen(g.FiredTok, g.LoadedTok, r.Sessions))

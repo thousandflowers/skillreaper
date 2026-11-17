@@ -474,6 +474,7 @@ func restoreWithin(claudeDir string, e Entry) error {
 				return nil
 			}
 		}
+		return fmt.Errorf("the copy reap kept of its description is gone (%s): write a description back into %s and run reap unmute again", e.Backup, path)
 	}
 	if err != nil {
 		return err
@@ -574,7 +575,7 @@ func splitKey(b []byte, anyIndent bool) (rest, removed []byte, found bool) {
 			// Inside quotes a value runs on to the quote that closes it, however
 			// its lines are indented.
 			taken.Write(line)
-			if openQuotes(trimmed, quote)%2 == 1 {
+			if closes(trimmed, quote) {
 				quote = 0
 			}
 			continue
@@ -599,7 +600,9 @@ func splitKey(b []byte, anyIndent bool) (rest, removed []byte, found bool) {
 			dropping = true // also drop any continuation lines that follow
 			taken.Write(line)
 			value := bytes.TrimSpace(trimmed[len("description:"):])
-			if len(value) > 0 && (value[0] == '"' || value[0] == '\'') && openQuotes(value, value[0])%2 == 1 {
+			// A quote left open runs on to the line that closes it. With no such
+			// line before the header ends, the value is the one line it is on.
+			if len(value) > 0 && (value[0] == '"' || value[0] == '\'') && !closes(value[1:], value[0]) && closesLater(lines[i+1:], value[0]) {
 				quote = value[0]
 			}
 			continue
@@ -637,20 +640,34 @@ func indentOf(line string) int {
 	return len(line) - len(strings.TrimLeft(line, " \t"))
 }
 
-// openQuotes counts the quotes of that kind in a line that open or close a
-// value: one escaped with a backslash inside double quotes does neither. An
-// odd count means the line ends inside the value, or closes one begun before.
-// (Two single quotes in a row write one inside single quotes, and count twice,
-// which leaves the count's parity as it should be.)
-func openQuotes(line []byte, quote byte) int {
-	n := 0
-	for i := 0; i < len(line); i++ {
+// closes says whether the quote that opened a value closes in text. Inside
+// double quotes a backslash makes the next character itself; inside single
+// quotes two in a row write one.
+func closes(text []byte, quote byte) bool {
+	for i := 0; i < len(text); i++ {
 		switch {
-		case quote == '"' && line[i] == '\\':
-			i++ // the character after a backslash is itself
-		case line[i] == quote:
-			n++
+		case quote == '"' && text[i] == '\\':
+			i++
+		case text[i] == quote && quote == '\'' && i+1 < len(text) && text[i+1] == '\'':
+			i++
+		case text[i] == quote:
+			return true
 		}
 	}
-	return n
+	return false
+}
+
+// closesLater says whether a quote left open closes on one of the header's
+// lines that follow.
+func closesLater(lines [][]byte, quote byte) bool {
+	for _, line := range lines {
+		trimmed := bytes.TrimSpace(line)
+		if string(trimmed) == "---" {
+			return false
+		}
+		if closes(trimmed, quote) {
+			return true
+		}
+	}
+	return false
 }

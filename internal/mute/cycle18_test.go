@@ -96,3 +96,51 @@ func TestUnmuteOfAnEditedFileWithAByteOrderMark(t *testing.T) {
 		t.Errorf("unmuted, the file reads:\n%q", back)
 	}
 }
+
+// A quote that closes on the key's own line ends the value there, whatever
+// follows it: an apostrophe inside single quotes, a comment that holds a
+// quote. Counted as still open, the description read as one that never ends
+// and mute said the file had none, or took the next key with it.
+func TestMuteReadsAQuoteThatClosesOnItsLine(t *testing.T) {
+	for _, description := range []string{
+		`'Don't use it for anything else'`,
+		`"Use it" # "fixme`,
+		`'Don't use it'`,
+		`"never closed`,
+	} {
+		whole := "---\nname: x\ndescription: " + description + "\nlicense: 'MIT' and it's fine\n---\nbody\n"
+		dir, path := cycle18Skill(t, whole)
+		if err := Mute(dir, dir, "x", path); err != nil {
+			t.Errorf("%s: %v", description, err)
+			continue
+		}
+		if muted, _ := os.ReadFile(path); string(muted) != "---\nname: x\nlicense: 'MIT' and it's fine\n---\nbody\n" {
+			t.Errorf("%s: muted, the file reads:\n%s", description, muted)
+		}
+		if _, err := Unmute(dir, "x"); err != nil {
+			t.Fatal(err)
+		}
+		if back, _ := os.ReadFile(path); string(back) != whole {
+			t.Errorf("%s: unmuted, the file reads:\n%s", description, back)
+		}
+	}
+}
+
+// With the copy of the description gone and none in the file, unmute says what
+// to do: it gave the system's "no such file" and no way out.
+func TestUnmuteWithItsCopyGoneSaysWhatToDo(t *testing.T) {
+	dir, path := cycle18Skill(t, "---\nname: x\ndescription: some words\n---\nbody\n")
+	if err := Mute(dir, dir, "x", path); err != nil {
+		t.Fatal(err)
+	}
+	copies, _ := filepath.Glob(filepath.Join(dir, "reaped", "muted", "*.bak*"))
+	if err := os.Rename(copies[0], filepath.Join(t.TempDir(), "gone")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Unmute(dir, "x")
+
+	if err == nil || !strings.Contains(err.Error(), "write a description back into") {
+		t.Errorf("unmute: %v", err)
+	}
+}

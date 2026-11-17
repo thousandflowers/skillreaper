@@ -105,31 +105,37 @@ func create(c candidate) error {
 	} else if taken {
 		return fmt.Errorf("a skill named %s already exists in %s", c.Slug, skillsDir())
 	}
-	if taken, err := present(home); err != nil {
-		return err
-	} else if taken {
-		return fmt.Errorf("%s already exists", home)
-	}
-	if err := os.MkdirAll(writtenDir(), sharedDir); err != nil {
+	left, err := present(home)
+	if err != nil {
 		return err
 	}
-	if err := os.Mkdir(home, sharedDir); err != nil {
-		return err // not made here, so nothing here to take back
+	if left {
+		// Left by an earlier run whose link was deleted since. With the same
+		// text it is that skill: link it again. Another text is not replaced.
+		if was, readErr := os.ReadFile(filepath.Join(home, skillFile)); readErr != nil || string(was) != c.Doc {
+			return fmt.Errorf("%s is left from an earlier run, with another text: move it away and run reinvest again", home)
+		}
+	} else {
+		if err := os.MkdirAll(writtenDir(), sharedDir); err != nil {
+			return err
+		}
+		if err := os.Mkdir(home, sharedDir); err != nil {
+			return err // not made here, so nothing here to take back
+		}
+		err = os.WriteFile(filepath.Join(home, skillFile), []byte(c.Doc), sharedFile)
 	}
-	err := os.WriteFile(filepath.Join(home, skillFile), []byte(c.Doc), sharedFile)
 	if err == nil {
 		err = os.MkdirAll(skillsDir(), sharedDir)
 	}
 	if err == nil {
 		err = os.Symlink(home, link)
 	}
-	if err != nil {
+	if err != nil && !left {
 		if undo := removeAll(home); undo != nil { // the folder this call made a moment ago
 			return fmt.Errorf("%w (and %s could not be removed: %v)", err, home, undo)
 		}
-		return err
 	}
-	return nil
+	return err
 }
 
 // pointsAt reports whether link is a symlink that resolves to target.
@@ -526,7 +532,7 @@ func dryRunLines(s swap) []string {
 		lines = append(lines, "  ·  "+strings.Join(words, " "))
 	}
 	for _, x := range s.Mute {
-		lines = append(lines, "  ·  reap mute "+scan.ShellArg(x.Name))
+		lines = append(lines, "  ·  "+reapLine("mute", x))
 	}
 	return lines
 }
@@ -546,7 +552,13 @@ func (n noAnswer) Error() string { return fmt.Sprintf("no answer in %d s", int(n
 func undoMute(x skill) string {
 	// Without its control characters: it is printed to be read, and a path
 	// that holds them cannot be pasted either way.
-	cmd := "reap unmute " + scan.ShellArg(printable(x.target()))
+	return reapLine("unmute", x)
+}
+
+// reapLine is a reap command on one skill, to be read and pasted: on its
+// path, and in the config folder this run was pointed at.
+func reapLine(verb string, x skill) string {
+	cmd := "reap " + verb + " " + scan.ShellArg(printable(x.target()))
 	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
 		cmd = "CLAUDE_CONFIG_DIR=" + scan.ShellArg(dir) + " " + cmd
 	}

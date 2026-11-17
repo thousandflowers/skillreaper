@@ -310,6 +310,9 @@ func (a *app) show(result outcome, dryRun bool) error {
 		return err
 	}
 	fmt.Fprintln(a.term, a.summary(result.swaps, result.gaps, result.state.Dead))
+	if !dryRun { // with no terminal there is nobody to ask: a list, and no more
+		fmt.Fprintln(a.term, "  nothing was changed: run reap reinvest in a terminal to choose among these")
+	}
 	return nil
 }
 

@@ -180,7 +180,7 @@ func TestTextHelpers(t *testing.T) {
 	if got := Visible("plain name-1.2"); got != "plain name-1.2" {
 		t.Errorf("Visible changed a plain name: %q", got)
 	}
-	if got, want := Glyphs("⚠ █▸ 日x̶ €5"), "! #> ?x EUR5"; got != want {
+	if got, want := Glyphs("⚠ █▸ 日x̶ €5"), "! #> ??x EUR5"; got != want {
 		t.Errorf("Glyphs = %q, want %q", got, want)
 	}
 	for locale, utf8 := range map[string]bool{"it_IT.UTF-8": true, "en_US.utf8": true, "C": false, "POSIX": false, "it_IT.ISO8859-1": false} {
@@ -484,5 +484,68 @@ func TestAMouseReportWithAPauseInItIsStillReadWhole(t *testing.T) {
 	}
 	if len(keys) != 2 || keys[1] != 'a' {
 		t.Errorf("keys = %q, want the wheel and then the a typed after it", keys)
+	}
+}
+
+// Any sequence a terminal began is read to its end, however slowly it arrives:
+// an arrow cut after "ESC [" left its last letter as a key, and a Left that
+// stalled marked the row to delete.
+func TestASequenceWithAPauseInItLeavesNoKeyBehind(t *testing.T) {
+	for _, c := range []struct {
+		before, after string
+		want          []Key
+	}{
+		{"\x1b[", "Dq", []Key{KeyLeft, 'q'}},
+		{"\x1b[1;2", "Aq", []Key{KeyShiftUp, 'q'}},
+		{"\x1bO", "Aq", []Key{KeyUp, 'q'}},
+		{"\x1b[M ", "!!q", []Key{0, 'q'}}, // a click, whichever, and no "!" typed
+	} {
+		src := &paused{before: []byte(c.before), after: []byte(c.after), silence: 800 * time.Millisecond}
+		d := &decoder{src: src, escWait: escWaitLocal}
+		var keys []Key
+		for {
+			b, st := src.next(time.Hour)
+			if st != gotByte {
+				break
+			}
+			if k, ok := d.decode(b); ok {
+				keys = append(keys, k)
+			}
+		}
+		if len(keys) == len(c.want) && c.want[0] == 0 {
+			keys[0] = 0
+		}
+		if string(keysText(keys)) != string(keysText(c.want)) {
+			t.Errorf("%q then %q: keys = %v, want %v", c.before, c.after, keys, c.want)
+		}
+	}
+}
+
+func keysText(keys []Key) []rune {
+	out := make([]rune, len(keys))
+	for i, k := range keys {
+		out[i] = rune(k)
+	}
+	return out
+}
+
+// A name cut in its middle begins its tail on a whole character: an accent
+// written as a mark of its own was left alone there, and landed on the "…".
+func TestCutMidStartsItsTailOnAWholeCharacter(t *testing.T) {
+	name := strings.Repeat("é", 30)
+	for n := 5; n <= 12; n++ {
+		if got := CutMid(name, n); strings.Contains(got, "…́") || Cells(got) > n {
+			t.Errorf("CutMid(…, %d) = %q", n, got)
+		}
+	}
+}
+
+// A character two cells wide that the locale cannot draw keeps its two cells:
+// drawn as one "?", everything after it on the row moved left.
+func TestGlyphsKeepTheWidthOfWhatTheyReplace(t *testing.T) {
+	for _, s := range []string{"日本語", "a日b", "é"} {
+		if got := Glyphs(s); Cells(got) != Cells(s) {
+			t.Errorf("Glyphs(%q) = %q: %d cells for %d", s, got, Cells(got), Cells(s))
+		}
 	}
 }

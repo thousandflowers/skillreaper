@@ -156,6 +156,7 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 		case err == nil:
 			out.muted = append(out.muted, row)
 			out.tokens += report.MuteSaving(row)
+			out.monthly += report.MuteSaving(row) * r.SessionsPerMonthOf(row.Platform)
 			if !machine && !named {
 				fmt.Fprintf(stdout, "muted %s (~%d tok/session)\n", row.Name, report.MuteSaving(row))
 			}
@@ -189,6 +190,7 @@ type muteOutcome struct {
 	planTokens  int
 	muted       []report.Row
 	tokens      int
+	monthly     int // those tokens times the sessions a month of each row's own tool
 	skipped     []itemProblem
 	failed      []itemProblem
 	interrupted int
@@ -228,7 +230,7 @@ func (o muteOutcome) printSummary(opts options, stdout, stderr io.Writer, r *rep
 		fmt.Fprintf(stdout, "\nmuted %d %s · ~%s tok/session reclaimed\n", len(o.muted), report.Plural(len(o.muted), "item"), report.HumanCount(o.tokens))
 	}
 	col := colorEnabled(opts, stdout)
-	report.RenderValueFeedback(stdout, "muted", len(o.muted), o.tokens, r.SessionsPerMonth, r.PricePerToken*1e6, col)
+	report.RenderValueFeedback(stdout, "muted", len(o.muted), o.tokens, o.monthly, r.PricePerToken*1e6, col)
 	tryShowShareHint(opts, stdout, col)
 }
 

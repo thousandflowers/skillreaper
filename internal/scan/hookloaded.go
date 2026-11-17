@@ -13,7 +13,7 @@ import (
 var skillFileRe = regexp.MustCompile(`skills['"/\\,\s]+([\w.-]+)['"/\\,\s]+SKILL\.md`)
 
 // pluginRootPathRe finds a path under the plugin root in a hook command.
-var pluginRootPathRe = regexp.MustCompile(`\$\{?(?:CLAUDE_)?PLUGIN_ROOT\}?/([^"'\s]+)`)
+var pluginRootPathRe = regexp.MustCompile(`\$\{?(?:CLAUDE_)?PLUGIN_ROOT\}?/([^"'\s;|&()<>` + "`" + `]+)`)
 
 // hookLoadedSkills names the skills a plugin's SessionStart hook injects. Such a
 // skill is at work in every session while the transcripts show no invocation.
@@ -90,6 +90,8 @@ func sessionStartCommands(installPath string) []string {
 	return commands
 }
 
+var unquoted = strings.NewReplacer(`"`, "", "'", "")
+
 // hookWordRe finds what could be a path in a hook command.
 var hookWordRe = regexp.MustCompile(`[~$\w./{}-]+`)
 
@@ -111,7 +113,9 @@ func userHookLoadedSkills(dir string) map[string]bool {
 		for _, g := range s.Hooks["SessionStart"] {
 			for _, h := range g.Hooks {
 				text := h.Command
-				for _, word := range hookWordRe.FindAllString(h.Command, -1) {
+				// A quote between a variable and the rest of a path ("$HOME"/x) is
+				// nothing to the shell: read the words without the quotes.
+				for _, word := range hookWordRe.FindAllString(unquoted.Replace(h.Command), -1) {
 					text += hookScripts(underHome(word, home, dir), dir)
 				}
 				for _, m := range skillFileRe.FindAllStringSubmatch(text, -1) {
@@ -141,10 +145,14 @@ func hookScripts(path, dir string) string {
 	}
 	entries, _ := os.ReadDir(folder)
 	for _, e := range entries {
-		if e.Type().IsRegular() {
-			if b, err := readCapped(filepath.Join(folder, e.Name())); err == nil {
-				text += "\n" + string(b)
-			}
+		// A link to a file counts (a dotfiles folder is all links); what it
+		// leads to is looked at, so a link to a folder or a pipe is passed by.
+		beside := filepath.Join(folder, e.Name())
+		if info, err := os.Stat(beside); err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		if b, err := readCapped(beside); err == nil {
+			text += "\n" + string(b)
 		}
 	}
 	return text

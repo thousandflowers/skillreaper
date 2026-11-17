@@ -38,15 +38,15 @@ type Headline struct {
 	PluginTokens    int
 	Muted           int
 	ByHandTokens    int // unused items outside plugins that reap cannot edit
+	mutedIdle       int // the muted that never fired: the ones among NeverFired
 }
 
 // NewHeadline derives the opening figures from a finished report.
 func NewHeadline(r *Report) Headline {
 	h := Headline{Reaped: r.DeadCount, Muted: r.MutedCount}
-	mutedIdle := 0 // muted and never fired: the ones that are among the never-fired
 	for _, row := range r.Rows {
 		if row.Reason == ReasonMuted && row.Uses == 0 {
-			mutedIdle++
+			h.mutedIdle++ // muted and never fired: the ones that are among the never-fired
 		}
 		switch {
 		case row.Verdict != VerdictReap:
@@ -66,7 +66,7 @@ func NewHeadline(r *Report) Headline {
 	h.KnowsFired = true
 	// Clamped, not trusted: the two counts come from different passes, and a
 	// negative "held back" would be printed as a fact.
-	if held := h.NeverFired - h.Reaped - mutedIdle; held > 0 {
+	if held := h.NeverFired - h.Reaped - h.mutedIdle; held > 0 {
 		h.HeldBack = held
 	}
 	return h
@@ -115,6 +115,11 @@ func (h Headline) Split() string {
 func (h Headline) MutedLine() string {
 	if h.Muted == 0 {
 		return ""
+	}
+	if h.KnowsFired && h.mutedIdle < h.Muted {
+		// The three figures above close with the muted that never fired, not
+		// with all of them.
+		return fmt.Sprintf("%d muted, %d of them never fired · reap unmute to list", h.Muted, h.mutedIdle)
 	}
 	return fmt.Sprintf("%d muted · reap unmute to list", h.Muted)
 }

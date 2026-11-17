@@ -143,6 +143,21 @@ func invokedName(arg0 string) string {
 // the tool's other public name counts: a binary built under a scratch name (the
 // render captures, go run) is no name to send anyone to.
 func hintRewriter(invoked string, args []string) func([]byte) []byte {
+	return hintRewriterAs(invoked, invoked, args)
+}
+
+// shownName is the command to print in a hint. Run through npx, neither name is
+// on the PATH: `npx skillreaper` is what works there.
+func shownName(invoked, wrapper string) string {
+	if invoked == "skillreaper" && strings.Contains(filepath.ToSlash(wrapper), "/_npx/") {
+		return "npx " + invoked
+	}
+	return invoked
+}
+
+// hintRewriterAs is hintRewriter with the name to print given apart from the
+// name that was run.
+func hintRewriterAs(invoked, shown string, args []string) func([]byte) []byte {
 	if invoked != "skillreaper" || slices.ContainsFunc(args, asksJSON) {
 		return nil
 	}
@@ -155,8 +170,8 @@ func hintRewriter(invoked string, args []string) func([]byte) []byte {
 	// After the name: a subcommand or a "[", a flag, the word "to", or the
 	// backquote that closes a bare `reap`.
 	re := regexp.MustCompile(`(^|[\s\x60(])reap( (?:` + strings.Join(names, "|") + `|--|to )|\x60)`)
-	with := []byte("${1}" + invoked + "${2}")
-	pad := []byte(strings.Repeat(" ", len(invoked)-len("reap")))
+	with := []byte("${1}" + shown + "${2}")
+	pad := []byte(strings.Repeat(" ", len(shown)-len("reap")))
 	return func(p []byte) []byte {
 		lines := bytes.SplitAfter(p, []byte("\n"))
 		moved := false // the line before was rewritten, or carries on one that was

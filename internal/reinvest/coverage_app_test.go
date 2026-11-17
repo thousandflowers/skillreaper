@@ -372,7 +372,7 @@ func TestAppCov_a_written_skill_is_never_put_over_anything(t *testing.T) {
 
 	home = tempHome(t)
 	writeFile(t, filepath.Join(written(home), c.Slug, "notes"), "someone's")
-	if err := create(c); err == nil || !strings.HasSuffix(err.Error(), "ship-release already exists") {
+	if err := create(c); err == nil || !strings.Contains(err.Error(), "ship-release is left from an earlier run") {
 		t.Errorf("a folder already there gave %v", err)
 	}
 	if got := readFile(t, filepath.Join(written(home), c.Slug, "notes")); got != "someone's" {

@@ -124,5 +124,6 @@ of `.claude.json`. Before you uninstall, put back what you want to keep:
 ```bash
 reap restore --all
 reap unmute --all
+reap uninstall-hook   # if you ran install-hook: it leaves settings.json calling a binary that is gone
 ```
 After that the folder can go. Whatever is still in it goes for good.

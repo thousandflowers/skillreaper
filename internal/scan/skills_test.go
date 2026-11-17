@@ -313,3 +313,24 @@ func TestScanSkillsFolderWithoutSkillFileIsNotBroken(t *testing.T) {
 		t.Errorf("want nothing for an empty folder, got items %+v warns %+v", items, warns)
 	}
 }
+
+// An agent's `skills:` list is read in both of the ways YAML writes a list.
+func TestScanAgentsReadsTheSkillsAnAgentPreloads(t *testing.T) {
+	home := t.TempDir()
+	mustWrite(t, filepath.Join(home, "agents", "block.md"), "---\nname: block\ndescription: d\nskills:\n  - one\n  - \"two\"\ntools: Read\n---\n")
+	mustWrite(t, filepath.Join(home, "agents", "inline.md"), "---\nname: inline\nskills: [three, 'four']\n---\n")
+	mustWrite(t, filepath.Join(home, "agents", "comma.md"), "---\nname: comma\nskills: five, six\n---\n")
+	mustWrite(t, filepath.Join(home, "agents", "none.md"), "---\nname: none\ndescription: skills: are great\n---\nskills:\n  - seven\n")
+
+	items, _ := ScanAgents(home, "test")
+
+	for name, want := range map[string]string{"block": "one two", "inline": "three four", "comma": "five six", "none": ""} {
+		it := findItem(items, name)
+		if it == nil {
+			t.Fatalf("no agent %s", name)
+		}
+		if got := strings.Join(it.Preloads, " "); got != want {
+			t.Errorf("%s preloads %q, want %q", name, got, want)
+		}
+	}
+}

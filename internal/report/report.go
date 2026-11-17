@@ -199,6 +199,7 @@ type Report struct {
 // Build joins inventory items with usage stats and computes verdicts
 // and totals.
 func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) *Report {
+	agentLoaded := scan.AgentLoaded(items)
 	r := &Report{
 		GeneratedAt:     clock.Now(),
 		Platforms:       opts.PlatformNames,
@@ -304,6 +305,14 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 			if it.HookLoaded && (row.Verdict == VerdictReap || row.Verdict == VerdictMute) {
 				row.Verdict = VerdictKeep
 				row.Reason = ReasonHookLoaded
+			}
+			// An agent's `skills:` list names it by its whole name or, for a
+			// plugin's skill, by what stands after the plugin's.
+			leaf := it.Name[strings.LastIndexByte(it.Name, ':')+1:]
+			byAgent := agentLoaded[it.Platform][strings.ToLower(it.Name)] || agentLoaded[it.Platform][strings.ToLower(leaf)]
+			if it.Category == scan.CatSkill && byAgent && (row.Verdict == VerdictReap || row.Verdict == VerdictMute) {
+				row.Verdict = VerdictKeep
+				row.Reason = ReasonAgentLoaded
 			}
 			// Muting removed the description that makes a skill fire, so its
 			// zero uses are the mute's doing and say nothing about the skill.

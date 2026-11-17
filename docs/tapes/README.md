@@ -4,7 +4,7 @@ The README GIFs are generated with [VHS](https://github.com/charmbracelet/vhs),
 so they can be rebuilt from source instead of re-recorded by hand.
 
     brew install vhs gifsicle
-    mkdir -p ../gifs
+    mkdir -p docs/gifs
     cd docs/tapes && vhs reap-prune.tape
 
 `reap-prune.tape` writes into `docs/gifs/`, which is git-ignored - hence the

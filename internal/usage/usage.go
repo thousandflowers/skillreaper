@@ -350,6 +350,7 @@ type entry struct {
 
 // message is the part of an entry's message this parser reads.
 type message struct {
+	ID      string          `json:"id"`
 	Model   string          `json:"model"`
 	Content json.RawMessage `json:"content"`
 	Usage   json.RawMessage `json:"usage"`
@@ -801,6 +802,7 @@ func parseFile(path, project string, st *Stats) string {
 	skillChars := map[string]int{}
 	var lastTS time.Time
 	inWindow := false // a turn of this session falls in the window
+	seenMessage := map[string]bool{}
 
 	br := bufio.NewReaderSize(f, 256*1024)
 	for {
@@ -873,14 +875,20 @@ func parseFile(path, project string, st *Stats) string {
 		// to the message regardless of what the message did, and skipping the
 		// ones that fired no tool would undercount exactly the turns where
 		// resident context was re-read for nothing.
+		// One message is written as one line per content block, each carrying the
+		// message's whole usage: it is counted at its first line.
+		first := msg.ID == "" || !seenMessage[msg.ID]
+		if msg.ID != "" {
+			seenMessage[msg.ID] = true
+		}
 		var u usageBlock
-		if e.Type == "assistant" && msg.Model != "" && !st.beforeWindow(ts) {
+		if first && e.Type == "assistant" && msg.Model != "" && !st.beforeWindow(ts) {
 			if st.ModelUse == nil {
 				st.ModelUse = map[string]int{}
 			}
 			st.ModelUse[msg.Model]++
 		}
-		if !st.beforeWindow(ts) && string(msg.Usage) != "null" && decodeLenient(msg.Usage, &u) {
+		if first && !st.beforeWindow(ts) && string(msg.Usage) != "null" && decodeLenient(msg.Usage, &u) {
 			st.Measured.Add(u)
 		}
 
@@ -902,6 +910,11 @@ func parseFile(path, project string, st *Stats) string {
 		if e.Type == "user" {
 			text := userText(msg.Content)
 			for _, name := range commandNames(text) {
+				if strings.HasPrefix(name, "mcp__") {
+					// A server's prompt, run as /mcp__server__prompt: a use of the server.
+					recordMCPCall(st, name, ts)
+					continue
+				}
 				recSkill(name, ts)
 			}
 		}

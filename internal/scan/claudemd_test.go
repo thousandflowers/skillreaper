@@ -124,3 +124,25 @@ func TestLoadClaudeMDFollowsALinkedRulesFolder(t *testing.T) {
 		t.Error("a skill named in a linked rules folder must count")
 	}
 }
+
+// A skill is named in a memory file in whatever case the sentence wants, as it
+// is used in whatever case it is typed. And CLAUDE.local.md is read like CLAUDE.md.
+func TestClaudeMDProtectionFoldsCaseAndReadsTheLocalFile(t *testing.T) {
+	for line, name := range map[string]string{
+		"Always run the S-unused skill first.": "s-unused",
+		"Then use /Deploy when done.":          "deploy",
+		"use the `Plan` skill":                 "ecc:plan",
+	} {
+		if !ClaudeMDReferences([]string{line}, name) {
+			t.Errorf("%q does not protect %s", line, name)
+		}
+	}
+	if ClaudeMDReferences([]string{"Redeploy the planner"}, "deploy") {
+		t.Error("a longer word protects a shorter name")
+	}
+	cwd := t.TempDir()
+	mustWrite(t, filepath.Join(cwd, "CLAUDE.local.md"), "use /only-local for this project\n")
+	if !ClaudeMDReferences(LoadClaudeMD(cwd, "", ""), "only-local") {
+		t.Error("CLAUDE.local.md is not read")
+	}
+}

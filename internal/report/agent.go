@@ -148,7 +148,9 @@ func mdCell(s string) string {
 // mdText is mdCell for text outside a code span, where a name could read as a
 // tag or as a link.
 func mdText(s string) string {
-	return strings.NewReplacer("<", "&lt;", "[", `\[`).Replace(mdCell(s))
+	// The backslash first and in the same pass: one left alone would un-escape
+	// the "|" written after it.
+	return strings.NewReplacer(`\`, `\\`, "|", `\|`, "`", "'", "<", "&lt;", "[", `\[`).Replace(s)
 }
 
 // deadRows returns the REAP rows heaviest first. Ties break on name so the

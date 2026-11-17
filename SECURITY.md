@@ -9,7 +9,9 @@ start by hand:
   own Claude Code account, excerpts of your sessions (with the keys it
   recognises removed first) and your installed skills' names and
   descriptions; with `--online` it also sends search words drawn from them
-  to skills.sh (and, with `--mcp`, the MCP registry). It says so on its
+  to skills.sh (and, with `--mcp`, the MCP registry), reads what it found
+  from GitHub and from the npm and PyPI registries to check it, and, once
+  you answer yes to `apply?`, installs it with `npx`. It says so on its
   first line.
 - The npm package downloads the release binary the first time it runs,
   and checks it against the release's checksums.
@@ -23,6 +25,12 @@ a URL, `Authorization` and `Cookie` headers, `-u user:password`. This reads
 shapes, not secrets. A credential under a name that says nothing, or passed as
 a bare argument, is shown as it is written in your config: look before you
 share `--json` output or a snapshot file.
+
+Two places hold your config as it is, unmasked, because that is their job:
+`reap install-hook --dry-run` prints the whole `settings.json` it would write,
+and `~/.claude/reaped` keeps what restore needs to put a pruned MCP server
+back (its full definition in `manifest.json`, and copies of `.claude.json` in
+`backups/`, readable by you alone).
 
 ## Reporting a Vulnerability
 

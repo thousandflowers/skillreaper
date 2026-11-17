@@ -183,20 +183,20 @@ func TestLookupServerFindsCallsOfANameWithTheSeparator(t *testing.T) {
 		"a__b__other": {Uses: 1},
 		"plain":       {Uses: 4},
 	}}}
-	if r, ok := d.LookupServer("mcp", "a__b"); !ok || r.Uses != 3 || !r.Last.Equal(last) {
+	if r, ok := d.LookupServer("mcp", "a__b", nil); !ok || r.Uses != 3 || !r.Last.Equal(last) {
 		t.Errorf("a__b = %+v, %v", r, ok)
 	}
-	if r, ok := d.LookupServer("mcp", "plain"); !ok || r.Uses != 4 {
+	if r, ok := d.LookupServer("mcp", "plain", nil); !ok || r.Uses != 4 {
 		t.Errorf("plain = %+v, %v", r, ok)
 	}
-	if r, ok := d.LookupServer("mcp", "a"); !ok || r.Uses != 5 {
+	if r, ok := d.LookupServer("mcp", "a", nil); !ok || r.Uses != 5 {
 		t.Errorf("a = %+v, %v", r, ok)
 	}
 	older := &Digest{Items: map[string]map[string]Record{"mcp": {"a": {Uses: 5}}}}
-	if r, ok := older.LookupServer("mcp", "a__b"); !ok || r.Uses != 5 {
+	if r, ok := older.LookupServer("mcp", "a__b", nil); !ok || r.Uses != 5 {
 		t.Errorf("a__b in an older record = %+v, %v", r, ok)
 	}
-	if _, ok := d.LookupServer("mcp", "none__x"); ok {
+	if _, ok := d.LookupServer("mcp", "none__x", nil); ok {
 		t.Error("a server nobody called was found")
 	}
 }
@@ -214,12 +214,30 @@ func TestLookupServerAddsTheExactNameAndTheCallsKeptWhole(t *testing.T) {
 		"plain__x__y":   {Uses: 5}, // kept whole, and credited to plain already
 	}}}
 	for name, want := range map[string]int{"a__b": 3, "docs_": 3, "docs": 3, "_": 4, "plain": 5} {
-		if r, ok := d.LookupServer("mcp", name); !ok || r.Uses != want {
+		if r, ok := d.LookupServer("mcp", name, nil); !ok || r.Uses != want {
 			t.Errorf("%s = %+v, %v, want %d uses", name, r, ok, want)
 		}
 	}
 	older := &Digest{Items: map[string]map[string]Record{"mcp": {"docs": {Uses: 3}}}}
-	if r, ok := older.LookupServer("mcp", "docs_"); !ok || r.Uses != 3 {
+	if r, ok := older.LookupServer("mcp", "docs_", nil); !ok || r.Uses != 3 {
 		t.Errorf("docs_ in an older record = %+v, %v", r, ok)
+	}
+}
+
+// With the configured servers known, a call kept whole goes to the longest name
+// that begins it, and is taken off the shorter name it was filed under.
+func TestLookupServerLeavesACallToTheServerItBelongsTo(t *testing.T) {
+	d := &Digest{Items: map[string]map[string]Record{"mcp": {
+		"a":             {Uses: 2}, // filed here by the parser, for a__b's two calls
+		"a__b__tool":    {Uses: 2},
+		"docs":          {Uses: 4}, // three of its own, one of docs_
+		"docs___search": {Uses: 1},
+	}}}
+	servers := []string{"a", "a__b", "docs", "docs_"}
+	for name, want := range map[string]int{"a": 0, "a__b": 2, "docs": 3, "docs_": 1} {
+		r, ok := d.LookupServer("mcp", name, servers)
+		if r.Uses != want || ok != (want > 0) {
+			t.Errorf("%s = %d uses, %v; want %d", name, r.Uses, ok, want)
+		}
 	}
 }

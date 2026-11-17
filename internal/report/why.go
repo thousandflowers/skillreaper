@@ -176,6 +176,8 @@ func summaryFor(row Row) string {
 		return "you muted it, so it cannot fire on its own and its uses prove nothing"
 	case ReasonHookLoaded:
 		return "injected every session by its plugin's hook — in use without being invoked"
+	case ReasonAgentLoaded:
+		return "an agent names it under `skills:` and loads it when it starts — in use without being invoked"
 	default:
 		return row.Reason
 	}

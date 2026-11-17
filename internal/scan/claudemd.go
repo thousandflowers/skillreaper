@@ -27,7 +27,7 @@ func claudeMDPaths(cwd, home, claudeDir string) []string {
 	if cwd != "" {
 		paths = append(paths, markdownUnder(filepath.Join(cwd, ".claude", "rules"))...)
 		for dir := cwd; ; dir = filepath.Dir(dir) {
-			paths = append(paths, filepath.Join(dir, "CLAUDE.md"), filepath.Join(dir, ".claude", "CLAUDE.md"))
+			paths = append(paths, filepath.Join(dir, "CLAUDE.md"), filepath.Join(dir, "CLAUDE.local.md"), filepath.Join(dir, ".claude", "CLAUDE.md"))
 			if dir == filepath.Dir(dir) {
 				break
 			}
@@ -150,7 +150,7 @@ func ClaudeMDReferences(lines []string, name string) bool {
 // is given, whether that occurrence passes it.
 func wordAt(line, word string, check func(line string, i, j int) bool) bool {
 	for from := 0; ; {
-		k := strings.Index(line[from:], word)
+		k := indexFold(line[from:], word)
 		if k < 0 {
 			return false
 		}
@@ -161,4 +161,15 @@ func wordAt(line, word string, check func(line string, i, j int) bool) bool {
 		}
 		from = i + 1
 	}
+}
+
+// indexFold is strings.Index without regard to case: a sentence writes a
+// skill's name in the case the sentence wants.
+func indexFold(s, word string) int {
+	for k := 0; k+len(word) <= len(s); k++ {
+		if strings.EqualFold(s[k:k+len(word)], word) {
+			return k
+		}
+	}
+	return -1
 }

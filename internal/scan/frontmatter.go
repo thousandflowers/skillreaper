@@ -254,3 +254,52 @@ func blockScalar(lines []string, style, chomp byte) string {
 	}
 	return out.String()
 }
+
+// frontmatterList reads a top-level list from the frontmatter, written inline
+// (`key: a, b` or `key: [a, b]`) or one item to a line under the key.
+func frontmatterList(b []byte, key string) []string {
+	sc := newLineScanner(trimBOM(b))
+	if !sc.Scan() || strings.TrimSpace(sc.Text()) != "---" {
+		return nil
+	}
+	var out []string
+	add := func(s string) {
+		if s = strings.Trim(strings.TrimSpace(s), `"'`); s != "" {
+			out = append(out, s)
+		}
+	}
+	under := false // on the lines below the key, reading its items
+	for sc.Scan() {
+		line := strings.TrimRight(sc.Text(), " \t\r")
+		item, isItem := strings.CutPrefix(strings.TrimSpace(line), "-")
+		switch {
+		case strings.TrimSpace(line) == "---":
+			return out
+		case under && isItem:
+			add(item)
+		case line == strings.TrimLeft(line, " \t"): // a top-level line
+			under = false
+			if v, ok := yamlValue(line, key); ok {
+				under = v == ""
+				for _, part := range strings.Split(strings.Trim(v, "[]"), ",") {
+					add(part)
+				}
+			}
+		}
+	}
+	return nil // a header that never closes is no frontmatter
+}
+
+// AgentLoaded names, by platform, the skills some agent preloads.
+func AgentLoaded(items []Item) map[string]map[string]bool {
+	loaded := map[string]map[string]bool{}
+	for _, it := range items {
+		for _, name := range it.Preloads {
+			if loaded[it.Platform] == nil {
+				loaded[it.Platform] = map[string]bool{}
+			}
+			loaded[it.Platform][strings.ToLower(name)] = true
+		}
+	}
+	return loaded
+}

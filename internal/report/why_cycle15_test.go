@@ -25,3 +25,11 @@ func TestWhyDoesNotAskForSessionsThatChangeNothing(t *testing.T) {
 		t.Errorf("why at 9 sessions of 10, for an item used before the window:\n%s", said)
 	}
 }
+
+// A backslash in a name is written so that it stays a backslash: left alone it
+// un-escaped the "|" after it, and the cell split in two.
+func TestMarkdownTextEscapesABackslash(t *testing.T) {
+	if got, want := mdText(`a\|b <i> [l](u)`), `a\\\|b &lt;i> \[l](u)`; got != want {
+		t.Errorf("mdText = %s, want %s", got, want)
+	}
+}

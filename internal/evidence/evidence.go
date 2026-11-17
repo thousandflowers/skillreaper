@@ -241,27 +241,43 @@ const serverSep = "__"
 // LookupServer is Lookup for an MCP server: what was filed under its own name,
 // and its calls that were kept whole. A call is recorded as server__tool and
 // the parser can only credit what stands before the first "__", so a server
-// whose name holds "__", or ends in "_", has its calls under their whole names.
-// One the parser credited to this very name is in its own record already.
+// whose name holds "__", or ends in "_", has its calls under their whole names
+// and filed under another's. servers is every configured server: a call kept
+// whole belongs to the longest of them that begins it, and is taken off the
+// shorter one it was filed under.
 // In a record written before whole names were kept there is only the parser's
 // credit, and it is taken: more uses than its own is the safe mistake, none
 // would condemn it.
-func (d *Digest) LookupServer(cat, name string) (Record, bool) {
+func (d *Digest) LookupServer(cat, name string, servers []string) (Record, bool) {
 	sum, found := d.Lookup(cat, name)
-	calls, kept := d.sumWhere(cat, func(recorded string) bool {
-		return strings.HasPrefix(recorded, name+serverSep) && creditedTo(recorded) != name
-	})
-	if kept {
-		sum.Uses += calls.Uses
-		if calls.Last.After(sum.Last) {
-			sum.Last = calls.Last
+	anothers := func(recorded string) bool {
+		for _, s := range servers {
+			if len(s) > len(name) && strings.HasPrefix(recorded, s+serverSep) {
+				return true
+			}
 		}
-		return sum, true
+		return false
 	}
-	if older := creditedTo(name + serverSep); !found && older != name {
+	kept := false
+	for recorded, r := range d.Items[cat] {
+		if !strings.HasPrefix(recorded, name+serverSep) {
+			continue
+		}
+		switch mine, filedHere := !anothers(recorded), creditedTo(recorded) == name; {
+		case mine && !filedHere:
+			kept = true
+			sum.Uses += r.Uses
+			if r.Last.After(sum.Last) {
+				sum.Last = r.Last
+			}
+		case !mine && filedHere:
+			sum.Uses = max(sum.Uses-r.Uses, 0)
+		}
+	}
+	if older := creditedTo(name + serverSep); !kept && !found && older != name {
 		return d.Lookup(cat, older)
 	}
-	return sum, found
+	return sum, (kept || found) && sum.Uses > 0
 }
 
 // creditedTo is the server the parser credits a call to before the configured

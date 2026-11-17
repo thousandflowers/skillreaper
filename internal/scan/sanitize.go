@@ -33,10 +33,12 @@ const (
 	inSingle = `(?:[^'\n]|'\\'')`
 	// quotedValue is one argument in quotes, whichever way: "…", '…', $'…', or
 	// \"…\" inside a string.
-	quotedValue = `(?:\$?"` + inDouble + `*"|\$?'` + inSingle + `*'|\\"[^\n]*?\\")`
+	// $'…' comes first: inside it a quote is written with a backslash, which
+	// '…' cannot hold. Text glued after the closing quote is part of the word.
+	quotedValue = `(?:\$'(?:[^'\\\n]|\\.)*'|\$?"` + inDouble + `*"|'` + inSingle + `*'|\\"[^\n]*?\\")[^\s"',;}\])]*`
 	// bareValue runs to the next space, whatever it holds. One already masked
 	// stays as it is, with the quote that closes it.
-	bareValue = `(?:<redacted>|\S+)`
+	bareValue = `(?:<redacted>|(?:\\.|\S)+)`
 	// beforeName is what can stand right before a name: the start, a space, a
 	// quote, the punctuation of a JSON object, and what joins commands and
 	// assignments (--env=TOKEN=…, a;TOKEN=…, Server=db;Password=…).
@@ -55,7 +57,7 @@ var secretPatterns = []struct {
 }{
 	// A URL's user part: the password, up to the last "@" before the host, and a
 	// lone token standing where the user would. Then its query and fragment.
-	{regexp.MustCompile(`(?i)(://[^/\s:@]+:)[^/\s]+@`), "${1}<redacted>@"},
+	{regexp.MustCompile(`(?i)(://[^/\s:@]*:)[^/\s]+@`), "${1}<redacted>@"},
 	{regexp.MustCompile(`(://)[^/\s:@]+@`), "${1}<redacted>@"},
 	{regexp.MustCompile(`(?i)([?&#]` + secretWord + `=)[^&\s]+`), "${1}<redacted>"},
 	{regexp.MustCompile(`(?i)(\bcookie\s*[:=]\s*)[^"'\n]+`), "${1}<redacted>"},
@@ -75,6 +77,8 @@ var secretPatterns = []struct {
 	{regexp.MustCompile(`(?i)((?:^|[^"'\w-])[\w-]*authorization\s*[:=]\s*)[^\n]+`), "${1}<redacted>"},
 	// name, separator, value in quotes: the quotes and what they hold.
 	{regexp.MustCompile(`(?i)` + beforeName + `(-{0,2}` + secretWord + `)(\\?["']?(?:\s*[=:]\s*|\s+))` + quotedValue), "${1}${2}${3}<redacted>"},
+	// In a connection string a value runs to the next ";", spaces and all.
+	{regexp.MustCompile(`(?i)(;\s*` + secretWord + `\s*=\s*)[^;"'\n]*;`), "${1}<redacted>;"},
 	// name=value and name: value, then name value.
 	{regexp.MustCompile(`(?i)` + beforeName + `(-{0,2}` + secretWord + `)(\\?["']?\s*[=:]\s*)` + bareValue), "${1}${2}${3}<redacted>"},
 	{regexp.MustCompile(`(?i)` + beforeName + `(-{0,2}` + secretWord + `)(\s+)` + bareValue), "${1}${2}${3}<redacted>"},

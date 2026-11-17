@@ -976,6 +976,14 @@ func gather(opts options) (*report.Report, error) {
 	}
 	muted, muteLost := mutedSet(opts.claudeDir, items)
 	price, priceBasis := pricing(opts, st)
+	// Every configured server, as the record of past uses names it: a call
+	// kept whole there belongs to the longest name that begins it.
+	servers := map[string][]string{}
+	for _, it := range items {
+		if it.Category == scan.CatMCP {
+			servers[it.Platform] = append(servers[it.Platform], scopedName(it.Platform, usage.MCPServerKey(it.Name)))
+		}
+	}
 	return report.Build(items, st, uniqueWarnings(warns), report.Opts{
 		PlatformNames: names,
 		PriceBasis:    priceBasis,
@@ -986,7 +994,7 @@ func gather(opts options) (*report.Report, error) {
 			// a server's name is exact; a skill's or an agent's is not
 			r, ok := digest.LookupFold(category, scopedName(platformID, name))
 			if category == string(scan.CatMCP) {
-				r, ok = digest.LookupServer(category, scopedName(platformID, name))
+				r, ok = digest.LookupServer(category, scopedName(platformID, name), servers[platformID])
 			}
 			if !ok || r.Uses == 0 {
 				return 0, time.Time{}, false
@@ -1430,14 +1438,14 @@ func cmdKeep(opts options, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "marked as keep: %s\n", itemKey)
+	fmt.Fprintf(stdout, "marked as keep: %s\n", shown(itemKey))
 	// The key is one name, so it holds every copy of that name on every platform.
 	for _, row := range r.Rows {
 		if override.ItemKey(string(row.Category), row.Name) == itemKey {
 			fmt.Fprintf(stdout, "  covers %s: %s\n", row.Platform, shown(row.Path))
 		}
 	}
-	fmt.Fprintf(stdout, "This item will be excluded from prune. Undo: reap keep --remove %s%s\n", scan.ShellArg(itemKey), sameFolder(opts))
+	fmt.Fprintf(stdout, "This item will be excluded from prune. Undo: reap keep --remove %s%s\n", scan.ShellArg(shown(itemKey)), sameFolder(opts))
 	return 0
 }
 
@@ -2128,6 +2136,12 @@ func resolveKeepKey(r *report.Report, arg string) (string, error) {
 	if want == "" {
 		return "", fmt.Errorf("empty item name")
 	}
+	// As typed first: a name can end in a space, and the menu locks such an item.
+	for _, row := range r.Rows {
+		if typed := strings.ToLower(arg); typed != want && strings.ToLower(row.DiskName()) == typed {
+			return override.ItemKey(string(row.Category), row.DiskName()), nil
+		}
+	}
 	seen := map[string]bool{}
 	var matches []string
 	add := func(key string) {
@@ -2137,8 +2151,10 @@ func resolveKeepKey(r *report.Report, arg string) (string, error) {
 		}
 	}
 	for _, row := range r.Rows {
-		key := override.ItemKey(string(row.Category), row.Name)
-		if key == want {
+		// The key is the name on disk, which is what the report reads the keep
+		// list by; what is typed is the name as the report shows it.
+		key := override.ItemKey(string(row.Category), row.DiskName())
+		if key == want || override.ItemKey(string(row.Category), row.Name) == want {
 			// Already qualified: keep taking it, so existing scripts still work.
 			return key, nil
 		}

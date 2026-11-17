@@ -43,6 +43,9 @@ const (
 	// ReasonHookLoaded holds a skill at KEEP because its plugin's SessionStart
 	// hook injects it: it is in use with no invocation on record.
 	ReasonHookLoaded = "hook-loaded"
+	// ReasonAgentLoaded holds a skill at KEEP because an agent names it under
+	// `skills:`: it is loaded into that agent whenever the agent starts.
+	ReasonAgentLoaded = "agent-loaded"
 )
 
 // VerdictOpts configures the smart verdict logic.

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/thousandflowers/skillreaper/internal/atomicfile"
+	"github.com/thousandflowers/skillreaper/internal/scan"
 )
 
 // Keys use "category:name" format to disambiguate items that share a
@@ -46,14 +47,16 @@ func RemoveKeep(claudeDir, arg string) (string, error) {
 	want := strings.ToLower(strings.TrimSpace(arg))
 	var matches []string
 	for _, k := range f.Keep {
-		lk := strings.ToLower(k)
+		// As it is shown: a key holds the name on disk, and what gets typed is
+		// the name the report prints, with its control characters taken out.
+		lk := strings.ToLower(scan.SafeText(k))
 		// As typed first: a key is written from the name on disk, which can end in a space.
-		if lk == strings.ToLower(arg) || lk == want {
+		if lk == strings.ToLower(arg) || lk == want || strings.ToLower(k) == strings.ToLower(arg) {
 			matches = []string{k}
 			break
 		}
 		// category:name, and the leaf of a namespaced name like skill:ecc:plan.
-		if _, name, ok := strings.Cut(lk, ":"); ok && name == want {
+		if _, name, ok := strings.Cut(lk, ":"); ok && (name == want || name == strings.ToLower(arg)) {
 			matches = append(matches, k)
 		} else if i := strings.LastIndexByte(lk, ':'); i >= 0 && lk[i+1:] == want {
 			matches = append(matches, k)

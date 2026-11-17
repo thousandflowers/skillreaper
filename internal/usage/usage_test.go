@@ -765,3 +765,24 @@ func TestASessionCountsByWhenItHappenedNotByItsFilesDate(t *testing.T) {
 		t.Errorf("sessions in the window = %d, want the resumed one and the undated one", st.Sessions)
 	}
 }
+
+// Claude Code writes one line per content block of a message, each with the
+// message's whole usage. Counted per line, a message with three blocks weighed
+// three times what it cost.
+func TestMeasuredCountsAMessageOnce(t *testing.T) {
+	dir := t.TempDir()
+	at := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	block := func(id string) string {
+		return `{"type":"assistant","sessionId":"s","timestamp":"` + at + `","requestId":"req1","message":{"id":"` + id + `","model":"claude-sonnet-4-6","content":[],"usage":{"input_tokens":1,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":20000}}}`
+	}
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"), block("msg_1"), block("msg_1"), block("msg_1"), block("msg_2"), block(""), block(""))
+
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if st.Measured.Messages != 4 || st.Measured.CacheRead != 80000 || st.ModelUse["claude-sonnet-4-6"] != 4 {
+		t.Errorf("measured %+v, models %v; want msg_1 once, msg_2 once and the two with no id", st.Measured, st.ModelUse)
+	}
+}

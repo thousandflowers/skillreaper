@@ -230,3 +230,37 @@ func TestRedactSecretsFindsANameBehindAnotherAndMasksItsWholeValue(t *testing.T)
 		}
 	}
 }
+
+// A URL can carry a password with no user (redis://:password@host), and a
+// value can hold a space the shell was told to keep (a\ b).
+func TestRedactSecretsMasksAPasswordWithNoUserAndAnEscapedSpace(t *testing.T) {
+	for _, c := range []struct{ in, keep, gone string }{
+		{`run redis://:rSECRET31@host:6379`, "@host:6379", "rSECRET31"},
+		{`https://:urlSECRET2@host/x`, "@host/x", "urlSECRET2"},
+		{`run TOKEN=a\ bSECRET1 next`, " next", "bSECRET1"},
+		{`run --token a\ bSECRET1 next`, " next", "bSECRET1"},
+		{`curl http://host:8080/path@x`, `curl http://host:8080/path@x`, "\x00"},
+	} {
+		got := RedactSecrets(c.in)
+		if strings.Contains(got, c.gone) || !strings.Contains(got, c.keep) {
+			t.Errorf("RedactSecrets(%s) = %s", c.in, got)
+		}
+	}
+}
+
+// More ways a value can be written: $'…' with an escaped quote inside, text
+// glued after a closing quote, a connection string's value with a space in it.
+func TestRedactSecretsMasksGluedAndEscapedValues(t *testing.T) {
+	for _, c := range []struct{ in, keep, gone string }{
+		{`x --token=$'abc\'defSECRET ghi' next`, " next", "defSECRET"},
+		{`x --password 'abc'defSECRET next`, " next", "defSECRET"},
+		{`x Server=db;Password=aaa bbbSECRET;Uid=me`, "Uid=me", "bbbSECRET"},
+		{`{"api_key":"abc123","model":"m1"}`, `"model":"m1"`, "abc123"},
+		{`cd /x;API_KEY=abcSECRET run`, " run", "abcSECRET"},
+	} {
+		got := RedactSecrets(c.in)
+		if strings.Contains(got, c.gone) || !strings.Contains(got, c.keep) {
+			t.Errorf("RedactSecrets(%s) = %s", c.in, got)
+		}
+	}
+}

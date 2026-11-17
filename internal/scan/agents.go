@@ -68,6 +68,7 @@ func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 			InstalledAt:     datedOr(installedAt, path),
 			Removable:       removable,
 			ToolSurface:     toolSurface(b, "tools", "allowed-tools"),
+			Preloads:        frontmatterList(b, "skills"),
 		})
 	}
 	return items, warns

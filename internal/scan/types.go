@@ -46,6 +46,10 @@ type Item struct {
 	// HookLoaded is set on a plugin skill its SessionStart hook injects: it
 	// works in every session and no transcript records an invocation.
 	HookLoaded bool
+	// Preloads is, for an agent, the skills its frontmatter names under
+	// `skills:`. Claude Code loads them into the agent when it starts, and no
+	// transcript records that as a use.
+	Preloads []string `json:",omitempty"`
 	// ToolSurface is the permission breadth of a skill/agent: the count of
 	// tools it is restricted to via the "allowed-tools" (skill) or "tools"
 	// (agent) frontmatter field. ToolSurfaceAll means no restriction — the

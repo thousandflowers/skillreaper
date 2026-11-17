@@ -200,3 +200,17 @@ func TestADeleteThatFailsHalfwaySaysSo(t *testing.T) {
 		t.Errorf("delete in a read-only folder: %d\n%s", code, out)
 	}
 }
+
+// A name can end in a space, and the menu locks such an item. reap keep takes
+// the name as typed before it takes it trimmed, and so does keep --remove.
+func TestKeepTakesANameThatEndsInASpace(t *testing.T) {
+	home := deleteHome(t)
+	putSkill(t, home, "sp ")
+
+	if code, out := reapRun("keep", "sp "); code != 0 {
+		t.Fatalf("keep 'sp ': %d %s", code, out)
+	}
+	if code, out := reapRun("keep", "--remove", "sp "); code != 0 {
+		t.Errorf("keep --remove 'sp ': %d %s", code, out)
+	}
+}

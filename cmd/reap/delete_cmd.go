@@ -38,6 +38,10 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 	row := rows[0]
+	if err := prune.FolderLinkRefusal(row.Item); err != nil { // before any note that says what will go
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
 	seen := stampsOf(rows[:1]) // before the question: what is there when it is asked
 	if refuseKept(opts, row, stderr) {
 		return 1

@@ -104,7 +104,7 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 			if opts.asJSON {
 				return plan.writeJSON(stdout, stderr, false)
 			}
-			return 0
+			return quietNotDone(stderr)
 		}
 		strips := "their descriptions"
 		if len(candidates) == 1 {

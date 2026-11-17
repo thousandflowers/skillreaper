@@ -165,6 +165,10 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 		if refuseKept(opts, rows[0], stderr) {
 			return 1
 		}
+		if err := prune.FolderLinkRefusal(rows[0].Item); err != nil { // before a plan that says what it reclaims
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
 		candidates = rows
 	}
 	for _, row := range r.Rows {
@@ -247,7 +251,7 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 			if opts.asJSON {
 				return plan.writeJSON(stdout, stderr, false)
 			}
-			return 0
+			return quietNotDone(stderr)
 		}
 		prompt := fmt.Sprintf("\nPrune %s? This quarantines %s (reversible). [y/N] ", countAll(len(candidates)), itOrThem(len(candidates)))
 		if named {
@@ -529,9 +533,12 @@ func (o pruneOutcome) writeJSON(w, stderr io.Writer, applied bool) int {
 		out.Candidates = append(out.Candidates, item{
 			Category: string(row.Category), Name: row.Name, Tokens: row.Tokens, WeightUnknown: row.WeightUnknown, Path: row.Path,
 		})
-		if row.WeightUnknown {
+		if row.WeightUnknown && !applied { // of the plan; after an apply, of what moved
 			out.Unmeasured++
 		}
+	}
+	if applied {
+		out.Unmeasured = o.movedUnmeasured
 	}
 	for _, e := range o.done {
 		out.Pruned = append(out.Pruned, entry{ID: e.ID, Name: e.Name, Category: e.Category})
@@ -724,6 +731,14 @@ func prunable(rows []report.Row) int {
 		}
 	}
 	return n
+}
+
+// quietNotDone is --quiet with something to do and no --yes: there is nobody
+// to ask, so nothing is done. A script reads that from the exit code, and a
+// person from one line on stderr; exit 0 read as a prune that happened.
+func quietNotDone(stderr io.Writer) int {
+	fmt.Fprintln(stderr, "nothing done: --quiet needs --yes")
+	return exitNotDone
 }
 
 // warningNote follows a "nothing to do": clean and "could not tell" are not

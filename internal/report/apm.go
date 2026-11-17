@@ -443,7 +443,7 @@ func coordLastSegment(coord string) string {
 // comments.
 func RenderAPMYAML(w io.Writer, m APMReport) {
 	fmt.Fprintln(w, "# apm.yml — proposed by skillreaper from firing evidence (not applied)")
-	fmt.Fprintf(w, "# repo: %s · window: %dd · %s in all projects\n", orNone(m.Repo), m.WindowDays, nOf(m.Sessions, "session"))
+	fmt.Fprintf(w, "# repo: %s · window: %dd · %s in all projects\n", scan.SafeText(orNone(m.Repo)), m.WindowDays, nOf(m.Sessions, "session"))
 	fmt.Fprintln(w, "# skills only (first cut); MCP servers and agents are not emitted yet.")
 	fmt.Fprintln(w, "dependencies:")
 	// Emit "apm: []" when no line will be an active list item, so the value
@@ -515,7 +515,7 @@ func RenderAPMJSON(w io.Writer, m APMReport) error {
 
 // RenderAPMMarkdown writes the report as Markdown.
 func RenderAPMMarkdown(w io.Writer, m APMReport) {
-	fmt.Fprintf(w, "# apm.yml proposal — %s\n\n", orNone(m.Repo))
+	fmt.Fprintf(w, "# apm.yml proposal — %s\n\n", scan.SafeText(orNone(m.Repo)))
 	fmt.Fprintf(w, "_From firing evidence over %s · %s in all projects · skills only._\n\n", nOf(m.WindowDays, "day"), nOf(m.Sessions, "session"))
 	fmt.Fprintln(w, "| Skill | Coordinate | Uses here | Status |")
 	fmt.Fprintln(w, "|---|---|---|---|")

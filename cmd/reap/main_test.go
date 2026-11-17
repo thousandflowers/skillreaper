@@ -390,14 +390,17 @@ func TestRunPruneQuietPrintsNothing(t *testing.T) {
 	claudeDir, claudeJSON := buildFixture(t)
 	var out, errOut bytes.Buffer
 
-	// Without --yes: silent, and a no-op.
+	// Without --yes: nothing on stdout and nothing moved, and it says so where a
+	// script looks: exit 3, "not done", and one line on stderr. It used to exit
+	// 0, and a script took that for a prune.
 	code := run([]string{
 		"prune", "--claude-dir", claudeDir, "--claude-json", claudeJSON,
 		"--min-sessions", "1", "--quiet",
 	}, strings.NewReader(""), &out, &errOut)
-	if code != 0 {
+	if code != exitNotDone || !strings.Contains(errOut.String(), "nothing done: --quiet needs --yes") {
 		t.Fatalf("exit = %d, stderr: %s", code, errOut.String())
 	}
+	errOut.Reset()
 	if out.Len() != 0 {
 		t.Errorf("--quiet wrote %d bytes to stdout:\n%s", out.Len(), out.String())
 	}

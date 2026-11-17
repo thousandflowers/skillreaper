@@ -204,6 +204,15 @@ func QuarantineChosen(claudeDir string, it scan.Item) (Entry, error) {
 	return quarantine(claudeDir, it, chosenRoot(root, itemPath(it)))
 }
 
+// FolderLinkRefusal is why an item reached through a link that is its whole
+// skills folder is not pruned or deleted; nil for any other item.
+func FolderLinkRefusal(it scan.Item) error {
+	if !it.FolderLink {
+		return nil
+	}
+	return errFolderLink(it)
+}
+
 func errFolderLink(it scan.Item) error {
 	return fmt.Errorf("%s is reached through a link that is its whole skills folder (%s); reap will not remove that link, it would take every skill there", it.Name, filepath.Dir(itemPath(it)))
 }

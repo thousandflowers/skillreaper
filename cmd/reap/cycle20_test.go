@@ -324,3 +324,76 @@ func TestTheStarLineSaysSavedOnlyAfterAPrune(t *testing.T) {
 		t.Errorf("after a prune: %q", said)
 	}
 }
+
+// A skill reached through a link that is the whole skills folder is refused
+// before anything is promised about it: the note said "the link goes".
+func TestAFolderLinkIsRefusedBeforeItsNote(t *testing.T) {
+	home := deleteHome(t)
+	skills := filepath.Join(home, ".claude", "skills")
+	moved := filepath.Join(home, "ext2", "skills")
+	if err := os.MkdirAll(filepath.Dir(moved), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(skills, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(moved, skills); err != nil {
+		t.Skip(err)
+	}
+	for _, verb := range []string{"delete", "prune"} {
+		var out, errOut bytes.Buffer
+		code := run([]string{verb, "mine", "--yes"}, strings.NewReader(""), &out, &errOut)
+		if said := out.String(); code == 0 || strings.Contains(said, "the link goes") || strings.Contains(said, "reclaim") || !strings.Contains(errOut.String(), "whole skills folder") {
+			t.Errorf("%s, exit %d:\n%s%s", verb, code, said, errOut.String())
+		}
+	}
+}
+
+// Names are printed without their control characters here too.
+func TestKeepRemoveAndApmPrintNamesSafely(t *testing.T) {
+	home := deleteHome(t)
+	mustWriteFile(t, filepath.Join(home, ".claude", "reaped", "overrides.json"), `{"keep":["skill:ev\u001b[31mil"]}`)
+	var out, errOut bytes.Buffer
+	run([]string{"keep", "--remove", "skill:ev?[31mil"}, strings.NewReader(""), &out, &errOut)
+	if said := out.String() + errOut.String(); strings.Contains(said, "\x1b") || !strings.Contains(said, "removed keep") {
+		t.Errorf("keep --remove:\n%q", said)
+	}
+	var yaml, md bytes.Buffer
+	m := report.APMReport{Repo: "nl\ndir \x1b[31m", WindowDays: 30, Sessions: 3}
+	report.RenderAPMYAML(&yaml, m)
+	report.RenderAPMMarkdown(&md, m)
+	for name, said := range map[string]string{"yaml": yaml.String(), "markdown": md.String()} {
+		if strings.Contains(said, "\x1b") || strings.Contains(said, "# repo: nl\n") || strings.Contains(said, "proposal — nl\n") {
+			t.Errorf("%s:\n%q", name, said)
+		}
+	}
+}
+
+// After an apply, --json's "unmeasured" is of what was moved, as total_tokens is.
+func TestPruneJSONCountsUnmeasuredAmongWhatMoved(t *testing.T) {
+	var b, errOut bytes.Buffer
+	o := pruneOutcome{
+		candidates:  []report.Row{{Item: scan.Item{Category: scan.CatSkill, Name: "a"}, Tokens: 34}, {Item: scan.Item{Category: scan.CatMCP, Name: "srv"}, WeightUnknown: true}},
+		movedTokens: 34,
+	}
+	o.writeJSON(&b, &errOut, true)
+	if strings.Contains(b.String(), `"unmeasured"`) {
+		t.Errorf("an unmeasured server that was not moved is counted:\n%s", b.String())
+	}
+}
+
+// The same for mute: quiet without --yes is "not done", and says so on stderr.
+func TestMuteQuietWithoutYesIsNotDone(t *testing.T) {
+	home := deleteHome(t)
+	for i := range 12 {
+		mustWriteFile(t, filepath.Join(home, ".claude", "projects", "p", "q"+strings.Repeat("x", i)+".jsonl"),
+			`{"type":"user","sessionId":"q`+strings.Repeat("x", i)+`","timestamp":"`+nowStamp()+`","message":{"content":"hi"}}`+"\n")
+	}
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"mute", "mine", "--quiet"}, strings.NewReader(""), &out, &errOut)
+
+	if code != exitNotDone || out.Len() != 0 || !strings.Contains(errOut.String(), "nothing done: --quiet needs --yes") {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errOut.String())
+	}
+}

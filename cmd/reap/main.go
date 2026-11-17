@@ -205,7 +205,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&opts.yes, "yes", false, "prune, mute, delete, restore --all, unmute --all: apply without asking")
 	fs.BoolVar(&opts.all, "all", false, "mute, restore, unmute: act on every eligible item")
 	fs.BoolVar(&opts.dryRun, "dry-run", false, "install-hook: print the change without writing")
-	fs.BoolVar(&opts.quiet, "quiet", false, "suppress the normal text report")
+	fs.BoolVar(&opts.quiet, "quiet", false, "suppress the normal text report (prune and mute then need --yes: with nobody to ask they do nothing, and exit 3)")
 	fs.BoolVar(&opts.listKeep, "list", false, "keep, snapshot: list what is saved")
 	fs.StringVar(&opts.removeKeep, "remove", "", "keep: remove a kept item")
 	fs.StringVar(&opts.claudeDir, "claude-dir", "", "Claude Code directory (default ~/.claude)")
@@ -275,7 +275,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		for _, m := range msgs {
 			fmt.Fprintf(stderr, "error: %s\n", m)
 		}
-		return 1
+		return 1 // as 0.8.0 answers it: scripts may test for it
 	}
 
 	cmd := ""
@@ -1413,7 +1413,7 @@ func cmdKeepRemove(opts options, name string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "removed keep: %s\n", removed)
+	fmt.Fprintf(stdout, "removed keep: %s\n", scan.SafeText(removed))
 	return 0
 }
 

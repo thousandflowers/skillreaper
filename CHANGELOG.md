@@ -552,6 +552,9 @@ really injected, with multi-line descriptions read in full.
 - The line asking for a star after a report says what reap `can save you`:
   it said `saved you` before anything was pruned. After a prune it says
   what that prune saved.
+- `reap prune --quiet` and `reap mute --quiet` without `--yes`, with
+  something to do, exit 3 and say `nothing done: --quiet needs --yes` on
+  stderr. They exited 0 in silence, and a script took that for done.
 
 ### Behaviour changes on the command line
 

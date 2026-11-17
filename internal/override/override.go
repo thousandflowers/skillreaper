@@ -70,7 +70,7 @@ func RemoveKeep(claudeDir, arg string) (string, error) {
 		return "", fmt.Errorf("not kept: %s. Kept items: %s", arg, scan.SafeText(strings.Join(f.Keep, ", ")))
 	case 1:
 	default:
-		return "", fmt.Errorf("%s matches %s; use the full key", arg, strings.Join(matches, ", "))
+		return "", fmt.Errorf("%s matches %s; use the full key", arg, scan.SafeText(strings.Join(matches, ", ")))
 	}
 	f.Keep = slices.DeleteFunc(slices.Clone(f.Keep), func(k string) bool { return k == matches[0] })
 	return matches[0], save(path(claudeDir), f)

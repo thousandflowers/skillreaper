@@ -154,7 +154,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 275 fixes of this release, most of them found by reviewing it before
+The 276 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -720,6 +720,11 @@ it went out. Each says what was wrong where that is not plain.
   the nearest unit, where 1.99 read `1`; the receipt asks for the size it
   needs, where a window of 9 rows was told it needed 29; its summary fits
   the narrowest receipt with long figures too.
+- Space in a row's card takes reap's suggestion, as space in the list does:
+  under "reap suggests mute" or "reap suggests lock" it marked the row to
+  prune. reap's own choice (space, a click, `a`) no longer mutes a skill
+  linked into the folder other tools read; `m` still does, and the receipt
+  says whose file it is.
 
 #### Secrets in the report
 

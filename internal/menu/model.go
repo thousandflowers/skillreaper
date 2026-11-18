@@ -348,8 +348,11 @@ func best(r *Row) string {
 	}
 	// Never a choice the row would refuse: space, a click and `a` set this
 	// without asking again.
+	// Nor a mute of a skill linked into the folder other tools read too: the
+	// file is theirs as well. A bulk reap mute leaves it; m still takes it.
+	shared := r.LinkTarget != ""
 	if verb, ok := suggestPlan[suggestion(r)]; ok {
-		if can(r, verb) {
+		if can(r, verb) && !(shared && verb == vMute) {
 			return verb
 		}
 		return ""
@@ -357,7 +360,7 @@ func best(r *Row) string {
 	switch {
 	case own(r) && can(r, vPrune):
 		return vPrune
-	case can(r, vMute):
+	case can(r, vMute) && !shared:
 		return vMute
 	case can(r, vPrune):
 		return vPrune

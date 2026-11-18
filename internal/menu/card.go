@@ -206,13 +206,10 @@ func (m *Menu) card(r *Row, p *Plan, siblings []*Row, hk cardHooks) *Row {
 			}
 			at = min(len(siblings)-1, at+1)
 		case k == ' ':
-			// As in the list: space means what reap can do to it at once, even
-			// over another choice, and clears only that.
-			if verb := spaceVerb(r); verb != 0 {
-				if chosen == map[rune]string{'p': vPrune, 'm': vMute}[verb] {
-					verb = 'n'
-				}
-				hk.act([]*Row{r}, verb)
+			// As in the list: space takes reap's own suggestion, even over
+			// another choice, and clears only that.
+			if key := cardSpace(r, chosen); key != 0 {
+				hk.act([]*Row{r}, key)
 			}
 			focusOn = nil
 		case k == 'n':
@@ -235,14 +232,16 @@ func (m *Menu) card(r *Row, p *Plan, siblings []*Row, hk cardHooks) *Row {
 	}
 }
 
-func spaceVerb(r *Row) rune {
-	switch {
-	case can(r, vPrune):
-		return 'p'
-	case can(r, vMute):
-		return 'm'
+// cardSpace is the key space stands for in a row's card: the one for reap's
+// own suggestion, as space in the list takes it, or the one that clears it
+// when it is chosen already. It took prune wherever a prune was possible,
+// under a card that said "reap suggests mute".
+func cardSpace(r *Row, chosen string) rune {
+	verb := best(r)
+	if verb != "" && chosen == verb {
+		return 'n'
 	}
-	return 0
+	return map[string]rune{vPrune: 'p', vMute: 'm', vLock: 'l'}[verb]
 }
 
 func refusedOption(options []option, ch rune) int {

@@ -1112,3 +1112,44 @@ func TestTheReceiptSummaryFitsWithLongFigures(t *testing.T) {
 		t.Errorf("room for the word: %q", got)
 	}
 }
+
+// Space in a row's card takes reap's own suggestion, as space in the list
+// does: the card said "reap suggests mute" (or lock), and space marked the
+// row to prune.
+func TestSpaceInTheCardTakesReapsSuggestion(t *testing.T) {
+	skill := func(v string) *Row {
+		r := raw("x", verdict(v), tokens(600))
+		r.Category, r.Path, r.Removable = "skill", "/s/x/SKILL.md", true
+		return cleanRow(r)
+	}
+	for name, c := range map[string]struct {
+		row    *Row
+		chosen string
+		want   rune
+	}{
+		"reap suggests mute":           {skill(report.VerdictMute), "", 'm'},
+		"reap suggests lock":           {skill(report.VerdictKeep), "", 'l'},
+		"reap suggests prune":          {skill(report.VerdictReap), "", 'p'},
+		"the suggestion is chosen":     {skill(report.VerdictMute), vMute, 'n'},
+		"another choice is taken over": {skill(report.VerdictMute), vPrune, 'm'},
+	} {
+		if got := cardSpace(c.row, c.chosen); got != c.want {
+			t.Errorf("%s: %q, want %q", name, got, c.want)
+		}
+	}
+}
+
+// reap's own choice never mutes a skill that is a link into the folder other
+// tools read too: a, space and a click left it out of nothing, though a bulk
+// reap mute does. The m key still takes it, and the receipt says whose it is.
+func TestReapsOwnChoiceLeavesASharedSkillUnmuted(t *testing.T) {
+	r := raw("shared", verdict(report.VerdictMute), tokens(600))
+	r.Category, r.Path, r.Removable, r.LinkTarget = "skill", "/h/.claude/skills/shared/SKILL.md", true, "/h/.agents/skills/shared"
+	row := cleanRow(r)
+	if got := best(row); got != "" {
+		t.Errorf("reap's own choice: %q", got)
+	}
+	if !can(row, vMute) {
+		t.Error("a mute by hand is refused")
+	}
+}

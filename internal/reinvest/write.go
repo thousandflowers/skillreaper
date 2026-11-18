@@ -54,6 +54,9 @@ func canonNames(installed []skill) map[string]bool {
 	out := make(map[string]bool, len(installed))
 	for _, s := range installed {
 		out[canon(s.Name)] = true
+		if s.Called != "" { // two skills called alike: the new one would stand beside it
+			out[canon(s.Called)] = true
+		}
 	}
 	return out
 }

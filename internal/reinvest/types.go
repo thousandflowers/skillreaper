@@ -6,7 +6,10 @@ import "sort"
 
 // skill is one installed skill as reap reports it.
 type skill struct {
-	Name    string
+	Name string
+	// Called is the name in the skill's header when it is not its folder's:
+	// the one it is invoked by, and a name that is taken.
+	Called  string
 	Path    string // the file reap knows it by: a name can be several tools' copies
 	Desc    string
 	Tokens  int

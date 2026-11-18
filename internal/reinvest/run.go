@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -174,7 +175,7 @@ const claudeNotice = "experimental · reinvest runs `claude -p` on your Claude C
 func noticeFor(opts options) string {
 	switch {
 	case opts.online && opts.mcp:
-		return claudeNotice + "; it also sends search words drawn from them to skills.sh and the MCP registry"
+		return claudeNotice + "; it also sends search words drawn from them to skills.sh and the MCP registry, and asks npm, PyPI and GitHub about the servers it finds"
 	case opts.online:
 		return claudeNotice + "; it also sends search words drawn from them to skills.sh"
 	}
@@ -444,14 +445,18 @@ func (a *app) showSwap(s swap) {
 	c := s.cand()
 	fmt.Fprintf(a.term, "  %s  in place of  %s\n", named(c), names(s.Mute))
 	a.showDoc(c)
-	if c.Installed || c.Created {
-		return
-	}
-	if argv, ok := installCommand(c); ok {
+	// Where it goes and what is muted, by path, before the question: it was
+	// said only by --dry-run, and after the apply.
+	if c.Created {
+		fmt.Fprintf(a.term, "    will write: %s, linked as %s\n", printable(filepath.Join(writtenDir(), c.Slug, skillFile)), printable(filepath.Join(skillsDir(), c.Slug)))
+	} else if argv, ok := installCommand(c); ok && !c.Installed {
 		words := make([]string, len(argv))
 		for i, w := range argv {
 			words[i] = scan.ShellArg(printable(w))
 		}
 		fmt.Fprintf(a.term, "    will run: %s\n", strings.Join(words, " "))
+	}
+	for _, x := range s.Mute {
+		fmt.Fprintf(a.term, "    will mute: %s\n", reapLine("mute", x))
 	}
 }

@@ -79,6 +79,9 @@ var riskRules = []riskRule{
 	{`\brm\s+(?:-[a-z]+\s+)+["']?(?:/|~|\$home|\$\{home\})/?\*?["']?(?:\s|$|;)`, "destructive command"},
 	{`xattr\s+-c`, "bypasses macOS quarantine"},
 	{`(?:^|\s)!` + backtick, "runs a command as soon as it loads"},
+	// The same as a fenced block: three backticks and "!". Claude Code runs
+	// both forms when the skill loads.
+	{backtick + backtick + backtick + `!`, "runs a command as soon as it loads"},
 	{strings.Join(secretPatterns, "|"), "holds what looks like a pasted secret"},
 }
 

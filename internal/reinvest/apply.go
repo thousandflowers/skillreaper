@@ -512,6 +512,9 @@ func stoppedHalfway(c candidate, installing bool, log []string, muted []skill, i
 		lines = append(lines, "  ?  "+c.Name+": its install was cut short (it may be half there)")
 	}
 	lines = append(lines, log...)
+	if c.Created && !installing { // the new skill is in place: say how to take it out
+		lines = append(lines, "  →  to take "+c.Name+" out again: "+reapLine("prune", skill{Name: c.Slug}))
+	}
 	// By path throughout: two skills can share a name. inHand is the path of
 	// the one whose mute was running when the stop came.
 	done := map[string]bool{}

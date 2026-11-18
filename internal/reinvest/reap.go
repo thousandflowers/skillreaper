@@ -29,6 +29,7 @@ type reapState struct {
 func skillFromRow(row *obj) skill {
 	s := skill{}
 	s.Name, _ = row.str("Name")
+	s.Called, _ = row.str("FrontmatterName")
 	s.Path, _ = row.str("Path")
 	s.Desc, _ = row.str("Description")
 	s.Tokens, _ = pyInt(row.val("Tokens"))

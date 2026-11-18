@@ -258,7 +258,7 @@ func skillLines(skills []skill, width int) string {
 	}
 	lines := make([]string, len(skills))
 	for i, s := range skills {
-		lines[i] = "- " + s.Name + ": " + cut(s.Desc, width)
+		lines[i] = "- " + s.Name + ": " + cut(redact(s.Desc), width) // a key pasted in a description stays here
 	}
 	return strings.Join(lines, "\n")
 }

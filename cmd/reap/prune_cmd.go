@@ -633,6 +633,9 @@ func cmdRestore(opts options, args []string, stdin io.Reader, stdout, stderr io.
 		fmt.Fprintln(stdout, "aborted")
 		return exitNotDone
 	}
+	if count == 0 {
+		return 0 // said above: nothing to lock or write
+	}
 	lock, ok := lockState(opts.claudeDir, stateLockWait, stderr)
 	if !ok {
 		return 1

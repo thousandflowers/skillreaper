@@ -128,6 +128,10 @@ func cmdMute(opts options, args []string, stdin io.Reader, stdout, stderr io.Wri
 			}
 		}
 	}
+	if named && !machine && candidates[0].LinkTarget != "" {
+		// As prune says of a link: the file is in a folder other tools read.
+		fmt.Fprintf(stdout, "  This edits %s: a folder other tools read too.\n", shown(candidates[0].LinkTarget))
+	}
 	if !opts.yes {
 		if machine {
 			if opts.asJSON {
@@ -333,6 +337,16 @@ func cmdUnmute(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		if !confirm(stdin, stderr, fmt.Sprintf("\nUnmute %s? [y/N] ", countAll(len(entries)))) {
 			fmt.Fprintln(stdout, "aborted")
 			return exitNotDone
+		}
+	}
+	if opts.all {
+		// Nothing muted: nothing to lock or write. It left a reaped/ folder in
+		// whatever folder it was pointed at.
+		if entries, err := mute.Entries(opts.claudeDir); err == nil && len(entries) == 0 {
+			if opts.yes {
+				fmt.Fprintln(stdout, "Nothing is muted.")
+			}
+			return 0
 		}
 	}
 	lock, ok := lockState(opts.claudeDir, stateLockWait, stderr)

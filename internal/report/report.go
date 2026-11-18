@@ -661,7 +661,9 @@ func MuteEligible(row Row) bool {
 	// so a mute saves nothing and takes the text its slash menu shows.
 	// Nor an item whose mute would save nothing: a description that is empty,
 	// or no longer than the name that stays.
-	return row.Path != "" && MuteSaving(row) > 0 &&
+	// Nor a skill that is a link into the folder other tools read too: the
+	// file a mute edits is theirs as well. By name it can be muted, and says so.
+	return row.Path != "" && MuteSaving(row) > 0 && row.LinkTarget == "" &&
 		row.Removable && !row.ManualOnly &&
 		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
 		(row.Verdict == VerdictReap || row.Verdict == VerdictMute)

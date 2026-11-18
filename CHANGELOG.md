@@ -148,7 +148,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 271 fixes of this release, most of them found by reviewing it before
+The 273 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -466,6 +466,11 @@ it went out. Each says what was wrong where that is not plain.
   and when it asks for an id. A bulk mute leaves out an item whose mute
   would save nothing, as a mute by name refuses it. The undo line of a mute
   never prints a control character from a path.
+- A skill that is a link into the folder other tools read too
+  (`~/.agents/skills`) is left out of a bulk mute, as a bulk prune leaves
+  it; a mute by name says whose file it edits. `reap restore --all` and
+  `reap unmute --all` with nothing to bring back write nothing: they left a
+  `reaped/` folder in whatever folder they were pointed at.
 
 #### What reap accepts and prints
 
@@ -935,6 +940,13 @@ it went out. Each says what was wrong where that is not plain.
   would go by one name are told apart: the second was written, verified,
   and never offered. The prototype's README says it is not maintained, and
   how it differs from `reap reinvest`.
+- The fenced form of a command that runs when a skill loads (three
+  backticks and `!`) is refused like the inline one. The name in a skill's
+  header counts as taken, not only its folder's. A key pasted in a skill's
+  description is removed before the description goes to Claude. Before the
+  question the screen says where the skill is written and which files are
+  muted; with `--mcp` the first line names npm, PyPI and GitHub too; a stop
+  after the skill was created says how to take it out again.
 
 </details>
 

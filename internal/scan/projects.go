@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 )
 
 // ProjectLoaded names the skills a project's own agents preload (`skills:` in
@@ -36,6 +38,30 @@ func ProjectLoaded(project, config string) (byAgents, byHooks map[string]bool, u
 		}
 	}
 	return byAgents, hookLoadedFrom(dir, config, project), cmp.Or(UnreadProtection(dir), unread)
+}
+
+// ProjectSkillAgents names, in lower case, the agents a project's own skills
+// run in (`agent:` in .claude/skills/*/SKILL.md), as SkillAgents does for the
+// user's: such an agent is at work with no use of its own on record. unread
+// says why one of those files could not be read, when one could not.
+func ProjectSkillAgents(project string) (agents map[string]bool, unread string) {
+	agents = map[string]bool{}
+	dir := filepath.Join(project, ".claude", "skills")
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		path := filepath.Join(dir, e.Name(), "SKILL.md")
+		b, err := readCapped(path)
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) && unread == "" {
+				unread = fmt.Sprintf("%s could not be read (%v), and may say that it is at work", SafeText(path), err)
+			}
+			continue
+		}
+		if name := skillAgent(b); name != "" {
+			agents[strings.ToLower(name)] = true
+		}
+	}
+	return agents, unread
 }
 
 // UnreadProtection says why a file of a config folder that tells what is at

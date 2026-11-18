@@ -53,3 +53,24 @@ func TestAProjectsFolderThatIsALinkIsRead(t *testing.T) {
 		t.Errorf("sessions %d, err %v", st.Sessions, err)
 	}
 }
+
+// The folder a session ran in is kept as it was recorded, beside the form
+// that can be printed: looked for by the printed form, a folder with a
+// character rewritten for printing was never found.
+func TestTheSessionFolderIsKeptAsRecorded(t *testing.T) {
+	dir := t.TempDir()
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		`{"type":"user","timestamp":"2026-06-01T10:00:00Z","cwd":"/work/p7\u200fx","sessionId":"s","message":{"content":"hi"}}`)
+	st, err := Parse(dir, time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.ProjectDirs["proj"]; got != "/work/p7\u200fx" {
+		t.Errorf("as recorded: %q (printed form %q)", got, st.ProjectPaths["proj"])
+	}
+	into := NewStats(30)
+	MergeInto(into, st)
+	if into.ProjectDirs["proj"] == "" {
+		t.Error("lost when two platforms' histories are put together")
+	}
+}

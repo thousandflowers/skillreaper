@@ -1,8 +1,14 @@
 package main
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -85,28 +91,48 @@ func shortHistoryNote(r *report.Report) string {
 		fmt.Sprintf("%d %s", r.MonthlyBasisDays, report.Plural(r.MonthlyBasisDays, "day")), r.WindowDays)
 }
 
-// sessionProjects are the folders sessions ran in that are still there.
-func sessionProjects(st *usage.Stats) []string {
-	seen := map[string]bool{}
-	var dirs []string
-	for _, path := range st.ProjectPaths {
-		if info, err := os.Stat(path); err == nil && info.IsDir() && !seen[path] {
-			seen[path] = true
-			dirs = append(dirs, path)
+// sessionProjects are the folders sessions ran in that are still there, and
+// a warning for each that reap may not enter, itself or a folder above it:
+// that one is not gone, and what its CLAUDE.md, agents and hooks name is not
+// known. In order, so that two runs read the same files the same way.
+func sessionProjects(st *usage.Stats) (dirs []string, closed []scan.Warning) {
+	// By the folder as recorded; a cache written before that was kept has
+	// only the form that can be printed.
+	recorded := maps.Clone(st.ProjectPaths)
+	if recorded == nil {
+		recorded = map[string]string{}
+	}
+	maps.Copy(recorded, st.ProjectDirs)
+	paths := slices.Sorted(maps.Values(recorded))
+	for _, path := range slices.Compact(paths) {
+		info, err := os.Stat(path)
+		if err == nil && !info.IsDir() {
+			continue
+		}
+		if err == nil {
+			// Seen from outside; what it holds is another permission.
+			if _, err = os.Lstat(filepath.Join(path, ".claude")); !errors.Is(err, fs.ErrPermission) {
+				dirs = append(dirs, path)
+				continue
+			}
+		}
+		if errors.Is(err, fs.ErrPermission) {
+			closed = append(closed, scan.Warning{Path: path, Msg: fmt.Sprintf(
+				"this project folder could not be entered (%v), so what its CLAUDE.md, agents and hooks name is not known: unused skills and agents are shown as REVIEW, not REAP/MUTE", err)})
 		}
 	}
-	return dirs
+	return dirs, closed
 }
 
 // projectLoads names what those projects' agents and hooks load, with the
-// reason each is kept for.
-func projectLoads(projects []string, config string) (loaded map[string]string, unread string) {
-	loaded = map[string]string{}
+// reason each is kept for, and the agents their skills run in.
+func projectLoads(projects []string, config string) (loaded map[string]string, runIn map[string]bool, unread string) {
+	loaded, runIn = map[string]string{}, map[string]bool{}
 	for _, project := range projects {
 		byAgents, byHooks, why := scan.ProjectLoaded(project, config)
-		if why != "" && unread == "" {
-			unread = why
-		}
+		agents, whySkills := scan.ProjectSkillAgents(project)
+		maps.Copy(runIn, agents)
+		unread = cmp.Or(unread, why, whySkills)
 		for name := range byHooks {
 			loaded[name] = report.ReasonHookLoaded
 		}
@@ -114,5 +140,5 @@ func projectLoads(projects []string, config string) (loaded map[string]string, u
 			loaded[name] = report.ReasonAgentLoaded
 		}
 	}
-	return loaded, unread
+	return loaded, runIn, unread
 }

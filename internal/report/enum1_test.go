@@ -73,3 +73,19 @@ func TestProjectAgentPreloadsAPluginSkillByItsBareName(t *testing.T) {
 		t.Errorf("another skill's name: %q", got)
 	}
 }
+
+// The agent a project's skill runs in is at work, as the one a user's skill
+// runs in: by any name it has.
+func TestTheAgentAProjectsSkillRunsInIsKept(t *testing.T) {
+	items := []scan.Item{
+		{Category: scan.CatAgent, Name: "worker", Platform: "claude-code", Source: "personal", DescChars: 370},
+		{Category: scan.CatAgent, Name: "pl:helper", Platform: "claude-code", Source: "plugin:pl@mk", DescChars: 370},
+		{Category: scan.CatAgent, Name: "idle", Platform: "claude-code", Source: "personal", DescChars: 370},
+	}
+	got := verdictsOf(items, Opts{ProjectSkillAgents: map[string]bool{"worker": true, "helper": true}})
+	for name, want := range map[string]string{"worker": "KEEP(skill-agent)", "pl:helper": "KEEP(skill-agent)", "idle": "REAP(unused)"} {
+		if got[name] != want {
+			t.Errorf("%s: %s, want %s", name, got[name], want)
+		}
+	}
+}

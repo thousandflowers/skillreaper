@@ -1033,13 +1033,17 @@ func gather(opts options) (*report.Report, error) {
 	home, _ := os.UserHomeDir()
 	// The projects sessions ran in have memory files, agents and hooks of
 	// their own: read from wherever reap is run, or a verdict depends on it.
-	projects := sessionProjects(st)
+	projects, closed := sessionProjects(st)
 	claudeMD, unreadMD := scan.LoadClaudeMDChecked(cwd, home, opts.claudeDir, projects...)
+	unreadMD = append(unreadMD, closed...) // a closed project's memory files are unread ones
 	warns = append(warns, unreadMD...)
-	projectLoaded, projectUnread := projectLoads(projects, opts.claudeDir)
+	projectLoaded, projectRunIn, projectUnread := projectLoads(projects, opts.claudeDir)
 	protectionUnread := cmp.Or(scan.UnreadProtection(opts.claudeDir), projectUnread)
 	if protectionUnread != "" {
 		warns = append(warns, scan.Warning{Path: opts.claudeDir, Msg: protectionUnread + ": unused skills and agents are shown as REVIEW, not REAP/MUTE."})
+	}
+	if len(closed) > 0 { // said above, once for each; here it holds the agents too
+		protectionUnread = cmp.Or(protectionUnread, scan.SafeText(closed[0].Path)+" could not be entered, and may say that it is at work")
 	}
 	if pastUsesLost {
 		for _, p := range platforms {
@@ -1096,28 +1100,29 @@ func gather(opts options) (*report.Report, error) {
 			return r.Uses, r.Last, true
 		},
 
-		MinSessions:      opts.minSessions,
-		GraceDays:        opts.graceDays,
-		MinTokens:        opts.minTokens,
-		Model:            opts.model,
-		PricePerMTok:     price,
-		Cutoff:           cutoff,
-		WindowDays:       opts.days,
-		KeepSet:          keepSet,
-		EvidenceBlind:    evidenceBlind,
-		BlindReason:      blindReason,
-		HistoryUnread:    historyUnread,
-		ClaudeMDUnread:   len(unreadMD) > 0,
-		ProtectionUnread: protectionUnread,
-		ProjectLoaded:    projectLoaded,
-		PerPlatform:      perPlatform,
-		RetentionDays:    retentionFor(opts.claudeDir),
-		ClaudeMDLines:    claudeMD,
-		MuteThreshold:    opts.muteThreshold,
-		MuteMinTokens:    opts.muteMinTokens,
-		Muted:            muted,
-		MuteLost:         muteLost,
-		PruneLost:        prunedPluginItems(opts.claudeDir),
+		MinSessions:        opts.minSessions,
+		GraceDays:          opts.graceDays,
+		MinTokens:          opts.minTokens,
+		Model:              opts.model,
+		PricePerMTok:       price,
+		Cutoff:             cutoff,
+		WindowDays:         opts.days,
+		KeepSet:            keepSet,
+		EvidenceBlind:      evidenceBlind,
+		BlindReason:        blindReason,
+		HistoryUnread:      historyUnread,
+		ClaudeMDUnread:     len(unreadMD) > 0,
+		ProtectionUnread:   protectionUnread,
+		ProjectLoaded:      projectLoaded,
+		ProjectSkillAgents: projectRunIn,
+		PerPlatform:        perPlatform,
+		RetentionDays:      retentionFor(opts.claudeDir),
+		ClaudeMDLines:      claudeMD,
+		MuteThreshold:      opts.muteThreshold,
+		MuteMinTokens:      opts.muteMinTokens,
+		Muted:              muted,
+		MuteLost:           muteLost,
+		PruneLost:          prunedPluginItems(opts.claudeDir),
 	})
 	if _, err := mute.Entries(opts.claudeDir); err != nil {
 		// Without the list a muted skill reads as any other, and its uses as proof.

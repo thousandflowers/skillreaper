@@ -62,6 +62,9 @@ type Opts struct {
 	// ProjectLoaded names the skills the agents and SessionStart hooks of the
 	// projects sessions ran in load, with the reason each is kept for.
 	ProjectLoaded map[string]string
+	// ProjectSkillAgents names, in lower case, the agents those projects'
+	// own skills run in (`agent:` in a skill's header).
+	ProjectSkillAgents map[string]bool
 	// RetentionDays is Claude Code's transcript retention, 0 when unknown.
 	RetentionDays int
 	// ClaudeMDLines holds the lines of every detected CLAUDE.md, headings included.
@@ -344,7 +347,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				row.Verdict, row.Reason = VerdictKeep, ReasonAgentLoaded
 			case it.Category == scan.CatAgent && it.MainAgent:
 				row.Verdict, row.Reason = VerdictKeep, ReasonMainAgent
-			case it.Category == scan.CatAgent && namedIn(skillAgents[it.Platform]):
+			case it.Category == scan.CatAgent && (namedIn(skillAgents[it.Platform]) || namedIn(opts.ProjectSkillAgents)):
 				row.Verdict, row.Reason = VerdictKeep, ReasonSkillAgent
 			case it.Category == scan.CatSkill && !IsPluginSource(it.Source) && usedByAReader(opts, evidenceFor, it):
 				row.Verdict, row.Reason = VerdictReview, ReasonUsedElsewhere

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -185,7 +186,7 @@ func hookLoadedFrom(settingsDir, config, project string) map[string]bool {
 				// A quote between a variable and the rest of a path ("$HOME"/x) is
 				// nothing to the shell: read the words without the quotes.
 				for _, word := range append(hookWordRe.FindAllString(unquoted.Replace(h.Command), -1), shellWords(h.Command)...) {
-					text += hookScripts(inProject(underHome(word, home, config), project), dir)
+					text += hookScripts(inProject(underHome(word, home, config), project), dir, config)
 				}
 				for _, m := range skillFileRe.FindAllStringSubmatch(text, -1) {
 					loaded[m[1]] = true
@@ -197,9 +198,11 @@ func hookLoadedFrom(settingsDir, config, project string) map[string]bool {
 }
 
 // hookScripts is the text of the script at path and, when it lies in a folder
-// of the config folder, of the scripts beside it. A path that is not absolute
-// is the project's, wherever reap happens to run, and is not read.
-func hookScripts(path, dir string) string {
+// of one of the config folders (the settings' own, and the user's: a
+// project's hook runs the user's scripts too), of the scripts beside it. A
+// path that is not absolute is the project's, wherever reap happens to run,
+// and is not read.
+func hookScripts(path string, configs ...string) string {
 	if !filepath.IsAbs(path) {
 		return ""
 	}
@@ -209,8 +212,12 @@ func hookScripts(path, dir string) string {
 	}
 	text := "\n" + string(script)
 	folder := filepath.Dir(path)
-	if rel, err := filepath.Rel(dir, folder); err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-		return text // outside the config folder, or the folder itself: the script alone
+	inAFolderOf := func(dir string) bool {
+		rel, err := filepath.Rel(dir, folder)
+		return err == nil && rel != "." && !strings.HasPrefix(rel, "..")
+	}
+	if !slices.ContainsFunc(configs, inAFolderOf) {
+		return text // outside the config folders, or one of them itself: the script alone
 	}
 	entries, _ := os.ReadDir(folder)
 	for _, e := range entries {

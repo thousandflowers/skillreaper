@@ -155,7 +155,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 282 fixes of this release, most of them found by reviewing it before
+The 286 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -375,6 +375,17 @@ it went out. Each says what was wrong where that is not plain.
   no folder (`bash x.sh`) or by `$PWD`.
 - A name is looked for in each distinct memory line once, and faster: with
   a CLAUDE.md in every folder of 400 projects a run took a second.
+- The agent a project's own skill runs in (`agent:` in
+  `.claude/skills/*/SKILL.md`) is kept, as the one a skill of yours runs
+  in: it came out REAP.
+- A project behind a folder reap may not enter is not taken for gone: one
+  warning names it and unused skills and agents are held as REVIEW. What
+  its CLAUDE.md named came out REAP with no word. A project folder closed
+  itself now makes that one warning, not four.
+- A project's hook that runs a script of your config folder is followed to
+  the scripts beside it, as your own hook is.
+- A project is looked up by its folder as the session recorded it: one
+  with a character rewritten for printing in its path was never found.
 
 #### Prune, mute, restore, delete and keep
 

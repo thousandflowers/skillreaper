@@ -103,3 +103,38 @@ func TestMemoryLinesAreKeptOnce(t *testing.T) {
 		t.Errorf("lines = %q", lines)
 	}
 }
+
+// A project's skill runs in an agent (`agent:` in its header), as a user's
+// skill does: only the user's skills were read for it.
+func TestProjectSkillAgentsNamesTheAgentsAProjectsSkillsRunIn(t *testing.T) {
+	proj := t.TempDir()
+	put(t, filepath.Join(proj, ".claude", "skills", "sk", "SKILL.md"), "---\nname: sk\ndescription: d\ncontext: fork\nagent: Worker\n---\nbody\n")
+	put(t, filepath.Join(proj, ".claude", "skills", "plain", "SKILL.md"), "---\nname: plain\ndescription: d\n---\nbody\n")
+	agents, unread := ProjectSkillAgents(proj)
+	if !agents["worker"] || len(agents) != 1 || unread != "" {
+		t.Errorf("agents %v, unread %q", agents, unread)
+	}
+	if err := os.Truncate(filepath.Join(proj, ".claude", "skills", "plain", "SKILL.md"), maxFileSize+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, unread := ProjectSkillAgents(proj); !strings.Contains(unread, "plain") {
+		t.Errorf("a skill file over the limit was passed by in silence: %q", unread)
+	}
+	if a, unread := ProjectSkillAgents(filepath.Join(proj, "nothing")); len(a) != 0 || unread != "" {
+		t.Errorf("a project with no skills: %v %q", a, unread)
+	}
+}
+
+// A project's hook that runs a script of the user's config folder is
+// followed to the scripts beside it, as the user's own hook is.
+func TestProjectHookIsFollowedBesideAScriptOfTheConfigFolder(t *testing.T) {
+	root := t.TempDir()
+	config, proj := filepath.Join(root, "config"), filepath.Join(root, "proj")
+	put(t, filepath.Join(config, "hooks", "wrap.sh"), "exec real.sh\n")
+	put(t, filepath.Join(config, "hooks", "real.sh"), "cat ~/.claude/skills/wrapped/SKILL.md\n")
+	put(t, filepath.Join(proj, ".claude", "settings.json"),
+		`{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":`+quoteJSON("bash "+filepath.Join(config, "hooks", "wrap.sh"))+`}]}]}}`)
+	if _, hooks, _ := ProjectLoaded(proj, config); !hooks["wrapped"] {
+		t.Errorf("the script beside it was not read: %v", hooks)
+	}
+}

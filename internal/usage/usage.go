@@ -133,10 +133,11 @@ type Stats struct {
 	// the only real path: the bucket name itself cannot be decoded.
 	ProjectPaths map[string]string
 
-	// ProjectDirs is that cwd as it was recorded, to look the folder up by:
-	// ProjectPaths holds the form that can be printed, and a character
-	// rewritten for printing names another folder.
-	ProjectDirs map[string]string
+	// ProjectDirs is every cwd the transcripts recorded, as recorded, to look
+	// the folders up by. ProjectPaths keeps one form that can be printed per
+	// project, and two folders can share a project's name ("my app" and
+	// "my-app"): by it, the second folder's CLAUDE.md was never read.
+	ProjectDirs map[string]bool
 
 	// ToolCalls counts tool names whose server cannot be told from the name
 	// alone, because a server's name can contain the separator. They are matched
@@ -718,11 +719,11 @@ func MergeInto(dst, src *Stats) {
 		}
 		dst.ProjectPaths[project] = path
 	}
-	for project, dir := range src.ProjectDirs {
+	for dir := range src.ProjectDirs {
 		if dst.ProjectDirs == nil {
-			dst.ProjectDirs = map[string]string{}
+			dst.ProjectDirs = map[string]bool{}
 		}
-		dst.ProjectDirs[project] = dir
+		dst.ProjectDirs[dir] = true
 	}
 	for name, n := range src.ToolCalls {
 		if dst.ToolCalls == nil {
@@ -886,10 +887,12 @@ func parseFile(path, project string, st *Stats) string {
 				st.ProjectPaths = map[string]string{}
 			}
 			st.ProjectPaths[project] = scan.SafeText(e.Cwd)
+		}
+		if e.Cwd != "" && !st.ProjectDirs[e.Cwd] {
 			if st.ProjectDirs == nil {
-				st.ProjectDirs = map[string]string{}
+				st.ProjectDirs = map[string]bool{}
 			}
-			st.ProjectDirs[project] = e.Cwd
+			st.ProjectDirs[e.Cwd] = true
 		}
 		if e.Type == "attachment" {
 			var a attachment

@@ -75,9 +75,12 @@ func UnreadProtection(dir string) string {
 	unread := func(path string, err error) string {
 		return fmt.Sprintf("%s could not be read (%v), and may say that it is at work", SafeText(path), err)
 	}
-	// A folder reap may not enter or list hides files that may be there.
-	if _, err := os.ReadDir(filepath.Join(dir, "agents")); errors.Is(err, fs.ErrPermission) {
-		return unread(filepath.Join(dir, "agents"), err)
+	// A folder reap may not enter or list hides files that may be there: the
+	// agents' own, the skills' (the agents they run in), the rules'.
+	for _, sub := range []string{"agents", "skills", "rules"} {
+		if _, err := os.ReadDir(filepath.Join(dir, sub)); errors.Is(err, fs.ErrPermission) {
+			return unread(filepath.Join(dir, sub), err)
+		}
 	}
 	for _, path := range append(paths, agents...) {
 		info, err := os.Stat(path)

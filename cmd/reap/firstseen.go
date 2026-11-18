@@ -96,15 +96,9 @@ func shortHistoryNote(r *report.Report) string {
 // that one is not gone, and what its CLAUDE.md, agents and hooks name is not
 // known. In order, so that two runs read the same files the same way.
 func sessionProjects(st *usage.Stats) (dirs []string, closed []scan.Warning) {
-	// By the folder as recorded; a cache written before that was kept has
-	// only the form that can be printed.
-	recorded := maps.Clone(st.ProjectPaths)
-	if recorded == nil {
-		recorded = map[string]string{}
-	}
-	maps.Copy(recorded, st.ProjectDirs)
-	paths := slices.Sorted(maps.Values(recorded))
-	for _, path := range slices.Compact(paths) {
+	// By every folder as recorded: the form that can be printed names another
+	// folder when a character was rewritten.
+	for _, path := range slices.Sorted(maps.Keys(st.ProjectDirs)) {
 		info, err := os.Stat(path)
 		if err == nil && !info.IsDir() {
 			continue

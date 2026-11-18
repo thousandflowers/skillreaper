@@ -65,12 +65,37 @@ func TestTheSessionFolderIsKeptAsRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := st.ProjectDirs["proj"]; got != "/work/p7\u200fx" {
-		t.Errorf("as recorded: %q (printed form %q)", got, st.ProjectPaths["proj"])
+	if !st.ProjectDirs["/work/p7\u200fx"] {
+		t.Errorf("as recorded: %v (printed form %q)", st.ProjectDirs, st.ProjectPaths["proj"])
 	}
 	into := NewStats(30)
 	MergeInto(into, st)
-	if into.ProjectDirs["proj"] == "" {
+	if !into.ProjectDirs["/work/p7\u200fx"] {
 		t.Error("lost when two platforms' histories are put together")
+	}
+}
+
+// One project folder of transcripts can hold sessions of two folders: "my
+// app" and "my-app" are given the same name. Only the first was kept, and
+// what the other's CLAUDE.md named came out REAP.
+func TestEveryFolderOfAProjectIsKept(t *testing.T) {
+	dir := t.TempDir()
+	writeTranscript(t, filepath.Join(dir, "-w-my-app", "a.jsonl"),
+		`{"type":"user","timestamp":"2026-06-01T10:00:00Z","cwd":"/w/my-app","sessionId":"a","message":{"content":"hi"}}`)
+	writeTranscript(t, filepath.Join(dir, "-w-my-app", "b.jsonl"),
+		`{"type":"user","timestamp":"2026-06-02T10:00:00Z","cwd":"/w/my app","sessionId":"b","message":{"content":"hi"}}`)
+	st, err := Parse(dir, time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.ProjectDirs["/w/my-app"] || !st.ProjectDirs["/w/my app"] {
+		t.Errorf("folders: %v", st.ProjectDirs)
+	}
+}
+
+// The usage cache holds the folders now: one written before that is a miss.
+func TestTheCacheFormatCountsTheFolders(t *testing.T) {
+	if cacheFormat < 9 {
+		t.Errorf("cacheFormat %d: a cache with no folders would be read as having none", cacheFormat)
 	}
 }

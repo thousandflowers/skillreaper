@@ -138,3 +138,22 @@ func TestProjectHookIsFollowedBesideAScriptOfTheConfigFolder(t *testing.T) {
 		t.Errorf("the script beside it was not read: %v", hooks)
 	}
 }
+
+// A project's skills or rules folder that cannot be listed may hold what is
+// at work: it was passed by as empty, with no word.
+func TestSkillsAndRulesThatCannotBeListedAreUnread(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads everything")
+	}
+	for _, sub := range []string{"skills", "rules"} {
+		dir := filepath.Join(t.TempDir(), ".claude")
+		put(t, filepath.Join(dir, sub, "x", "SKILL.md"), "---\nagent: w\n---\n")
+		if err := os.Chmod(filepath.Join(dir, sub), 0o311); err != nil {
+			t.Fatal(err)
+		}
+		if got := UnreadProtection(dir); !strings.Contains(got, sub) {
+			t.Errorf("%s closed: %q", sub, got)
+		}
+		_ = os.Chmod(filepath.Join(dir, sub), 0o755)
+	}
+}

@@ -155,7 +155,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 286 fixes of this release, most of them found by reviewing it before
+The 288 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -386,6 +386,12 @@ it went out. Each says what was wrong where that is not plain.
   the scripts beside it, as your own hook is.
 - A project is looked up by its folder as the session recorded it: one
   with a character rewritten for printing in its path was never found.
+- Every folder your sessions ran in is read, also when two of them share
+  one name among the transcripts ("my app" and "my-app"): only the first
+  was kept, and what the other's CLAUDE.md named came out REAP.
+- A project's `.claude/skills` or `.claude/rules` that cannot be listed
+  holds unused skills and agents as REVIEW with a warning, as a closed
+  `.claude/agents` does: they were passed by as empty.
 
 #### Prune, mute, restore, delete and keep
 

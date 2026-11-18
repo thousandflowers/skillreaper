@@ -29,7 +29,7 @@ func TestSessionProjectsTellsAClosedProjectFromOneThatIsGone(t *testing.T) {
 		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 	}
 	st := usage.NewStats(30)
-	st.ProjectDirs = map[string]string{"a": open, "b": behind, "c": self, "d": filepath.Join(root, "gone"), "e": open}
+	st.ProjectDirs = map[string]bool{open: true, behind: true, self: true, filepath.Join(root, "gone"): true}
 
 	dirs, closed := sessionProjects(st)
 	if len(dirs) != 1 || dirs[0] != open {

@@ -281,7 +281,9 @@ func TestStopAndContinue(t *testing.T) {
 	p.typeIn("k") // typed while stopped: the menu reads it once continued
 	c.signal(syscall.SIGCONT)
 	c.expect("first resize true, raw true, then k")
-	if !strings.Contains(p.output()[mark:], screenOn+modesOn) {
+	// The child says what it read before its output is all through the pty:
+	// wait for it, as for the screen going off above.
+	if !p.waitFor(mark, screenOn+modesOn) {
 		t.Errorf("a continued menu did not take the screen back: %q", p.output()[mark:])
 	}
 	if code, killed := c.wait(); code != 0 {

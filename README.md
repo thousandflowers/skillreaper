@@ -484,17 +484,6 @@ The menu runs on macOS and Linux. On Windows, in a pipe, or with any argument,
 
 <br>
 
-### Demo
-
-<p align="center">
-  <img src="docs/reap-demo.gif" alt="reap in action" width="800"><br>
-  <sub>Recorded against a small sample fixture
-  (<a href="docs/gif-helpers/demo-fixture.sh">demo-fixture.sh</a>), so the
-  numbers are the fixture's, not a real stack's.</sub>
-</p>
-
-<br>
-
 ### share - the number, ready to paste
 
 `reap share` prints one line about what you reclaimed (or, before a prune, what

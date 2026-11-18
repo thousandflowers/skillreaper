@@ -148,7 +148,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 267 fixes of this release, most of them found by reviewing it before
+The 268 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -680,6 +680,11 @@ it went out. Each says what was wrong where that is not plain.
   US$1,200.00): it takes a short figure, and where that has no room either,
   it is left out. On the narrowest receipt what comes back heavier is said
   whole.
+- The words beside the big figure are whole whenever the figure was judged
+  to fit (the check was one cell short); a short money figure is rounded to
+  the nearest unit, where 1.99 read `1`; the receipt asks for the size it
+  needs, where a window of 9 rows was told it needed 29; its summary fits
+  the narrowest receipt with long figures too.
 
 #### Secrets in the report
 

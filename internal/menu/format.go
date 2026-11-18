@@ -221,6 +221,9 @@ func (m *Menu) shortMoney(v float64) string {
 	if v > 0 && v < 1 {
 		return "<" + m.cur.Sym + "1"
 	}
+	if v < 1000*roundsUp {
+		v = math.Round(v) // to the nearest unit: 1.99 read "1"
+	}
 	return m.cur.Sym + m.short(v)
 }
 

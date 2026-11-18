@@ -870,7 +870,7 @@ func TestTheHeaderNeverCallsSavedWhatWasNot(t *testing.T) {
 // receipt said "$0 saved every month" under a line that said $0.09.
 func TestTheShortMoneyFigureIsNeverAFalseZero(t *testing.T) {
 	m := open(t, flowData()).m
-	for v, want := range map[float64]string{0.08: "<" + m.cur.Sym + "1", 0: m.cur.Sym + "0", 12.6: m.cur.Sym + "12", 2500: m.cur.Sym + m.short(2500)} {
+	for v, want := range map[float64]string{0.08: "<" + m.cur.Sym + "1", 0: m.cur.Sym + "0", 12.6: m.cur.Sym + "13", 1.99: m.cur.Sym + "2", 999.4: m.cur.Sym + "999", 999.96: m.cur.Sym + m.short(1000), 2500: m.cur.Sym + m.short(2500)} {
 		if got := m.shortMoney(v); got != want {
 			t.Errorf("shortMoney(%v) = %q, want %q", v, got, want)
 		}
@@ -1065,5 +1065,50 @@ func TestTheReceiptSummaryKeepsWhatComesBackWhole(t *testing.T) {
 	v.back, v.tok = 0, 0
 	if got := v.summary(80); got != "3 items" {
 		t.Errorf("nothing lighter: %q", got)
+	}
+}
+
+// The words beside the big figure are whole whenever the figure was judged
+// to fit: the check was one cell short, and "wasted a mont" was drawn.
+func TestTheWordsBesideTheBigFigureAreNeverOneLetterShort(t *testing.T) {
+	for _, scale := range []float64{1, 10, 100, 1000, 10000, 100000, 1000000} {
+		for cols := 66; cols <= 130; cols++ {
+			d := pricedData()
+			if cols%2 == 0 {
+				d.Billing = "stripe_subscription"
+			}
+			d.Report.MoneyPerMonth *= scale
+			x := openSized(t, 24, cols, d)
+			x.run()
+			if line := strings.TrimRight(lineWith(x.final(), "wasted a mont"), " "); line != "" && !strings.HasSuffix(line, "wasted a month") {
+				t.Errorf("x%v at %d columns: %q", scale, cols, line)
+			}
+		}
+	}
+}
+
+// The size the receipt asks for is the smallest that shows it, whatever the
+// window is now: at 9 rows it asked for 29, and drew at 19.
+func TestTheReceiptAsksForTheSizeItNeeds(t *testing.T) {
+	keys := []term.Key{space, applyKey, term.KeyResize, term.KeyNone}
+	x := openSized(t, 30, 80, flowData())
+	x.s.resizeAt = map[int][2]int{len(keys) - 2: {9, 80}}
+	x.press(keys...).run()
+	if !x.saw("window too small: needs 40x19") {
+		t.Errorf("at 9 rows: %q", x.final()[0])
+	}
+}
+
+// The last form of the receipt's summary fits the narrowest receipt with
+// long figures too, and still says "lighter" while there is room.
+func TestTheReceiptSummaryFitsWithLongFigures(t *testing.T) {
+	m := open(t, flowData()).m
+	v := &receiptView{m: m, picks: make([]Pick, 99), tok: 1234567, back: 12}
+	if got := v.summary(34); cells(got) > 34 || !strings.HasSuffix(got, "12 heavier") || !strings.Contains(got, "tok less") {
+		t.Errorf("34 cells: %q", got)
+	}
+	v = &receiptView{m: m, picks: make([]Pick, 2), tok: 5, back: 1}
+	if got := v.summary(34); !strings.Contains(got, "2 items · ~5 tok less") {
+		t.Errorf("room for the word: %q", got)
 	}
 }

@@ -141,7 +141,7 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 		value := math.Max(0, l.totalPriced-l.deadPriced*deadShare) * m.price * m.cur.Rate
 		above, words := m.bigMoneyWords("wasted a month")
 		figure := m.moneyFigure(value)
-		if bigWidth(figure) > wd-5-len(words) {
+		if bigWidth(figure) > wd-6-len(words) { // the words start two cells after the figure, and end one short of the edge
 			figure = m.shortMoney(value)
 		}
 		m.put(0, 3, above, dim)
@@ -164,7 +164,7 @@ func (l *list) header(wd int, left, frac, eased, deadShare float64) {
 	default:
 		words := "tokens wasted every session"
 		figure := m.tokens(int(left))
-		if bigWidth(figure) > wd-5-len(words) {
+		if bigWidth(figure) > wd-6-len(words) { // the words start two cells after the figure, and end one short of the edge
 			figure = m.short(left)
 		}
 		end := m.big(1, 3, figure, frac, 1)

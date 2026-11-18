@@ -413,8 +413,10 @@ func (v *receiptView) summary(pw int) string {
 		return firstFitting(pw, items+back, items+heavier)
 	}
 	lighter := items + " · ~" + v.m.tokens(v.tok)
+	brief := "~" + v.m.shortCount(v.tok) + " tok less" // long figures, the narrowest receipt
 	return firstFitting(pw, lighter+" tokens lighter every session"+back, lighter+" tok/session lighter"+back,
-		lighter+" tok lighter"+back, lighter+" tok lighter"+heavier, lighter+" tok"+heavier)
+		lighter+" tok lighter"+back, lighter+" tok lighter"+heavier, lighter+" tok less"+heavier,
+		items+" · "+brief+heavier, brief+heavier)
 }
 
 // draw returns false when the window cannot show the question: then y must not
@@ -428,8 +430,10 @@ func (v *receiptView) draw(question string) bool {
 	}
 	// A y must never answer a list it cannot see: with many warnings a short
 	// window would have room for none of the rows.
+	// The smallest window that shows it, whatever the window is now: taken
+	// from the room there is, a window too small asked for one too tall.
 	room := h - 14 - max(2, extra)
-	need := receiptRows + max(0, min(len(v.lines), receiptMinLines)-room)
+	need := max(receiptRows, 14+max(2, extra)+min(len(v.lines), receiptMinLines))
 	if m.tooSmall(need, receiptCols, "too small to confirm: esc cancels") {
 		return false
 	}

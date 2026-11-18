@@ -883,7 +883,7 @@ func gather(opts options) (*report.Report, error) {
 			for _, td := range p.TranscriptDirs {
 				needs := func(id string) bool { return !digest.HasSource(scoped(id)) }
 				observe := func(id string, one *usage.Stats) {
-					digest.Add(scoped(id), scopedObservation(pid, observationFrom(one)))
+					folded(digest, scoped(id), pid, one)
 					digestDirty = true
 				}
 				if parsed, err := usage.ParseCodex(td, parseCutoff(cutoff), opts.days, needs, observe); err == nil {
@@ -917,8 +917,7 @@ func gather(opts options) (*report.Report, error) {
 				// used less often than that can ever accumulate.
 				needs := func(id string) bool { return !digest.HasSource(id) }
 				observe := func(id string, one *usage.Stats) {
-					digest.Add(id, scopedObservation(pid, observationFrom(one)))
-					digestDirty = true
+					digestDirty = folded(digest, id, pid, one) || digestDirty
 				}
 				parsed, err := usage.ParseObserving(td, parseCutoff(cutoff), opts.days, needs, observe)
 				if err != nil {
@@ -1006,6 +1005,10 @@ func gather(opts options) (*report.Report, error) {
 			warns = append(warns, w)
 		}
 	}
+	stampMuted, _ := mutedSet(opts.claudeDir, items)
+	if stampFirstSeen(digest, items, stampMuted, clock.Now()) {
+		digestDirty = true
+	}
 	if digestDirty {
 		// A failure to persist is not worth interrupting a report for: the
 		// run is still correct, it simply did not extend the record.
@@ -1023,8 +1026,15 @@ func gather(opts options) (*report.Report, error) {
 			Msg: fmt.Sprintf("the keep list cannot be read, so nothing is protected by it in this report: %v", keepErr)})
 	}
 	home, _ := os.UserHomeDir()
-	claudeMD, unreadMD := scan.LoadClaudeMDChecked(cwd, home, opts.claudeDir)
+	// The projects sessions ran in have memory files, agents and hooks of
+	// their own: read from wherever reap is run, or a verdict depends on it.
+	projects := sessionProjects(st)
+	claudeMD, unreadMD := scan.LoadClaudeMDChecked(cwd, home, opts.claudeDir, projects...)
 	warns = append(warns, unreadMD...)
+	protectionUnread := unreadProtection(opts.claudeDir)
+	if protectionUnread != "" {
+		warns = append(warns, scan.Warning{Path: opts.claudeDir, Msg: protectionUnread + ": unused skills and agents are shown as REVIEW, not REAP/MUTE."})
+	}
 	if pastUsesLost {
 		for _, p := range platforms {
 			if pid := string(p.ID); !evidenceBlind[pid] {
@@ -1080,26 +1090,28 @@ func gather(opts options) (*report.Report, error) {
 			return r.Uses, r.Last, true
 		},
 
-		MinSessions:    opts.minSessions,
-		GraceDays:      opts.graceDays,
-		MinTokens:      opts.minTokens,
-		Model:          opts.model,
-		PricePerMTok:   price,
-		Cutoff:         cutoff,
-		WindowDays:     opts.days,
-		KeepSet:        keepSet,
-		EvidenceBlind:  evidenceBlind,
-		BlindReason:    blindReason,
-		HistoryUnread:  historyUnread,
-		ClaudeMDUnread: len(unreadMD) > 0,
-		PerPlatform:    perPlatform,
-		RetentionDays:  retentionFor(opts.claudeDir),
-		ClaudeMDLines:  claudeMD,
-		MuteThreshold:  opts.muteThreshold,
-		MuteMinTokens:  opts.muteMinTokens,
-		Muted:          muted,
-		MuteLost:       muteLost,
-		PruneLost:      prunedPluginItems(opts.claudeDir),
+		MinSessions:      opts.minSessions,
+		GraceDays:        opts.graceDays,
+		MinTokens:        opts.minTokens,
+		Model:            opts.model,
+		PricePerMTok:     price,
+		Cutoff:           cutoff,
+		WindowDays:       opts.days,
+		KeepSet:          keepSet,
+		EvidenceBlind:    evidenceBlind,
+		BlindReason:      blindReason,
+		HistoryUnread:    historyUnread,
+		ClaudeMDUnread:   len(unreadMD) > 0,
+		ProtectionUnread: protectionUnread,
+		ProjectLoaded:    projectLoads(projects),
+		PerPlatform:      perPlatform,
+		RetentionDays:    retentionFor(opts.claudeDir),
+		ClaudeMDLines:    claudeMD,
+		MuteThreshold:    opts.muteThreshold,
+		MuteMinTokens:    opts.muteMinTokens,
+		Muted:            muted,
+		MuteLost:         muteLost,
+		PruneLost:        prunedPluginItems(opts.claudeDir),
 	})
 	if _, err := mute.Entries(opts.claudeDir); err != nil {
 		// Without the list a muted skill reads as any other, and its uses as proof.
@@ -2037,14 +2049,12 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	cwd, _ := os.Getwd()
-	home, _ := os.UserHomeDir()
-	claudeLines := scan.LoadClaudeMD(cwd, home, opts.claudeDir)
+	claudeLines := r.MemoryLines // the lines the verdicts were made on, projects' files included
 	explain := func(row report.Row) report.Explanation {
 		muted, _ := mutedSet(opts.claudeDir, []scan.Item{row.Item})
 		// A name in CLAUDE.md protects a skill and nothing else.
 		isSkill := row.Category == scan.CatSkill
-		named := isSkill && scan.ClaudeMDReferences(claudeLines, row.Name)
+		named := isSkill && report.NamedInClaudeMD(claudeLines, row.Item)
 		return report.BuildExplanation(row, r.SessionsOf(row.Platform), report.ExplainInput{
 			MinSessions:   opts.minSessions,
 			GraceDays:     opts.graceDays,
@@ -2052,7 +2062,7 @@ func cmdWhy(opts options, args []string, stdout, stderr io.Writer) int {
 			WindowDays:    opts.days,
 			Muted:         muted[row.Path],
 			ClaudeMDRef:   named,
-			ClaudeMDPlain: isSkill && !named && scan.ClaudeMDMentions(claudeLines, row.Name),
+			ClaudeMDPlain: isSkill && !named && report.MentionedInClaudeMD(claudeLines, row.Item),
 			Now:           clock.Now(),
 		})
 	}

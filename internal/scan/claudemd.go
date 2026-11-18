@@ -69,9 +69,18 @@ func LoadClaudeMD(cwd, home, claudeDir string) []string {
 // there and could not be read (no permission, a link leading nowhere, over
 // the size limit). Such a file may name skills: read as missing, it stopped
 // protecting them without a word.
-func LoadClaudeMDChecked(cwd, home, claudeDir string) (lines []string, unread []Warning) {
+//
+// projects are the folders sessions ran in: their memory files are read too,
+// wherever reap is run from. A skill named only in one project's CLAUDE.md
+// was protected from inside that project and REAP from anywhere else.
+func LoadClaudeMDChecked(cwd, home, claudeDir string, projects ...string) (lines []string, unread []Warning) {
 	seen := map[string]bool{}
-	for _, p := range claudeMDPaths(cwd, home, claudeDir) {
+	paths := claudeMDPaths(cwd, home, claudeDir)
+	for _, project := range projects {
+		paths = append(paths, filepath.Join(project, "CLAUDE.md"), filepath.Join(project, "CLAUDE.local.md"), filepath.Join(project, ".claude", "CLAUDE.md"))
+		paths = append(paths, markdownUnder(filepath.Join(project, ".claude", "rules"))...)
+	}
+	for _, p := range paths {
 		lines = append(lines, readMemoryFile(p, home, seen, 0, &unread)...)
 	}
 	return lines, unread

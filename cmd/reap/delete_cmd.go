@@ -25,7 +25,7 @@ func cmdDelete(opts options, args []string, stdin io.Reader, stdout, stderr io.W
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	if !keepListReadable(opts, stderr) {
+	if !keepListReadable(opts, stderr) || !muteListReadable(opts, stderr) {
 		return 1
 	}
 	rows, err := findItem(r, args[0])

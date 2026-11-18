@@ -59,6 +59,11 @@ type Digest struct {
 	Updated time.Time                    `json:"updated"`
 	Sources map[string]Source            `json:"sources"`
 	Items   map[string]map[string]Record `json:"items"`
+	// FirstSeen is when reap first found an item in the stack, for the items
+	// that came after its first look (those there at the first look hold the
+	// zero time). It dates what has no date of its own, a server in a config,
+	// and what came back: an item restored, or unmuted.
+	FirstSeen map[string]time.Time `json:"first_seen,omitempty"`
 }
 
 // New returns an empty digest ready to merge into.

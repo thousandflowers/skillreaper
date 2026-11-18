@@ -148,7 +148,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 268 fixes of this release, most of them found by reviewing it before
+The 271 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -331,6 +331,23 @@ it went out. Each says what was wrong where that is not plain.
 - `reap why` on a hook or a prose file has no use lines: they read as
   "never used". A tool's name in the payload table is printed without
   control characters.
+- A skill is protected by the name in its header too, the one it is called
+  by: CLAUDE.md naming `ship-it` did not protect `skills/dirfoo` whose
+  header says `name: ship-it`. The memory files, the agents and the
+  SessionStart hooks of every project your sessions ran in are read,
+  wherever reap is run from: a skill named or loaded only in one project was
+  kept from inside it and REAP from anywhere else.
+- An item is dated by when reap first found it in the stack, where that is
+  later than its own date. A server added to a config had no date and was
+  REAP the same day; an item restored from quarantine, or unmuted, was
+  judged at once on sessions it was not in; a plugin's server is as new as
+  the plugin. What was there at reap's first look is not affected.
+- A transcript read only in part is not marked as read in the record of past
+  uses: it was never read again, and a use in it was lost when it left the
+  window. Settings or an agent's file that cannot be read hold the verdicts
+  of skills and agents; `reap prune` and `reap delete` stop on a mute list
+  they cannot read, as `reap mute` does. A plan made on under half the
+  window's days of history says so above it.
 
 #### Prune, mute, restore, delete and keep
 

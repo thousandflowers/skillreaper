@@ -56,6 +56,12 @@ type Opts struct {
 	// ClaudeMDUnread says that a CLAUDE.md or rules file is there and could
 	// not be read: it may name any skill.
 	ClaudeMDUnread bool
+	// ProtectionUnread says why another file that tells what is at work
+	// (settings.json, an agent's file) could not be read; empty when all were.
+	ProtectionUnread string
+	// ProjectLoaded names the skills the agents and SessionStart hooks of the
+	// projects sessions ran in load, with the reason each is kept for.
+	ProjectLoaded map[string]string
 	// RetentionDays is Claude Code's transcript retention, 0 when unknown.
 	RetentionDays int
 	// ClaudeMDLines holds the lines of every detected CLAUDE.md, headings included.
@@ -153,6 +159,9 @@ const nameCharsPerToken = 3.7
 
 // Report is the full result of a scan.
 type Report struct {
+	// MemoryLines are the lines of the CLAUDE.md and rules files the verdicts
+	// were made on, for reap why to read the same ones.
+	MemoryLines []string `json:"-"`
 	// MutedCount is how many installed items the user has muted.
 	MutedCount  int
 	GeneratedAt time.Time
@@ -216,6 +225,7 @@ type Report struct {
 func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) *Report {
 	agentLoaded, skillAgents := scan.AgentLoaded(items), scan.SkillAgents(items)
 	r := &Report{
+		MemoryLines:     opts.ClaudeMDLines,
 		GeneratedAt:     clock.Now(),
 		Platforms:       opts.PlatformNames,
 		PricePerToken:   opts.PricePerMTok / 1e6,
@@ -313,7 +323,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 			// REAP or MUTE it out from under them.
 			if it.Category == scan.CatSkill &&
 				(row.Verdict == VerdictReap || row.Verdict == VerdictMute) &&
-				scan.ClaudeMDReferences(opts.ClaudeMDLines, it.Name) {
+				NamedInClaudeMD(opts.ClaudeMDLines, it) {
 				row.Verdict = VerdictKeep
 				row.Reason = ReasonClaudeMDRef
 			}
@@ -338,6 +348,11 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				row.Verdict, row.Reason = VerdictKeep, ReasonSkillAgent
 			case it.Category == scan.CatSkill && !IsPluginSource(it.Source) && usedByAReader(opts, evidenceFor, it):
 				row.Verdict, row.Reason = VerdictReview, ReasonUsedElsewhere
+			case it.Category == scan.CatSkill && loadedByProject(opts, it) != "":
+				row.Verdict, row.Reason = VerdictKeep, loadedByProject(opts, it)
+			case (it.Category == scan.CatSkill || it.Category == scan.CatAgent) && opts.ProtectionUnread != "":
+				row.Verdict, row.Reason = VerdictReview, ReasonNoEvidence
+				row.EvidenceNote = opts.ProtectionUnread
 			case it.Category == scan.CatSkill && opts.ClaudeMDUnread:
 				row.Verdict, row.Reason = VerdictReview, ReasonNoEvidence
 				row.EvidenceNote = "a CLAUDE.md or rules file could not be read, and may name it"
@@ -669,6 +684,43 @@ func (r *Report) SessionsOf(platformID string) int {
 		return r.Sessions
 	}
 	return r.PlatformSessions[platformID]
+}
+
+// claudeMDNames are the names a rules file can call a skill by: its folder's,
+// and the one in its header, which is the one it is invoked by.
+func claudeMDNames(it scan.Item) []string {
+	names := []string{it.Name}
+	if it.FrontmatterName != "" && it.FrontmatterName != it.Name {
+		names = append(names, it.FrontmatterName)
+		if prefix, _, isPlugin := strings.Cut(it.Name, ":"); isPlugin {
+			names = append(names, prefix+":"+it.FrontmatterName)
+		}
+	}
+	return names
+}
+
+// NamedInClaudeMD says whether the lines name the skill, by any name it has.
+func NamedInClaudeMD(lines []string, it scan.Item) bool {
+	return slices.ContainsFunc(claudeMDNames(it), func(name string) bool { return scan.ClaudeMDReferences(lines, name) })
+}
+
+// MentionedInClaudeMD says whether any of its names stands in the lines,
+// written as a name or not.
+func MentionedInClaudeMD(lines []string, it scan.Item) bool {
+	return slices.ContainsFunc(claudeMDNames(it), func(name string) bool { return scan.ClaudeMDMentions(lines, name) })
+}
+
+// loadedByProject is the reason a skill is kept for when a project's agent
+// or hook loads it, by any name it has; empty when none does.
+func loadedByProject(opts Opts, it scan.Item) string {
+	for _, name := range claudeMDNames(it) {
+		for loaded, reason := range opts.ProjectLoaded {
+			if strings.EqualFold(loaded, name) {
+				return reason
+			}
+		}
+	}
+	return ""
 }
 
 // unreadReaderID is another tool that loads this item's folder and whose

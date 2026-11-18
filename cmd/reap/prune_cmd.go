@@ -157,7 +157,8 @@ func cmdPrune(opts options, args []string, stdin io.Reader, stdout, stderr io.Wr
 		return 1
 	}
 	named := len(args) == 1
-	if !keepListReadable(opts, stderr) {
+	// The mute list too: a muted skill has no use because of the mute.
+	if !keepListReadable(opts, stderr) || !muteListReadable(opts, stderr) {
 		return 1
 	}
 
@@ -372,6 +373,9 @@ func printChosenNote(stdout io.Writer, row report.Row) {
 
 // printPrunePlan shows what the run proposes.
 func printPrunePlan(opts options, stdout io.Writer, r *report.Report, candidates, dead []report.Row, named bool) {
+	if note := shortHistoryNote(r); note != "" {
+		fmt.Fprintln(stdout, "\n"+note)
+	}
 	total, unmeasured := 0, 0
 	for _, row := range candidates {
 		total += row.Tokens

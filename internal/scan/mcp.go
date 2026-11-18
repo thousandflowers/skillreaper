@@ -123,7 +123,11 @@ func ScanMCP(configPath, configDir, platformID, configFormat string) ([]Item, []
 				warns = append(warns, Warning{Path: path, Msg: "unreadable JSON: " + jerr.Error()})
 				continue
 			}
+			from := len(items)
 			items = appendMCPServers(items, f.MCPServers, "plugin:"+p.FullName, path, platformID, seen)
+			for i := from; i < len(items); i++ {
+				items[i].InstalledAt = p.InstalledAt // a plugin's server is as new as the plugin
+			}
 		}
 		// Plugin-shipped servers cannot be pruned per-server; mark not removable.
 		for i := before; i < len(items); i++ {

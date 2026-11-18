@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -183,7 +184,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.BoolVar(&showVersion, "version", false, "print version")
 	fs.BoolVar(&showVersion, "v", false, "print version")
 	fs.IntVar(&opts.days, "days", 30, "evidence window in days")
-	fs.IntVar(&opts.minSessions, "min-sessions", 10, "sessions required before REAP verdicts")
+	fs.IntVar(&opts.minSessions, "min-sessions", 10, "sessions required before REAP verdicts (fewer, in proportion, for an item that has existed for only part of the window)")
 	fs.IntVar(&opts.graceDays, "grace-days", 14, "items installed this recently → REVIEW(grace)")
 	fs.IntVar(&opts.minTokens, "min-tokens", 3, "items below this token weight → KEEP(tiny)")
 	fs.Float64Var(&opts.muteThreshold, "mute-threshold", 0.20, "MUTE used skills whose uses number fewer than this fraction of the sessions: uses ÷ sessions, so 5 uses in one session count 5 (0 disables)")
@@ -693,6 +694,7 @@ var detectPlatforms = platform.Detect
 // gather runs every scanner plus transcript parsers across all
 // detected platforms and joins the result into a report.
 func gather(opts options) (*report.Report, error) {
+	started := time.Now()
 	// A mistyped path is said: read as an empty stack it hides every server.
 	// Said here, by what reads the files, and not to `reap version`.
 	if opts.claudeJSONGiven {
@@ -1006,7 +1008,10 @@ func gather(opts options) (*report.Report, error) {
 		}
 	}
 	stampMuted, _ := mutedSet(opts.claudeDir, items)
-	if stampFirstSeen(digest, items, stampMuted, clock.Now()) {
+	// Stamped with the real time, taken before the verdicts' own "now": a run
+	// under a pinned clock must not write a date the next run reads as old,
+	// and an item found a moment ago is not "installed in the future".
+	if stampFirstSeen(digest, items, stampMuted, started) {
 		digestDirty = true
 	}
 	if digestDirty {
@@ -1031,7 +1036,8 @@ func gather(opts options) (*report.Report, error) {
 	projects := sessionProjects(st)
 	claudeMD, unreadMD := scan.LoadClaudeMDChecked(cwd, home, opts.claudeDir, projects...)
 	warns = append(warns, unreadMD...)
-	protectionUnread := unreadProtection(opts.claudeDir)
+	projectLoaded, projectUnread := projectLoads(projects, opts.claudeDir)
+	protectionUnread := cmp.Or(scan.UnreadProtection(opts.claudeDir), projectUnread)
 	if protectionUnread != "" {
 		warns = append(warns, scan.Warning{Path: opts.claudeDir, Msg: protectionUnread + ": unused skills and agents are shown as REVIEW, not REAP/MUTE."})
 	}
@@ -1103,7 +1109,7 @@ func gather(opts options) (*report.Report, error) {
 		HistoryUnread:    historyUnread,
 		ClaudeMDUnread:   len(unreadMD) > 0,
 		ProtectionUnread: protectionUnread,
-		ProjectLoaded:    projectLoads(projects),
+		ProjectLoaded:    projectLoaded,
 		PerPlatform:      perPlatform,
 		RetentionDays:    retentionFor(opts.claudeDir),
 		ClaudeMDLines:    claudeMD,

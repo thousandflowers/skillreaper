@@ -38,6 +38,21 @@ func skillFromRow(row *obj) skill {
 	return s
 }
 
+// mutedPlainly says whether a mute of this skill is what the screen says and
+// no more: not a link into the folder other tools read too (the file edited
+// is theirs as well), not a skill reap mute refuses (a skills folder that is
+// a link, a link out of the folders reap edits: the swap failed, and was
+// offered again at every run), not a path that cannot be printed as it is
+// (the undo line would name another file).
+func mutedPlainly(row *obj, s skill) bool {
+	for _, key := range []string{"LinkTarget", "ViaLink", "FolderLink"} {
+		if truthy(row.val(key)) {
+			return false
+		}
+	}
+	return printable(s.Path) == s.Path
+}
+
 // parseReapState reads the output of `reap --json`.
 func parseReapState(output string) (reapState, error) {
 	v, err := parseJSON(output)
@@ -67,7 +82,7 @@ func parseReapState(output string) (reapState, error) {
 			if s.Uses > 0 {
 				state.Used = append(state.Used, s)
 			}
-			if s.Verdict == verdictReap {
+			if s.Verdict == verdictReap && mutedPlainly(row, s) {
 				state.Reap = append(state.Reap, s)
 			}
 		case categoryMCP:

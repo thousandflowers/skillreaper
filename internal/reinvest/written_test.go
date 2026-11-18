@@ -278,7 +278,9 @@ func TestWrittenSkillRules_name_rules(t *testing.T) {
 		installed []skill
 		ok        bool
 	}{
-		{"code-review", []skill{{Name: "ecc:code-review"}}, false}, {"init", nil, false}, {"review", nil, false},
+		// A name an installed skill has is written and kept (it is refused,
+		// with the reason, where it would be offered: see createdFor).
+		{"code-review", []skill{{Name: "ecc:code-review"}}, true}, {"init", nil, false}, {"review", nil, false},
 		{"a-b-c-d-e-f", nil, false}, {"ship-release", nil, true},
 	}
 	for _, c := range cases {
@@ -287,6 +289,12 @@ func TestWrittenSkillRules_name_rules(t *testing.T) {
 		if _, ok, _ := a.writeSkill(releaseGap, [][]string{{"x"}}, c.installed); ok != c.ok {
 			t.Errorf("%s: accepted %v, want %v", c.name, ok, c.ok)
 		}
+	}
+	tempHome(t)
+	b := fakeApp(t)
+	alwaysAnswering(b, releaseAnswer("name", "code-review"))
+	if out := created(t, b, []kind{releaseGap}, releaseSessions, []skill{{Name: "ecc:code-review"}}); len(out) != 0 || !strings.Contains(termText(b), "was not offered") {
+		t.Errorf("a skill named like a plugin's was offered: %+v\n%s", out, termText(b))
 	}
 }
 

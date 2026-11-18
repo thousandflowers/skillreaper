@@ -31,6 +31,12 @@ What behaves differently for someone who had 0.8:
 - `echo y | reap prune` is refused: with no terminal to ask on, prune and
   mute need `--yes`. A declined prompt exits 3, and so does `--quiet`
   without `--yes` when there was something to do (it exited 0 in silence).
+- A skill or agent of your own written, edited or copied in the last 14
+  days is REVIEW (`grace`), not REAP: it is dated by its file. After a
+  restore from a backup, or a fresh checkout of your dotfiles, most of a
+  stack reads REVIEW for two weeks.
+- `reap manifest <name>` prints a `Platform:` line and a relative install
+  path, and no longer a `Restore path`.
 - In `--json`, a row of an item never used has no `LastUsed`, `LastAttempt`
   or `InstalledAt` where 0.8 wrote a date in year 1, and rows gained
   `FrontmatterName`, `HookLoaded` and `LinkTarget`. Every other JSON output
@@ -148,7 +154,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 273 fixes of this release, most of them found by reviewing it before
+The 275 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -348,6 +354,13 @@ it went out. Each says what was wrong where that is not plain.
   of skills and agents; `reap prune` and `reap delete` stop on a mute list
   they cannot read, as `reap mute` does. A plan made on under half the
   window's days of history says so above it.
+- For a project your sessions ran in, the CLAUDE.md of the folders above it
+  is read too (a repository's, for a session in one of its packages), and a
+  project's hook is followed when it names its script by
+  `$CLAUDE_PROJECT_DIR` or by a path from the project's root. An unreadable
+  agent or settings file in a project holds the verdicts as one in your own
+  folder does. The dates reap writes down are real ones under a pinned
+  clock. A pipe named like a settings or agent file no longer hangs a run.
 
 #### Prune, mute, restore, delete and keep
 
@@ -947,6 +960,11 @@ it went out. Each says what was wrong where that is not plain.
   question the screen says where the skill is written and which files are
   muted; with `--mcp` the first line names npm, PyPI and GitHub too; a stop
   after the skill was created says how to take it out again.
+- A skill is offered for a mute only when `reap mute` takes it plainly: not
+  one linked into the folder other tools read, not one in a skills folder
+  that is a link (the swap failed, and came back at every run). A written
+  skill whose name an installed one has says so, and is not written again
+  at every run. A swap rolled back leaves no empty folder.
 
 </details>
 

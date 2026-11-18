@@ -30,14 +30,21 @@ func claudeMDPaths(cwd, home, claudeDir string) []string {
 	}
 	if cwd != "" {
 		paths = append(paths, markdownUnder(filepath.Join(cwd, ".claude", "rules"))...)
-		for dir := cwd; ; dir = filepath.Dir(dir) {
-			paths = append(paths, filepath.Join(dir, "CLAUDE.md"), filepath.Join(dir, "CLAUDE.local.md"), filepath.Join(dir, ".claude", "CLAUDE.md"))
-			if dir == filepath.Dir(dir) {
-				break
-			}
-		}
+		paths = append(paths, memoryFilesUpFrom(cwd)...)
 	}
 	return paths
+}
+
+// memoryFilesUpFrom lists the memory files of a folder and of every folder
+// above it: a session started there loads them all.
+func memoryFilesUpFrom(start string) []string {
+	var paths []string
+	for dir := start; ; dir = filepath.Dir(dir) {
+		paths = append(paths, filepath.Join(dir, "CLAUDE.md"), filepath.Join(dir, "CLAUDE.local.md"), filepath.Join(dir, ".claude", "CLAUDE.md"))
+		if dir == filepath.Dir(dir) {
+			return paths
+		}
+	}
 }
 
 // markdownUnder lists the .md files in a rules folder, however deep, which may
@@ -77,8 +84,11 @@ func LoadClaudeMDChecked(cwd, home, claudeDir string, projects ...string) (lines
 	seen := map[string]bool{}
 	paths := claudeMDPaths(cwd, home, claudeDir)
 	for _, project := range projects {
-		paths = append(paths, filepath.Join(project, "CLAUDE.md"), filepath.Join(project, "CLAUDE.local.md"), filepath.Join(project, ".claude", "CLAUDE.md"))
+		// As for the folder reap runs from: the project's rules, and the
+		// memory files of every folder above it, which a session there loads
+		// too (a repository's CLAUDE.md, for a session in one of its packages).
 		paths = append(paths, markdownUnder(filepath.Join(project, ".claude", "rules"))...)
+		paths = append(paths, memoryFilesUpFrom(project)...)
 	}
 	for _, p := range paths {
 		lines = append(lines, readMemoryFile(p, home, seen, 0, &unread)...)

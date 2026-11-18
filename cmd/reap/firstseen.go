@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -86,26 +85,6 @@ func shortHistoryNote(r *report.Report) string {
 		fmt.Sprintf("%d %s", r.MonthlyBasisDays, report.Plural(r.MonthlyBasisDays, "day")), r.WindowDays)
 }
 
-// unreadProtection says why a file that tells what is at work could not be
-// read: the settings (the session's agent, the hooks that load skills) or an
-// agent's file (the skills it preloads). Empty when all could be, or are not
-// there.
-func unreadProtection(claudeDir string) string {
-	paths := []string{filepath.Join(claudeDir, "settings.json"), filepath.Join(claudeDir, "settings.local.json")}
-	agents, _ := filepath.Glob(filepath.Join(claudeDir, "agents", "*.md"))
-	for _, path := range append(paths, agents...) {
-		f, err := os.Open(path)
-		if err == nil {
-			_ = f.Close()
-			continue
-		}
-		if !os.IsNotExist(err) {
-			return fmt.Sprintf("%s could not be read (%v), and may say that it is at work", shown(path), err)
-		}
-	}
-	return ""
-}
-
 // sessionProjects are the folders sessions ran in that are still there.
 func sessionProjects(st *usage.Stats) []string {
 	seen := map[string]bool{}
@@ -121,10 +100,13 @@ func sessionProjects(st *usage.Stats) []string {
 
 // projectLoads names what those projects' agents and hooks load, with the
 // reason each is kept for.
-func projectLoads(projects []string) map[string]string {
-	loaded := map[string]string{}
+func projectLoads(projects []string, config string) (loaded map[string]string, unread string) {
+	loaded = map[string]string{}
 	for _, project := range projects {
-		byAgents, byHooks := scan.ProjectLoaded(project)
+		byAgents, byHooks, why := scan.ProjectLoaded(project, config)
+		if why != "" && unread == "" {
+			unread = why
+		}
 		for name := range byHooks {
 			loaded[name] = report.ReasonHookLoaded
 		}
@@ -132,5 +114,5 @@ func projectLoads(projects []string) map[string]string {
 			loaded[name] = report.ReasonAgentLoaded
 		}
 	}
-	return loaded
+	return loaded, unread
 }

@@ -170,7 +170,7 @@ func summaryFor(row Row) string {
 	case ReasonTiny:
 		return "token weight below the prune floor — negligible cost"
 	case ReasonGrace:
-		return "installed too recently — still inside the grace period"
+		return "new here (installed, added, restored or unmuted recently) — still inside the grace period"
 	case ReasonNeedsData:
 		return "not enough sessions yet to make a confident call"
 	case ReasonRare:

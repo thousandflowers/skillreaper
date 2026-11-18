@@ -96,11 +96,21 @@ func (a *app) writeSkill(gap kind, conversations [][]string, installed []skill) 
 	if !writtenSlugRE.MatchString(slug) || runeLen(desc) < minDesc || runeLen(desc) > maxDesc || runeLen(text) < minBody {
 		return writtenSkill{}, false, nil
 	}
-	if canonNames(installed)[canon(slug)] {
-		return writtenSkill{}, false, nil // beside a plugin's skill of that name, which of the two runs is anyone's guess
-	}
+	// A name an installed skill has is kept all the same, and refused where
+	// it would be offered (createdFor), with the reason.
 	doc := "---\nname: " + slug + "\ndescription: " + dumpJSONText(desc) + "\n---\n\n" + text + "\n"
 	return writtenSkill{slug, doc}, true, nil
+}
+
+// takenBy is the installed skill that has that name, as the person knows it.
+func takenBy(installed []skill, slug string) string {
+	by := slug
+	for _, s := range installed {
+		if canon(s.Name) == canon(slug) || s.Called != "" && canon(s.Called) == canon(slug) {
+			by = printable(s.Name)
+		}
+	}
+	return by
 }
 
 // writeKey names a written skill in the cache: a new prompt rewrites every skill.
@@ -227,7 +237,15 @@ func (a *app) createdFor(gaps []kind, sessions []session, installed []skill) ([]
 	var out []candidate
 	for i, g := range gaps {
 		w, cached := cache[keys[i]]
-		if !cached || flagged[keys[i]] || taken[canon(w.slug)] {
+		if !cached || flagged[keys[i]] {
+			continue
+		}
+		if taken[canon(w.slug)] {
+			// Said, and kept: it read "no usable answer" or nothing, and a
+			// skill refused at the write was paid for again at every run.
+			why := "a skill of that name is installed (" + takenBy(installed, w.slug) + ")"
+			a.failed(printable(w.slug) + " was not offered: " + why)
+			refused = append(refused, refusal{createdPrefix + w.slug, w.slug, why})
 			continue
 		}
 		out = append(out, candidate{ID: createdPrefix + w.slug, Name: w.slug, Slug: w.slug, Doc: w.doc, Kind: kindSkill,

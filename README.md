@@ -209,10 +209,10 @@ evidence was incomplete stays `REVIEW` rather than being flagged. The reasons:
 | `agent-loaded` | KEEP | an agent names it under `skills:` and loads it when it starts |
 | `main-agent` | KEEP | your settings run the session as this agent |
 | `skill-agent` | KEEP | a skill names it under `agent:` and runs in it |
-| `grace` | REVIEW | installed too recently to judge |
+| `grace` | REVIEW | new here: installed, added, restored or unmuted too recently to judge |
 | `needs-data` | REVIEW | not enough sessions yet |
 | `rare` | REVIEW | fired before this window, on a longer cadence |
-| `no-transcript` | REVIEW | this tool's sessions cannot be read, so there is no evidence |
+| `no-transcript` | REVIEW | evidence about it is missing: this tool's sessions, or a file that could protect it, cannot be read |
 | `used-elsewhere` | REVIEW | another tool that loads the same folder used it |
 | `muted` | `-` | you muted it, so its uses prove nothing |
 
@@ -306,7 +306,12 @@ on its first line, and sends Claude, through `claude -p` on your own Claude Code
 account, excerpts of your sessions (with the keys it recognises removed first)
 and the names and descriptions of your installed skills. With `--online` it also
 sends search words drawn from them to skills.sh (and, with `--mcp`, the MCP
-registry), and says that too on its first line.
+registry, then asks npm, PyPI and GitHub about the servers it finds), and says
+that too on its first line. It keeps what it read of your sessions, with the
+keys removed, in `sessions_memory.json` under reap's state folder
+(`~/Library/Application Support/skillreaper/reinvest` on macOS), readable by
+you alone, so that a kind of work is still known after Claude Code deletes
+the transcripts.
 
 <br>
 
@@ -784,7 +789,18 @@ with no readable session transcripts.
 reads per transcript record. If a record is oversized or unreadable, that
 platform's evidence is marked incomplete and its items stay **REVIEW (never
 REAP/MUTE)**, with a warning naming the platform - partial evidence can never
-mistakenly mark a tool as dead.
+mistakenly mark a tool as dead. The same holds for what reap cannot read
+elsewhere: a project folder that is a link to a disk that is not there, its
+own record of past uses, a CLAUDE.md, a `settings.json` or an agent's file.
+Each is named in a warning, and unused items stay REVIEW until it can be read.
+
+**An item that is new here waits out the grace period.** A skill or agent of
+your own is dated by its file; a server in a config, which has no date, by the
+day reap first found it. An item restored from quarantine or unmuted counts
+from that day too: it had no use while it was away. For `--grace-days` (14)
+after that it is REVIEW, and a bare `reap prune` leaves it. For an item that
+has existed for only part of the window, `--min-sessions` is scaled to that
+part.
 
 **A name in your CLAUDE.md protects a skill, a plain word only where it is
 written as a name.** A skill named in your CLAUDE.md or rules is kept

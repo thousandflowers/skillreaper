@@ -184,7 +184,9 @@ func removeWritten(c candidate, linkOnly bool) error {
 	if _, err := os.Lstat(home); err != nil {
 		return err
 	}
-	return os.RemoveAll(home)
+	err := os.RemoveAll(home)
+	_ = os.Remove(writtenDir()) // reinvest's own folder, when nothing is left in it
+	return err
 }
 
 // isInstalled checks the skill is where Claude Code reads it: `skills add`

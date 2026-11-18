@@ -22,8 +22,13 @@ func TestCycle27_an_unreadable_transcript_is_said(t *testing.T) {
 		t.Skip(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(closed, 0o600) })
+	second := filepath.Join(a.projectsDir, "-tmp-project", "closed-too.jsonl")
+	if err := os.WriteFile(second, []byte("{}\n"), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(second, 0o600) })
 	_ = a.run(options{days: defaultDays, max: defaultSwaps})
-	if said := termText(a); !strings.Contains(said, "✗") || !strings.Contains(said, "could not be read") || !strings.Contains(said, "closed.jsonl") {
+	if said := termText(a); !strings.Contains(said, "✗") || !strings.Contains(said, "could not be read") || !strings.Contains(said, "closed") || !strings.Contains(said, "and 1 more") {
 		t.Errorf("one closed transcript:\n%s", said)
 	}
 }

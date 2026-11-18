@@ -58,6 +58,35 @@ func TestItemsAreDatedByWhenReapFirstFoundThem(t *testing.T) {
 	}
 }
 
+// The dates reap writes down are real ones, whatever the clock the views are
+// pinned to: a run under SOURCE_DATE_EPOCH wrote a date 20 days back, and the
+// next run took a server added today out of its grace.
+func TestFirstSeenIsStampedWithTheRealTime(t *testing.T) {
+	t.Setenv("SOURCE_DATE_EPOCH", "1000000000")
+	home := deleteHome(t)
+	path := evidence.Path(filepath.Join(home, ".claude"))
+	var out, errOut bytes.Buffer
+	run([]string{"--json"}, strings.NewReader(""), &out, &errOut) // the first look
+	mustWriteFile(t, filepath.Join(home, ".claude.json"), `{"z":1,"mcpServers":{"srv":{"command":"x"},"other":{"command":"y"},"added":{"command":"z"}}}`)
+	run([]string{"--json"}, strings.NewReader(""), &out, &errOut)
+	d, err := evidence.LoadChecked(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for key, at := range d.FirstSeen {
+		if strings.Contains(key, "added") {
+			found = true
+			if time.Since(at) > time.Hour || time.Since(at) < -time.Hour {
+				t.Errorf("stamped %v, not now", at)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("the server added later has no stamp: %v", d.FirstSeen)
+	}
+}
+
 // A transcript read only in part is not folded into the record of past uses:
 // marked as read there, it was never read again, and what it held was lost.
 func TestAPartlyReadTranscriptIsNotRecordedAsRead(t *testing.T) {

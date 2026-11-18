@@ -158,6 +158,16 @@ var hookWordRe = regexp.MustCompile(`[~$\w./{}-]+`)
 // read: named in the command itself, in a script the command names, or in a
 // script beside that one in the config folder (a wrapper often calls it).
 func userHookLoadedSkills(dir string) map[string]bool {
+	return hookLoadedFrom(dir, dir, "")
+}
+
+// hookLoadedFrom reads the SessionStart hooks of the settings in settingsDir.
+// config is the user's config folder ($CLAUDE_CONFIG_DIR in a command).
+// project is the project the settings belong to, or "" for the user's own: a
+// project's hooks name their scripts by $CLAUDE_PROJECT_DIR or by a path from
+// its root, and only an absolute path was followed.
+func hookLoadedFrom(settingsDir, config, project string) map[string]bool {
+	dir := settingsDir
 	loaded := map[string]bool{}
 	home, _ := os.UserHomeDir()
 	for _, base := range []string{"settings.json", "settings.local.json"} {
@@ -175,7 +185,7 @@ func userHookLoadedSkills(dir string) map[string]bool {
 				// A quote between a variable and the rest of a path ("$HOME"/x) is
 				// nothing to the shell: read the words without the quotes.
 				for _, word := range append(hookWordRe.FindAllString(unquoted.Replace(h.Command), -1), shellWords(h.Command)...) {
-					text += hookScripts(underHome(word, home, dir), dir)
+					text += hookScripts(inProject(underHome(word, home, config), project), dir)
 				}
 				for _, m := range skillFileRe.FindAllStringSubmatch(text, -1) {
 					loaded[m[1]] = true
@@ -215,6 +225,23 @@ func hookScripts(path, dir string) string {
 		}
 	}
 	return text
+}
+
+// inProject writes out a path a project's hook names by the project's root:
+// $CLAUDE_PROJECT_DIR, or a path that is not absolute and has a folder in it.
+func inProject(word, project string) string {
+	if project == "" {
+		return word
+	}
+	for _, short := range []string{"$CLAUDE_PROJECT_DIR/", "${CLAUDE_PROJECT_DIR}/"} {
+		if rest, ok := strings.CutPrefix(word, short); ok {
+			return filepath.Join(project, rest)
+		}
+	}
+	if !filepath.IsAbs(word) && strings.Contains(word, "/") && !strings.HasPrefix(word, "$") && !strings.HasPrefix(word, "~") {
+		return filepath.Join(project, word)
+	}
+	return word
 }
 
 // underHome writes out the folders a hook command names by a variable: the

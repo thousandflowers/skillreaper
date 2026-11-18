@@ -1,7 +1,12 @@
 # Security Policy
 
 skillreaper is local - it reads config files and session transcripts on
-disk, computes verdicts, and prints results. The binary has no
+disk, computes verdicts, and prints results. Besides your config folders it
+reads, in every project folder your sessions ran in, the files that can
+protect a skill: `CLAUDE.md`, `CLAUDE.local.md` and `.claude/CLAUDE.md` there
+and in the folders above it, `.claude/rules`, `.claude/agents` and the
+SessionStart hooks of `.claude/settings*.json` with the scripts they name. It
+reads them and changes none. The binary has no
 dependencies, and no command makes a network connection except two you
 start by hand:
 

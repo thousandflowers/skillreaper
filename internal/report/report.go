@@ -713,13 +713,14 @@ func MentionedInClaudeMD(lines []string, it scan.Item) bool {
 }
 
 // loadedByProject is the reason a skill is kept for when a project's agent
-// or hook loads it, by any name it has; empty when none does.
+// or hook loads it, by any name it has; empty when none does. The names are
+// the ones a user's agent is matched by: a plugin's skill by its bare name
+// too, which was kept under a user's agent and REAP under a project's.
 func loadedByProject(opts Opts, it scan.Item) string {
-	for _, name := range claudeMDNames(it) {
-		for loaded, reason := range opts.ProjectLoaded {
-			if strings.EqualFold(loaded, name) {
-				return reason
-			}
+	keys := evidenceKeys(it)
+	for loaded, reason := range opts.ProjectLoaded {
+		if slices.Contains(keys, foldKey(loaded)) {
+			return reason
 		}
 	}
 	return ""

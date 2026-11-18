@@ -61,3 +61,15 @@ func TestAnUnreadableSourceOfProtectionHoldsTheVerdicts(t *testing.T) {
 		}
 	}
 }
+
+// A project's agent preloads a plugin's skill by its bare name, as a user's
+// agent does: the user's kept it, the project's left it REAP.
+func TestProjectAgentPreloadsAPluginSkillByItsBareName(t *testing.T) {
+	it := scan.Item{Category: scan.CatSkill, Name: "pl:pfoo"}
+	if got := loadedByProject(Opts{ProjectLoaded: map[string]string{"PFoo": "agent-loaded"}}, it); got != "agent-loaded" {
+		t.Errorf("by its bare name: %q", got)
+	}
+	if got := loadedByProject(Opts{ProjectLoaded: map[string]string{"other": "agent-loaded"}}, it); got != "" {
+		t.Errorf("another skill's name: %q", got)
+	}
+}

@@ -63,7 +63,9 @@ type Digest struct {
 	// that came after its first look (those there at the first look hold the
 	// zero time). It dates what has no date of its own, a server in a config,
 	// and what came back: an item restored, or unmuted.
-	FirstSeen map[string]time.Time `json:"first_seen,omitempty"`
+	// Not omitempty: an empty list is a first look taken that found nothing,
+	// and left out of the file it made the next run a first look again.
+	FirstSeen map[string]time.Time `json:"first_seen"`
 }
 
 // New returns an empty digest ready to merge into.

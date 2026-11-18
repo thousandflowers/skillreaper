@@ -155,7 +155,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 277 fixes of this release, most of them found by reviewing it before
+The 282 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -362,6 +362,19 @@ it went out. Each says what was wrong where that is not plain.
   agent or settings file in a project holds the verdicts as one in your own
   folder does. The dates reap writes down are real ones under a pinned
   clock. A pipe named like a settings or agent file no longer hangs a run.
+- A plugin's skill that a project's agent preloads by its bare name
+  (`skills: [plan]` for `ecc:plan`) is kept, as under a user's agent: it
+  came out REAP.
+- A first look that found an empty stack is remembered: the next run took
+  itself for the first, and a server added in between, or the one item
+  just restored, had no grace period and came out REAP.
+- A project folder reap may not enter, an agents folder it may not list
+  and an agent file too large to read hold unused skills as REVIEW with a
+  warning: they were taken for not there.
+- A project's SessionStart hook is followed when it names its script with
+  no folder (`bash x.sh`) or by `$PWD`.
+- A name is looked for in each distinct memory line once, and faster: with
+  a CLAUDE.md in every folder of 400 projects a run took a second.
 
 #### Prune, mute, restore, delete and keep
 

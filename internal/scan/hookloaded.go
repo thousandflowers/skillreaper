@@ -228,17 +228,19 @@ func hookScripts(path, dir string) string {
 }
 
 // inProject writes out a path a project's hook names by the project's root:
-// $CLAUDE_PROJECT_DIR, or a path that is not absolute and has a folder in it.
+// $CLAUDE_PROJECT_DIR, the folder the session runs in ($PWD), or any path
+// that is not absolute, a file at the root with no folder in it included
+// ("bash x.sh"). A word that is no file there reads nothing.
 func inProject(word, project string) string {
 	if project == "" {
 		return word
 	}
-	for _, short := range []string{"$CLAUDE_PROJECT_DIR/", "${CLAUDE_PROJECT_DIR}/"} {
+	for _, short := range []string{"$CLAUDE_PROJECT_DIR/", "${CLAUDE_PROJECT_DIR}/", "$PWD/", "${PWD}/"} {
 		if rest, ok := strings.CutPrefix(word, short); ok {
 			return filepath.Join(project, rest)
 		}
 	}
-	if !filepath.IsAbs(word) && strings.Contains(word, "/") && !strings.HasPrefix(word, "$") && !strings.HasPrefix(word, "~") {
+	if word != "" && !filepath.IsAbs(word) && !strings.ContainsAny(word[:1], "$~-") {
 		return filepath.Join(project, word)
 	}
 	return word

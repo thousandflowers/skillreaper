@@ -1,7 +1,10 @@
 package scan
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -19,15 +22,20 @@ func ProjectLoaded(project, config string) (byAgents, byHooks map[string]bool, u
 		if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
 			continue
 		}
-		b, err := readCapped(filepath.Join(dir, "agents", e.Name()))
+		path := filepath.Join(dir, "agents", e.Name())
+		b, err := readCapped(path)
 		if err != nil {
+			// Too large to read, say: what can be opened and is not read.
+			if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && unread == "" {
+				unread = fmt.Sprintf("%s could not be read (%v), and may say that it is at work", SafeText(path), err)
+			}
 			continue
 		}
 		for _, name := range frontmatterList(b, "skills") {
 			byAgents[name] = true
 		}
 	}
-	return byAgents, hookLoadedFrom(dir, config, project), UnreadProtection(dir)
+	return byAgents, hookLoadedFrom(dir, config, project), cmp.Or(UnreadProtection(dir), unread)
 }
 
 // UnreadProtection says why a file of a config folder that tells what is at
@@ -38,13 +46,24 @@ func ProjectLoaded(project, config string) (byAgents, byHooks map[string]bool, u
 func UnreadProtection(dir string) string {
 	paths := []string{filepath.Join(dir, "settings.json"), filepath.Join(dir, "settings.local.json")}
 	agents, _ := filepath.Glob(filepath.Join(dir, "agents", "*.md"))
+	unread := func(path string, err error) string {
+		return fmt.Sprintf("%s could not be read (%v), and may say that it is at work", SafeText(path), err)
+	}
+	// A folder reap may not enter or list hides files that may be there.
+	if _, err := os.ReadDir(filepath.Join(dir, "agents")); errors.Is(err, fs.ErrPermission) {
+		return unread(filepath.Join(dir, "agents"), err)
+	}
 	for _, path := range append(paths, agents...) {
-		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+		info, err := os.Stat(path)
+		if errors.Is(err, fs.ErrPermission) {
+			return unread(path, err)
+		}
+		if err != nil || !info.Mode().IsRegular() {
 			continue
 		}
 		f, err := os.Open(path)
 		if err != nil {
-			return fmt.Sprintf("%s could not be read (%v), and may say that it is at work", SafeText(path), err)
+			return unread(path, err)
 		}
 		_ = f.Close()
 	}

@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -90,8 +91,16 @@ func LoadClaudeMDChecked(cwd, home, claudeDir string, projects ...string) (lines
 		paths = append(paths, markdownUnder(filepath.Join(project, ".claude", "rules"))...)
 		paths = append(paths, memoryFilesUpFrom(project)...)
 	}
+	// A line is kept once: every skill is looked for in every line, and the
+	// packages of one repository say the same things.
+	had := map[string]bool{}
 	for _, p := range paths {
-		lines = append(lines, readMemoryFile(p, home, seen, 0, &unread)...)
+		for _, line := range readMemoryFile(p, home, seen, 0, &unread) {
+			if !had[line] {
+				had[line] = true
+				lines = append(lines, line)
+			}
+		}
 	}
 	return lines, unread
 }
@@ -106,8 +115,9 @@ func readMemoryFile(path, home string, seen map[string]bool, depth int, unread *
 	b, err := readCapped(path)
 	if err != nil {
 		// Not there is the usual case. There and unreadable, or a link whose
-		// target is gone, is a file whose names reap cannot see.
-		if _, statErr := os.Lstat(path); statErr == nil {
+		// target is gone, or behind a folder reap may not enter, is a file
+		// whose names reap cannot see.
+		if _, statErr := os.Lstat(path); statErr == nil || errors.Is(statErr, fs.ErrPermission) {
 			*unread = append(*unread, Warning{Path: path, Msg: fmt.Sprintf("this memory file could not be read (%v), so the skills it names are not known: unused skills are shown as REVIEW, not REAP/MUTE", err)})
 		}
 		return nil
@@ -286,7 +296,20 @@ func wordAt(line, word string, check func(line string, i, j int) bool) bool {
 // indexFold is strings.Index without regard to case: a sentence writes a
 // skill's name in the case the sentence wants.
 func indexFold(s, word string) int {
+	// The first letter is looked at before the whole word is compared: the
+	// comparison at every byte of every line, for every skill, was the run.
+	var lower, upper byte
+	if word != "" && word[0] < utf8.RuneSelf {
+		lower, upper = word[0]|0x20, word[0]&^0x20
+		if !('a' <= lower && lower <= 'z') {
+			lower, upper = word[0], word[0]
+		}
+	}
 	for k := 0; k+len(word) <= len(s); k++ {
+		// k and s (the long s, the Kelvin sign) fold with letters outside ASCII.
+		if lower != 0 && s[k] != lower && s[k] != upper && s[k] < utf8.RuneSelf {
+			continue
+		}
 		if strings.EqualFold(s[k:k+len(word)], word) {
 			return k
 		}

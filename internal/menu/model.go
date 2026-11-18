@@ -368,6 +368,18 @@ func best(r *Row) string {
 	return ""
 }
 
+// choiceFor is the choice a key sets on a row. On one row it is best(r): the
+// person is deciding about that item. Over many rows at once (a, or space or
+// a click on a group or a selection) it leaves the rows reap is not sure
+// about: it has no suggestion for them, and a group held back for want of
+// evidence was one key from a bulk prune.
+func choiceFor(r *Row, many bool) string {
+	if many && suggestion(r) == suggestUnsure {
+		return ""
+	}
+	return best(r)
+}
+
 // whyNothing says why reap has no choice of its own for a row: it is pruned,
 // locked or read-only; it is muted; or what reap would suggest is refused there.
 func whyNothing(r *Row) string {

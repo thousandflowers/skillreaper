@@ -1153,3 +1153,26 @@ func TestReapsOwnChoiceLeavesASharedSkillUnmuted(t *testing.T) {
 		t.Error("a mute by hand is refused")
 	}
 }
+
+// Where reap is not sure it has no choice of its own to fill in: a on such
+// rows chose prune and said "reap chose", and a group held back for want of
+// evidence was one key from a bulk prune. A single row is still chosen by
+// space: there the person is deciding about one item.
+func TestReapFillsInNothingWhereItIsNotSure(t *testing.T) {
+	unsure := func(name string) *Row { return cleanRow(raw(name, verdict(report.VerdictReview))) }
+	m, _, _ := newMenu(t, one(raw("x")))
+
+	p := newPlan()
+	got := m.auto(p, []*Row{unsure("a"), unsure("b")})
+	if p.size() != 0 || !strings.Contains(got, "not sure") || !strings.Contains(got, "p, m, l or d") {
+		t.Errorf("a on two rows reap is not sure about: %q, %d chosen", got, p.size())
+	}
+	p = newPlan()
+	got = m.auto(p, []*Row{cleanRow(raw("dead")), unsure("a")})
+	if p.size() != 1 || !strings.HasPrefix(got, "reap chose: 1 prune") || !strings.Contains(got, "1 left: reap is not sure") {
+		t.Errorf("a on a mix: %q, %d chosen", got, p.size())
+	}
+	if choiceFor(unsure("a"), true) != "" || choiceFor(unsure("a"), false) == "" {
+		t.Error("many rows must leave it, one row must take it")
+	}
+}

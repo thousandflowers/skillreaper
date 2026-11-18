@@ -221,28 +221,37 @@ func (m *Menu) actOn(p *Plan, rows []*Row, ch rune) string {
 }
 
 // auto sets what reap suggests, over any choice in the box; pressed again, it
-// puts back what stood before that press. Where reap is not sure, the same
-// choice a click takes, so a whole group can go at once. Nothing runs until apply.
+// puts back what stood before that press. Where reap is not sure it sets
+// nothing and says so. Nothing runs until apply.
 func (m *Menu) auto(p *Plan, items []*Row) string {
 	rows := unique(items)
 	var picked []*Row
 	picks := map[*Row]string{}
-	left := 0
+	left, unsure := 0, 0
 	for _, r := range rows {
 		verb := ""
 		if suggestion(r) != reasonMuted {
-			verb = best(r)
+			verb = choiceFor(r, true) // a never chooses where reap is not sure
 		}
-		if verb != "" {
+		switch s := suggestion(r); {
+		case verb != "":
 			picks[r] = verb
 			picked = append(picked, r)
-		} else if s := suggestion(r); s != reasonMuted && s != suggestRO && !alreadyLocked(r) {
+		case s == suggestUnsure:
+			unsure++
+		case s != reasonMuted && s != suggestRO && !alreadyLocked(r):
 			left++
 		}
 	}
 	tail := ""
 	if left > 0 {
 		tail = " · " + itoa(left) + " left: nothing reap can do to them"
+	}
+	if unsure > 0 {
+		tail += " · " + itoa(unsure) + " left: reap is not sure, choose with p, m, l or d"
+	}
+	if len(picks) == 0 && unsure > 0 && left == 0 {
+		return "reap is not sure about these: choose with p, m, l or d"
 	}
 	if len(picks) == 0 {
 		return "reap chose nothing" + tail
@@ -347,7 +356,7 @@ func (m *Menu) groupStats(rows []*Row, p *Plan) stats {
 		if r.Uses == 0 {
 			st.unused++
 		}
-		if best(r) != "" {
+		if choiceFor(r, len(rows) > 1) != "" {
 			st.doable = append(st.doable, r)
 			st.total += r.Tokens
 			st.totalPriced += float64(r.Tokens) * m.reach(r)
@@ -440,7 +449,7 @@ func verbsSaid(rows []*Row) string {
 	seen := map[string]bool{}
 	var words []string
 	for _, r := range rows {
-		if w := verbS[best(r)]; w != "" && !seen[w] {
+		if w := verbS[choiceFor(r, len(rows) > 1)]; w != "" && !seen[w] {
 			seen[w] = true
 			words = append(words, w)
 		}

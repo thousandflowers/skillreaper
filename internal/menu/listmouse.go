@@ -5,8 +5,9 @@ import "github.com/thousandflowers/skillreaper/internal/term"
 // paintRow is a click or a drag over a line: it sets reap's own choice on it, or
 // clears exactly that.
 func (l *list) paintRow(idx int, on bool) {
-	for _, r := range groupAll(l.flat[idx]) {
-		choice := best(r)
+	rows := groupAll(l.flat[idx])
+	for _, r := range rows {
+		choice := choiceFor(r, len(rows) > 1)
 		if choice == "" || l.m.applied[r] != "" {
 			continue
 		}
@@ -45,8 +46,9 @@ func (l *list) mouse(ev term.Mouse) {
 		l.heldTop, l.i, l.msg = l.top, idx, ""
 		l.endSelection()
 		set := false
-		for _, r := range groupAll(l.flat[idx]) {
-			if choice := best(r); choice != "" && l.p.get(r) != choice {
+		under := groupAll(l.flat[idx])
+		for _, r := range under {
+			if choice := choiceFor(r, len(under) > 1); choice != "" && l.p.get(r) != choice {
 				set = true
 			}
 		}

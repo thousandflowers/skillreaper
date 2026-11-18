@@ -221,8 +221,9 @@ func (l *list) toggle(items []*Row) {
 	p := l.p
 	p.refused = map[*Row]string{}
 	var doable []*Row
+	many := len(items) > 1 // over many rows, the ones reap is not sure about are left
 	for _, r := range items {
-		if best(r) != "" {
+		if choiceFor(r, many) != "" {
 			doable = append(doable, r)
 		}
 	}
@@ -230,6 +231,9 @@ func (l *list) toggle(items []*Row) {
 		l.msg = "nothing unused here to select"
 		if len(items) > 0 {
 			l.msg = "nothing to select here: " + whyNothing(items[0])
+			if many && suggestion(items[0]) == suggestUnsure {
+				l.msg = "reap is not sure about these: choose with p, m, l or d"
+			}
 			settled := true
 			for _, r := range items {
 				settled = settled && (r.Reason == reasonMuted || r.Reason == reasonPruned)
@@ -271,7 +275,7 @@ func (l *list) toggle(items []*Row) {
 	l.msg = strings.Join(said, " · ")
 	if stuck := len(items) - len(doable); stuck > 0 {
 		for _, r := range items {
-			if best(r) == "" {
+			if choiceFor(r, many) == "" {
 				l.msg += " · " + itoa(stuck) + " left: " + whyNot(r, vPrune)
 				break
 			}

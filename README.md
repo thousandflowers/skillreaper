@@ -454,7 +454,7 @@ taken back from the same screen with `u`.
 | `space` | Takes reap's own suggestion for the row, the group or the selection |
 | `p` `m` `l` `d` | Prune, mute, lock, delete. Delete is the one choice that cannot be undone, and it says so in red |
 | `n` &nbsp; `u` | Clear a choice &nbsp;·&nbsp; undo a mute, a lock or a prune that is already on disk |
-| `a` | Fills in what reap suggests; pressed again, puts back what was there |
+| `a` | Fills in what reap suggests; pressed again, puts back what was there. Where reap is not sure it fills in nothing: those rows are yours to choose, one by one |
 | `o` | Turns the row's whole plugin off, through `claude plugin disable` |
 | `enter` | Opens a group, or a row's card: its weight, its last use, why reap says what it says |
 | `shift+↑↓` &nbsp; `v` &nbsp; mouse | Select many rows at once; a click takes reap's suggestion, a drag paints it |

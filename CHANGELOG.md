@@ -59,7 +59,8 @@ mute, not sure, lock, already muted, already pruned), by plugin, or flat.
 - `space` takes reap's suggestion for a row, a group or a selection; `p`, `m`,
   `l` and `d` choose prune, mute, lock or delete yourself; `a` fills in reap's
   suggestions for the row, group or selection and, pressed again, puts back
-  what was there.
+  what was there. Over a group or a selection, the rows reap is not sure
+  about are left for you to choose one by one.
 - Any action can be chosen on any row or group. A verdict is a suggestion and
   never limits the choice; only what is physically impossible is refused, and
   the row says why.
@@ -154,7 +155,7 @@ It is not in the menu yet.
 
 ### Every fix, by area
 
-The 276 fixes of this release, most of them found by reviewing it before
+The 277 fixes of this release, most of them found by reviewing it before
 it went out. Each says what was wrong where that is not plain.
 
 <details>
@@ -725,6 +726,10 @@ it went out. Each says what was wrong where that is not plain.
   prune. reap's own choice (space, a click, `a`) no longer mutes a skill
   linked into the folder other tools read; `m` still does, and the receipt
   says whose file it is.
+- `a`, and space or a click on a group or a selection, leave the rows reap
+  is not sure about and say so: they chose prune for them under "reap
+  chose", and a group held back for want of evidence was one key from a
+  bulk prune. On one row, space and a click still choose.
 
 #### Secrets in the report
 

@@ -82,7 +82,8 @@ func TestBuildRoutePlanCategories(t *testing.T) {
 	if proj == nil {
 		t.Fatal("expected a project router for personal-rare")
 	}
-	if proj.Name != "/Users/x/Desktop/myrepo" {
+	// No path on record: the key as it is, since it cannot be decoded.
+	if proj.Name != "-Users-x-Desktop-myrepo" {
 		t.Errorf("project label: got %q", proj.Name)
 	}
 	// Heaviest router first: ecc(50) before project(25).
@@ -155,4 +156,29 @@ func indexCategorySkill(plan *RoutePlan, name string) (RouteSkill, bool) {
 		}
 	}
 	return RouteSkill{}, false
+}
+
+// A skill is rated on the sessions of the tool it belongs to, as its verdict is:
+// two uses in fourteen Claude Code sessions are not two in twenty-six.
+func TestRouteRatesASkillOnItsOwnToolsSessions(t *testing.T) {
+	r := &Report{
+		Sessions:         26,
+		PlatformSessions: map[string]int{"claude-code": 14, "opencode": 12},
+		Rows:             []Row{{Item: scan.Item{Category: scan.CatSkill, Name: "kappa", Platform: "claude-code"}, Verdict: VerdictKeep, Uses: 2, Tokens: 40}},
+	}
+	if got := r.SessionsOf("claude-code"); got != 14 {
+		t.Errorf("SessionsOf(claude-code) = %d", got)
+	}
+	if got := r.SessionsOf("codex"); got != 0 {
+		t.Errorf("a tool with no session has %d", got)
+	}
+	if got := (&Report{Sessions: 26}).SessionsOf("claude-code"); got != 26 {
+		t.Errorf("with the tools not counted apart = %d", got)
+	}
+
+	plan := BuildRoutePlan(r, 0.10)
+
+	if len(plan.Exposed) != 1 || plan.Exposed[0].Name != "kappa" {
+		t.Errorf("kappa (2 uses in 14 sessions) is not exposed: %+v", plan)
+	}
 }

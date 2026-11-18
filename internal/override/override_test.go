@@ -36,7 +36,7 @@ func TestRemoveKeep(t *testing.T) {
 	dir := t.TempDir()
 	_ = AddKeep(dir, "skill:a")
 	_ = AddKeep(dir, "skill:b")
-	if err := RemoveKeep(dir, "skill:a"); err != nil {
+	if _, err := RemoveKeep(dir, "skill:a"); err != nil {
 		t.Fatal(err)
 	}
 	items, _ := ListKeep(dir)
@@ -47,7 +47,7 @@ func TestRemoveKeep(t *testing.T) {
 
 func TestRemoveKeepNotFound(t *testing.T) {
 	dir := t.TempDir()
-	if err := RemoveKeep(dir, "skill:nonexistent"); err == nil {
+	if _, err := RemoveKeep(dir, "skill:nonexistent"); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -107,7 +107,21 @@ func TestItemKeyEmptyName(t *testing.T) {
 
 func TestRemoveKeepFromEmpty(t *testing.T) {
 	dir := t.TempDir()
-	if err := RemoveKeep(dir, "skill:ghost"); err == nil {
+	if _, err := RemoveKeep(dir, "skill:ghost"); err == nil {
 		t.Error("expected error for empty keep list")
+	}
+}
+
+// A lock is written under the item's name as it is on disk, and a name can end
+// in a space. It comes off by that same key: trimmed, it matched nothing, and
+// the item stayed locked for good.
+func TestRemoveKeepTakesAKeyThatEndsInASpace(t *testing.T) {
+	dir := t.TempDir()
+	_ = AddKeep(dir, "skill:trailing ")
+	if _, err := RemoveKeep(dir, "skill:trailing "); err != nil {
+		t.Fatal(err)
+	}
+	if items, _ := ListKeep(dir); len(items) != 0 {
+		t.Fatalf("still kept: %q", items)
 	}
 }

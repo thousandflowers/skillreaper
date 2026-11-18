@@ -1,6 +1,8 @@
 package usage
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +10,8 @@ import (
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/scan"
+
+	"strconv"
 )
 
 func writeTranscript(t *testing.T, path string, lines ...string) {
@@ -43,13 +47,12 @@ func TestParse(t *testing.T) {
 	writeTranscript(t, old,
 		`{"type":"assistant","timestamp":"2025-01-01T00:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"ancient"}}]}}`,
 	)
-	past := time.Now().AddDate(0, -6, 0)
+	past := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	if err := os.Chtimes(old, past, past); err != nil {
 		t.Fatal(err)
 	}
 
-	cutoff := time.Now().AddDate(0, 0, -30)
-	st, err := Parse(dir, cutoff, 30)
+	st, err := Parse(dir, time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC), 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +94,7 @@ func TestParseOverlongLineMarksEvidenceIncomplete(t *testing.T) {
 		overlong,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +123,7 @@ func TestParseErrorTracking(t *testing.T) {
 		`{"type":"user","timestamp":"2026-06-01T10:01:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"ok"}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +151,7 @@ func TestParseSuccessfulResultMentioningErrorIsNotBroken(t *testing.T) {
 		`{"type":"user","timestamp":"2026-06-01T10:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"no error found in your code"}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +175,7 @@ func TestParseSkillProjects(t *testing.T) {
 		`{"type":"assistant","timestamp":"2026-06-03T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"shared-skill"}}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +299,7 @@ func TestParseUnreadableSubdirMarksEvidenceIncomplete(t *testing.T) {
 	}
 	defer os.Chmod(unreadable, 0o755)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -325,7 +328,7 @@ func TestParseMCPToolPrefixForms(t *testing.T) {
 		`{"type":"assistant","timestamp":"2026-06-01T10:03:00Z","message":{"content":[{"type":"tool_use","name":"mcp__claude_ai_Figma__get_metadata","input":{}}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +360,7 @@ func TestParseResumesAfterAnOverlongLine(t *testing.T) {
 		`{"type":"assistant","timestamp":"2026-06-01T10:02:00Z","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"after-skill"}}]}}`,
 	)
 
-	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	st, err := Parse(dir, time.Time{}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,5 +424,382 @@ func TestMergeIntoCarriesMeasured(t *testing.T) {
 	MergeInto(dst, src)
 	if dst.Measured.CacheRead != 900 || dst.Measured.Messages != 2 {
 		t.Errorf("MergeInto dropped the measured totals: %+v", dst.Measured)
+	}
+}
+
+// An MCP server's per-session weight is what Claude Code recorded injecting:
+// the deferred tool names and the server's instructions. A later session wins,
+// because a server's tool list changes with its version.
+func TestParseMCPWeight(t *testing.T) {
+	dir := t.TempDir()
+	writeTranscript(t, filepath.Join(dir, "p", "old.jsonl"),
+		`{"type":"attachment","timestamp":"2026-06-01T10:00:00Z","attachment":{"type":"deferred_tools_delta","addedNames":["mcp__blender__a","WebFetch"]}}`,
+	)
+	writeTranscript(t, filepath.Join(dir, "p", "new.jsonl"),
+		`{"type":"attachment","timestamp":"2026-06-02T10:00:00Z","attachment":{"type":"deferred_tools_delta","addedNames":["mcp__blender__a","mcp__blender__bb","mcp__claude_ai_Figma__x"]}}`,
+		`{"type":"attachment","timestamp":"2026-06-02T10:00:01Z","attachment":{"type":"mcp_instructions_delta","addedNames":["claude.ai Figma"],"addedBlocks":["0123456789"]}}`,
+	)
+	st, err := Parse(dir, time.Time{}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each name is one line of the injected list: name plus newline.
+	want := map[string]int{
+		"blender":         len("mcp__blender__a\n") + len("mcp__blender__bb\n"),
+		"claude_ai_Figma": len("mcp__claude_ai_Figma__x\n") + 10,
+	}
+	if len(st.MCPWeight) != len(want) {
+		t.Fatalf("MCPWeight = %v, want keys %v", st.MCPWeight, want)
+	}
+	for k, chars := range want {
+		if got := st.MCPWeight[k].Chars; got != chars {
+			t.Errorf("MCPWeight[%q] = %d, want %d", k, got, chars)
+		}
+	}
+}
+
+func TestMCPServerKey(t *testing.T) {
+	for in, want := range map[string]string{
+		"claude.ai Figma":     "claude_ai_Figma",
+		"plugin:ecc:context7": "plugin_ecc_context7",
+		"caveman-shrink":      "caveman-shrink",
+	} {
+		if got := mcpServerKey(in); got != want {
+			t.Errorf("mcpServerKey(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A skill's per-session weight is its line in the listing Claude Code
+// injected: past a budget it keeps only the name, so reading the SKILL.md
+// overstated it. A later listing in the session adds skills; a later session
+// replaces the measurement.
+func TestParseSkillWeight(t *testing.T) {
+	dir := t.TempDir()
+	listing := func(ts string, initial bool, content string, names ...string) string {
+		b, _ := json.Marshal(map[string]any{"type": "attachment", "timestamp": ts, "attachment": map[string]any{
+			"type": "skill_listing", "isInitial": initial, "content": content, "names": names}})
+		return string(b)
+	}
+	writeTranscript(t, filepath.Join(dir, "p", "s.jsonl"),
+		listing("2026-06-02T10:00:00Z", true, "- long: does a thing\n  over two lines\n- ecc:plan\n- ecc:x: y",
+			"long", "ecc:plan", "ecc:x"),
+		listing("2026-06-02T10:05:00Z", false, "- late: added", "late"),
+	)
+	st, err := Parse(dir, time.Time{}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{
+		"long":     len("- long: does a thing\n  over two lines\n"),
+		"ecc:plan": len("- ecc:plan\n"),
+		"ecc:x":    len("- ecc:x: y\n"),
+		"late":     len("- late: added\n"),
+	}
+	for k, chars := range want {
+		if got := st.SkillWeight[k].Chars; got != chars {
+			t.Errorf("SkillWeight[%q] = %d, want %d", k, got, chars)
+		}
+	}
+}
+
+// Only a message the user sent is an invocation. Transcripts also hold the tag
+// as data: a file read back in a tool_result, source written by the assistant,
+// the raw API request log.
+func TestParseCountsCommandNameOnlyInUserMessages(t *testing.T) {
+	dir := t.TempDir()
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		`{"type":"user","timestamp":"2026-06-01T10:00:00Z","message":{"content":"<command-message>typed</command-message>\n<command-name>/typed</command-name>"}}`,
+		`{"type":"user","timestamp":"2026-06-01T10:00:01Z","message":{"content":[{"type":"text","text":"<command-name>/typedblock</command-name>"}]}}`,
+		`{"type":"user","timestamp":"2026-06-01T10:01:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"t","content":"<command-name>/inresult</command-name>"}]}}`,
+		`{"type":"assistant","timestamp":"2026-06-01T10:02:00Z","message":{"content":[{"type":"text","text":"<command-name>/saidbyassistant</command-name>"}]}}`,
+		`{"type":"api-request-blob","timestamp":"2026-06-01T10:03:00Z","message":{"content":[{"type":"text","text":"<command-name>/inblob</command-name>"}]}}`,
+	)
+	st, err := Parse(dir, time.Time{}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]int{"typed": 1, "typedblock": 1, "inresult": 0, "saidbyassistant": 0, "inblob": 0} {
+		if got := st.Uses[scan.CatSkill][name]; got != want {
+			t.Errorf("%s uses = %d, want %d", name, got, want)
+		}
+	}
+}
+
+// A skill asked for in words is recorded apart from its uses. Only what the user
+// wrote counts: a subagent's prompt, pasted text and tool output do not.
+
+// "N uses in 30 days" goes by each event's own time. A resumed session keeps old
+// lines in a file modified today: they stay out of the count and stay available
+// to the durable record. An event with no time has only its file's date.
+func TestWindowGoesByEachEventsOwnTime(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "p")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	line := func(skill, ts string) string {
+		field := ""
+		if ts != "" {
+			field = `"timestamp":"` + ts + `",`
+		}
+		return `{"type":"assistant","sessionId":"s",` + field + `"message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"` + skill + `"}}]}}` + "\n"
+	}
+	old := now.AddDate(0, 0, -60).Format(time.RFC3339)
+	recent := now.AddDate(0, 0, -2).Format(time.RFC3339)
+	body := line("oldfire", old) + line("both", old) + line("both", recent) + line("undated", "")
+	if err := os.WriteFile(filepath.Join(dir, "s.jsonl"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var observed *Stats
+	st, err := ParseObserving(dir, now.AddDate(0, 0, -30), 30, func(string) bool { return true },
+		func(_ string, one *Stats) { observed = one })
+	if err != nil {
+		t.Fatal(err)
+	}
+	uses := st.Uses[scan.CatSkill]
+	if uses["oldfire"] != 0 || !st.Last[scan.CatSkill]["oldfire"].IsZero() {
+		t.Errorf("oldfire counted: %d, last %v", uses["oldfire"], st.Last[scan.CatSkill]["oldfire"])
+	}
+	if uses["both"] != 1 || st.Last[scan.CatSkill]["both"].Format(time.RFC3339) != recent {
+		t.Errorf("both = %d, last %v", uses["both"], st.Last[scan.CatSkill]["both"])
+	}
+	if uses["undated"] != 1 {
+		t.Errorf("undated = %d, want it counted on its file's date", uses["undated"])
+	}
+	if len(st.SkillProjects["oldfire"]) != 0 {
+		t.Errorf("oldfire attributed to a project: %v", st.SkillProjects["oldfire"])
+	}
+	olderUses, olderLast := observed.OlderUses()
+	if olderUses[scan.CatSkill]["oldfire"] != 1 || olderUses[scan.CatSkill]["both"] != 1 {
+		t.Errorf("history lost older events: %v", olderUses)
+	}
+	if olderLast[scan.CatSkill]["oldfire"].Format(time.RFC3339) != old {
+		t.Errorf("older date = %v", olderLast[scan.CatSkill]["oldfire"])
+	}
+}
+
+// A call that was refused or interrupted never ran, in the wordings real
+// transcripts carry; one that ran and failed is an error.
+func TestRefusalsAreNeitherUsesNorErrors(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "p")
+	result := func(id, content string, isError bool) string {
+		c, _ := json.Marshal(content)
+		return fmt.Sprintf(`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":%q,"is_error":%v,"content":%s}]}}`, id, isError, c)
+	}
+	call := func(id, skill string) string {
+		return fmt.Sprintf(`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","id":%q,"name":"Skill","input":{"skill":%q}}]}}`, id, skill)
+	}
+	refusals := []string{
+		"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file)",
+		"Permission to use Skill has been denied.",
+		"Permission for this action was denied by the Claude Code auto mode classifier. Reason: [x].",
+		"[Request interrupted by user for tool use]",
+		"PreToolUse:Skill hook error: [x]",
+	}
+	var lines []string
+	for i, text := range refusals {
+		id := fmt.Sprintf("r%d", i)
+		lines = append(lines, call(id, "refused"), result(id, text, true))
+	}
+	lines = append(lines, call("e", "failed"), result("e", "Skill failed: no such file", true))
+	lines = append(lines, call("o", "fine"), result("o", "The user doesn't want to proceed is what this skill prints", false))
+	writeTranscript(t, filepath.Join(dir, "s.jsonl"), lines...)
+	st, err := Parse(dir, time.Time{}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Uses[scan.CatSkill]["refused"] != 0 || st.Errors[scan.CatSkill]["refused"] != 0 {
+		t.Errorf("refused: uses %d errors %d", st.Uses[scan.CatSkill]["refused"], st.Errors[scan.CatSkill]["refused"])
+	}
+	if st.Errors[scan.CatSkill]["failed"] != 1 {
+		t.Errorf("failed: errors %d", st.Errors[scan.CatSkill]["failed"])
+	}
+	if st.Uses[scan.CatSkill]["fine"] != 1 {
+		t.Errorf("fine: uses %d", st.Uses[scan.CatSkill]["fine"])
+	}
+}
+
+// MCP calls the same way: refused is no use, failed and unanswered are.
+func TestRefusedMCPCallsAreNotUses(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "p")
+	call := func(id, server string) string {
+		return fmt.Sprintf(`{"type":"assistant","timestamp":"2026-06-01T10:00:00Z","message":{"content":[{"type":"tool_use","id":%q,"name":"mcp__%s__do","input":{}}]}}`, id, server)
+	}
+	result := func(id, content string, isError bool) string {
+		c, _ := json.Marshal(content)
+		return fmt.Sprintf(`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":%q,"is_error":%v,"content":%s}]}}`, id, isError, c)
+	}
+	writeTranscript(t, filepath.Join(dir, "s.jsonl"),
+		call("a", "refused"), result("a", "The user doesn't want to proceed with this tool use. The tool use was rejected", true),
+		call("b", "failed"), result("b", "connection reset", true),
+		call("c", "fine"), result("c", "ok", false),
+		call("d", "unanswered"),
+	)
+	st, err := Parse(dir, time.Time{}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{"refused": 0, "failed": 1, "fine": 1, "unanswered": 1}
+	for server, n := range want {
+		if got := st.Uses[scan.CatMCP][server]; got != n {
+			t.Errorf("%s uses = %d, want %d", server, got, n)
+		}
+	}
+	if _, scored := st.MCPPayload["mcp__refused__do"]; scored {
+		t.Error("a refused call's text was scored as its payload")
+	}
+}
+
+// A project folder linked to another folder of the same projects directory is
+// that folder again: walked as a root of its own, everything in it counted twice.
+func TestTranscriptRootsSkipALinkBackIntoTheSameFolder(t *testing.T) {
+	dir, elsewhere := t.TempDir(), t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "proj"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "proj"), filepath.Join(dir, "alias")); err != nil {
+		t.Skip(err)
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(dir, "moved")); err != nil {
+		t.Fatal(err)
+	}
+	roots := transcriptRoots(dir)
+	if len(roots) != 2 || roots[1].project != "moved" {
+		t.Errorf("roots = %+v, want the folder itself and the one moved elsewhere", roots)
+	}
+}
+
+// What the provider measured is summed over the window, like everything else:
+// a session resumed today still holds turns from months ago, and their tokens
+// were added to "measured over the window".
+func TestMeasuredCountsOnlyTheWindow(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	stamp := func(daysAgo int) string { return now.AddDate(0, 0, -daysAgo).Format(time.RFC3339) }
+	turn := func(at string, read int) string {
+		return `{"type":"assistant","timestamp":"` + at + `","message":{"content":[],"usage":{"input_tokens":1,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":` + strconv.Itoa(read) + `}}}`
+	}
+	writeTranscript(t, filepath.Join(dir, "proj", "resumed.jsonl"), turn(stamp(90), 5000), turn(stamp(1), 8000))
+
+	st, err := Parse(dir, now.AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Measured.Messages != 1 || st.Measured.CacheRead != 8000 {
+		t.Errorf("measured %+v, want the one turn inside the window", st.Measured)
+	}
+}
+
+// A server can be named a__b, and only the configured names settle where a
+// server's name ends. A call from before the window is history under the whole
+// tool name too: under "a" alone the record of past uses never finds a__b.
+func TestACallBeforeTheWindowKeepsItsWholeToolName(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	old := now.AddDate(0, 0, -90).Format(time.RFC3339)
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		`{"type":"assistant","sessionId":"s","timestamp":"`+old+`","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__a__b__tool","input":{}}]}}`)
+
+	st, err := Parse(dir, now.AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	older, _ := st.OlderUses()
+	if older[scan.CatMCP]["a__b__tool"] != 1 || older[scan.CatMCP]["a"] != 1 {
+		t.Errorf("uses before the window = %v", older[scan.CatMCP])
+	}
+}
+
+// docs. is docs_ in a tool's name, and its tool reads mcp__docs___search: the
+// first "__" says the server is docs. Such a call is kept under its whole name,
+// for the configured names to settle; so is one whose server begins the name
+// with an underscore.
+func TestACallWhoseServerEndsInAnUnderscoreKeepsItsWholeName(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	call := func(name string, daysAgo int) string {
+		at := now.AddDate(0, 0, -daysAgo).Format(time.RFC3339)
+		return `{"type":"assistant","sessionId":"s","timestamp":"` + at + `","message":{"content":[{"type":"tool_use","id":"` + name + at + `","name":"` + name + `","input":{}}]}}`
+	}
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		call("mcp__docs___search", 1), call("mcp_____t", 1), call("mcp__plain__read", 1), call("mcp__docs___search", 90))
+
+	st, err := Parse(dir, now.AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if st.ToolCalls["docs___search"] != 1 || st.ToolCalls["___t"] != 1 || st.ToolCalls["plain__read"] != 0 {
+		t.Errorf("tool calls kept whole = %v", st.ToolCalls)
+	}
+	if older, _ := st.OlderUses(); older[scan.CatMCP]["docs___search"] != 1 {
+		t.Errorf("before the window = %v", older[scan.CatMCP])
+	}
+	if got := CreditedServer("docs___search") + " " + CreditedServer("___t") + " " + CreditedServer("a__b__t"); got != "docs ___t a" {
+		t.Errorf("credited = %q", got)
+	}
+}
+
+// A session is in the window when something in it happened in the window. Its
+// file's date says only that the file was touched: a folder restored from a
+// backup, or copied to a new machine, is all dated today, and every old session
+// counted as a recent one in which nothing was used.
+func TestASessionCountsByWhenItHappenedNotByItsFilesDate(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC()
+	said := func(id string, daysAgo int) string {
+		return `{"type":"user","sessionId":"` + id + `","timestamp":"` + now.AddDate(0, 0, -daysAgo).Format(time.RFC3339) + `","message":{"content":"hi"}}`
+	}
+	writeTranscript(t, filepath.Join(dir, "proj", "old.jsonl"), said("old", 90), said("old", 80))
+	writeTranscript(t, filepath.Join(dir, "proj", "resumed.jsonl"), said("resumed", 90), said("resumed", 1))
+	writeTranscript(t, filepath.Join(dir, "proj", "undated.jsonl"), `{"type":"user","sessionId":"undated","message":{"content":"hi"}}`)
+
+	st, err := Parse(dir, now.AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if st.Sessions != 2 {
+		t.Errorf("sessions in the window = %d, want the resumed one and the undated one", st.Sessions)
+	}
+}
+
+// Claude Code writes one line per content block of a message, each with the
+// message's whole usage. Counted per line, a message with three blocks weighed
+// three times what it cost.
+func TestMeasuredCountsAMessageOnce(t *testing.T) {
+	dir := t.TempDir()
+	at := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	block := func(id string) string {
+		return `{"type":"assistant","sessionId":"s","timestamp":"` + at + `","requestId":"req1","message":{"id":"` + id + `","model":"claude-sonnet-4-6","content":[],"usage":{"input_tokens":1,"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":20000}}}`
+	}
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"), block("msg_1"), block("msg_1"), block("msg_1"), block("msg_2"), block(""), block(""))
+
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if st.Measured.Messages != 4 || st.Measured.CacheRead != 80000 || st.ModelUse["claude-sonnet-4-6"] != 4 {
+		t.Errorf("measured %+v, models %v; want msg_1 once, msg_2 once and the two with no id", st.Measured, st.ModelUse)
+	}
+}
+
+// A server's prompt can be written with a note after its name.
+func TestAServersPromptIsItsUseWithANoteAfterTheName(t *testing.T) {
+	dir := t.TempDir()
+	at := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	writeTranscript(t, filepath.Join(dir, "proj", "s.jsonl"),
+		`{"type":"user","sessionId":"s","timestamp":"`+at+`","message":{"content":"<command-name>/mcp__promptsrv__review (MCP)</command-name>"}}`)
+
+	st, err := Parse(dir, time.Now().AddDate(0, 0, -30), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if st.Uses[scan.CatMCP]["promptsrv"] != 1 {
+		t.Errorf("uses = %v", st.Uses[scan.CatMCP])
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // AgentMaxRows is the default cap on the dead-item table in the agent format.
@@ -24,7 +26,8 @@ const agentSignature = "measured by skillreaper · github.com/thousandflowers/sk
 // denominator. A zero denominator is not an error: MCP items carry their weight
 // in tool schemas rather than in an injected description, so their token counts
 // are genuinely 0 and must not be reported as 0%.
-func pctOf(part, whole int) string {
+// PctOf is part/whole as a whole percent, "<1%" for a sliver, "n/a" for none.
+func PctOf(part, whole int) string {
 	if whole == 0 {
 		return "n/a"
 	}
@@ -33,6 +36,16 @@ func pctOf(part, whole int) string {
 		return "<1%"
 	}
 	return fmt.Sprintf("%d%%", p)
+}
+
+// pctSeen is PctOf for a ratio of what fired: with no session in the window
+// nothing was read, so there is no measurement to give, and "0%" would read as
+// "none of it is used".
+func pctSeen(part, whole, sessions int) string {
+	if sessions == 0 {
+		return "n/a"
+	}
+	return PctOf(part, whole)
 }
 
 // RenderAgent writes the report as compact plain text meant to be pasted
@@ -50,14 +63,20 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 	if top <= 0 {
 		top = AgentMaxRows
 	}
-	fmt.Fprintf(w, "skillreaper · last %dd · %d sessions\n", r.WindowDays, r.Sessions)
+	fmt.Fprintf(w, "skillreaper · last %dd · %s\n", r.WindowDays, nOf(r.Sessions, "session"))
 
 	if r.Gap != nil && r.Gap.Loaded > 0 {
 		fmt.Fprintf(w, "%d/%d items fired · %s utilization\n",
-			r.Gap.Fired, r.Gap.Loaded, pctOf(r.Gap.Fired, r.Gap.Loaded))
+			r.Gap.Fired, r.Gap.Loaded, pctSeen(r.Gap.Fired, r.Gap.Loaded, r.Sessions))
 	} else {
 		fmt.Fprintln(w, "no items loaded")
 	}
+	defer func() { // last, so that the figure never travels without it
+		if r.DeadUnknownWeight > 0 {
+			fmt.Fprintf(w, "\nThe dead-token figure is a floor: %s (MCP servers) %s weight that was never measured.\n",
+				nOf(r.DeadUnknownWeight, "unused item"), map[bool]string{true: "carries", false: "carry"}[r.DeadUnknownWeight == 1])
+		}
+	}()
 
 	// No money line here, unlike every other renderer. A dollar figure is a
 	// token count multiplied by a price we do not control and that moves when a
@@ -66,6 +85,9 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 	// and the token count are measured facts and survive a price change.
 	fmt.Fprintf(w, "%s · ~%d dead tokens/session\n",
 		NewHeadline(r).Line(), r.DeadTokensPerSession)
+	if note := averageNote(r); note != "" {
+		fmt.Fprintln(w, sentence(note)) // or the rows below do not add up to it
+	}
 
 	dead := deadRows(r)
 	if len(dead) == 0 {
@@ -88,21 +110,61 @@ func RenderAgent(w io.Writer, r *Report, top int) {
 			if row.WeightUnknown {
 				tok = "?"
 			}
-			tw.row(tok, string(row.Category), row.Name, row.Verdict, row.Reason)
+			tw.row(tok, string(row.Category), agentName(row.Name), row.Verdict, row.Reason)
 		}
 		tw.flush()
 		if len(dead) > top {
 			fmt.Fprintf(w, "(%d more marked REAP not shown — use --json for all)\n", len(dead)-top)
 		}
-		fmt.Fprintln(w, "\nTo prune: reap prune   (interactive, reversible via reap restore --all)")
+		if prunable := removableDead(dead); prunable > 0 {
+			fmt.Fprintln(w, "\nTo prune: reap prune   (interactive, reversible via reap restore --all)")
+		} else {
+			// Nothing here is reap prune's to take: it would answer "Nothing to reap".
+			fmt.Fprintf(w, "\nA bare reap prune takes none of these (inside a plugin, or reached through a link): reap why <name> says what can be done.\n")
+		}
 	}
 
+	// held back only when some were: a warning alone may be an advisory
+	held := 0
+	for _, row := range r.Rows {
+		if row.Reason == ReasonNoEvidence {
+			held++
+		}
+	}
+	if held > 0 {
+		its := "its usage"
+		if held > 1 {
+			its = "their usage"
+		}
+		fmt.Fprintf(w, "\n%d %s held back from a REAP or MUTE verdict: %s could not be read.\n", held, Plural(held, "item"), its)
+	}
 	if len(r.Warnings) > 0 {
-		fmt.Fprintf(w, "\n%d %s — some evidence was incomplete; those items were held back from a REAP verdict.\n",
-			len(r.Warnings), plural(len(r.Warnings), "warning"))
+		fmt.Fprintf(w, "\n%d %s — run reap for details.\n", len(r.Warnings), Plural(len(r.Warnings), "warning"))
 	}
 
 	fmt.Fprintf(w, "\n%s\n", agentSignature)
+}
+
+// agentName quotes a name that could pass for more than one table cell, so a name
+// can only ever read as a name when this output is pasted to an agent.
+func agentName(name string) string {
+	if strings.ContainsAny(name, " \t|`") {
+		return strconv.Quote(name)
+	}
+	return name
+}
+
+// mdCell makes text safe inside a Markdown table cell or code span.
+func mdCell(s string) string {
+	return strings.NewReplacer("|", `\|`, "`", "'").Replace(s)
+}
+
+// mdText is mdCell for text outside a code span, where a name could read as a
+// tag or as a link.
+func mdText(s string) string {
+	// The backslash first and in the same pass: one left alone would un-escape
+	// the "|" written after it.
+	return strings.NewReplacer(`\`, `\\`, "|", `\|`, "`", "'", "<", "&lt;", "[", `\[`).Replace(s)
 }
 
 // deadRows returns the REAP rows heaviest first. Ties break on name so the
@@ -135,14 +197,20 @@ func RenderGapAgent(w io.Writer, r *Report) {
 	}
 
 	g := r.Gap
-	fmt.Fprintf(w, "%d/%d items fired · %s utilization\n", g.Fired, g.Loaded, pctOf(g.Fired, g.Loaded))
-	fmt.Fprintf(w, "%d/%d tokens touched · %s token reach\n", g.FiredTok, g.LoadedTok, pctOf(g.FiredTok, g.LoadedTok))
+	if r.Sessions == 0 {
+		fmt.Fprintf(w, "no sessions in the last %s: nothing was read, so nothing is measured\n", nOf(r.WindowDays, "day"))
+	}
+	fmt.Fprintf(w, "%d/%d items fired · %s utilization\n", g.Fired, g.Loaded, pctSeen(g.Fired, g.Loaded, r.Sessions))
+	fmt.Fprintf(w, "%d/%d tokens touched · %s token reach\n", g.FiredTok, g.LoadedTok, pctSeen(g.FiredTok, g.LoadedTok, r.Sessions))
 
 	fmt.Fprintln(w)
 	tw := newTable(w)
 	tw.row("CATEGORY", "LOADED", "FIRED", "UTIL", "LOADED TOK", "TOUCHED TOK", "REACH")
 	zeroWeight := false
 	for _, c := range g.PerCat {
+		if c.Loaded == 0 {
+			continue // nothing of that kind here: no row, as in the plain view
+		}
 		if c.LoadedTok == 0 {
 			zeroWeight = true
 		}
@@ -150,15 +218,15 @@ func RenderGapAgent(w io.Writer, r *Report) {
 			string(c.Category),
 			fmt.Sprintf("%d", c.Loaded),
 			fmt.Sprintf("%d", c.Fired),
-			pctOf(c.Fired, c.Loaded),
+			pctSeen(c.Fired, c.Loaded, r.Sessions),
 			fmt.Sprintf("%d", c.LoadedTok),
 			fmt.Sprintf("%d", c.FiredTok),
-			pctOf(c.FiredTok, c.LoadedTok),
+			pctSeen(c.FiredTok, c.LoadedTok, r.Sessions),
 		)
 	}
 	tw.flush()
 
-	if zeroWeight {
+	if zeroWeight && r.Sessions > 0 {
 		fmt.Fprintln(w, "\nREACH n/a means there are no loaded tokens to divide by: that weight lives")
 		fmt.Fprintln(w, "in tool schemas rather than in an injected description, so it is not counted.")
 	}
@@ -172,7 +240,7 @@ func RenderGapAgent(w io.Writer, r *Report) {
 		}
 		nt.flush()
 	} else if len(r.MCPPayload) > 0 {
-		fmt.Fprintf(w, "\n%d tools measured, none flagged noisy.\n", len(r.MCPPayload))
+		fmt.Fprintf(w, "\n%s measured, none flagged noisy.\n", nOf(len(r.MCPPayload), "tool"))
 	}
 
 	fmt.Fprintf(w, "\n%s\n", agentSignature)
@@ -188,4 +256,15 @@ func noisyPayload(r *Report) []PayloadRow {
 		}
 	}
 	return out
+}
+
+// removableDead counts the unused rows a bare reap prune takes.
+func removableDead(dead []Row) int {
+	n := 0
+	for _, row := range dead {
+		if row.Removable {
+			n++
+		}
+	}
+	return n
 }

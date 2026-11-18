@@ -1,11 +1,9 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
-	"strings"
 )
 
 // RenderByProject lists skills that fired, bucketed by the project (repo) they
@@ -15,7 +13,7 @@ func RenderByProject(w io.Writer, r *Report, color bool) {
 	paint := painter(color)
 	width := termWidth(w)
 	fmt.Fprintf(w, "\n  %s\n", paint(cCyan,
-		rule(fmt.Sprintf("skills by project · last %d days · %d sessions", r.WindowDays, r.Sessions), width-2)))
+		rule("skills by project · "+windowOf(r.WindowDays, r.Sessions), width-2)))
 
 	if len(r.SkillProjects) == 0 {
 		fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, "no skill firings attributed to a project."))
@@ -62,8 +60,8 @@ func RenderByProject(w io.Writer, r *Report, color bool) {
 			// rows, so any single line still says what it is about when it is
 			// grepped or pasted out of context.
 			skills = append(skills, sr.skill)
-			projects = append(projects, prettyProject(pc.name))
-			counts = append(counts, humanNum(pc.count))
+			projects = append(projects, projectLabel(r, pc.name))
+			counts = append(counts, HumanNum(pc.count))
 			notes = append(notes, note)
 		}
 	}
@@ -101,18 +99,17 @@ func sortedProjects(m map[string]int) []projCount {
 	return out
 }
 
-// prettyProject turns Claude Code's encoded project dir ("-Users-me-repo")
-// into a readable path. Lossy (dashes in names), so best-effort only.
-func prettyProject(dir string) string {
-	if strings.HasPrefix(dir, "-") {
-		return strings.ReplaceAll(dir, "-", "/")
+// projectLabel names a project bucket by the path its transcripts recorded. The
+// encoded name ("-Users-me-repo") cannot be decoded: a dash there may be a slash,
+// a dot or a dash, so when no path is on record the key is shown as it is.
+func projectLabel(r *Report, key string) string {
+	if p := r.ProjectPaths[key]; p != "" {
+		return p
 	}
-	return dir
+	return key
 }
 
 // RenderByProjectJSON writes the skill→project firing map as indented JSON.
 func RenderByProjectJSON(w io.Writer, r *Report) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(r.SkillProjects)
+	return WriteJSON(w, r.SkillProjects)
 }

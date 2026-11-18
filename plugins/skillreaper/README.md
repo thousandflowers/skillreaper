@@ -30,7 +30,8 @@ plugin's.
 > the `skillreaper-weekly-nudge` marker and supersede the manual hook, rather
 > than coexist with it.
 
-**Skills consume `reap --json`, never the plain report.** The human report is a
-30-line ANSI table; injecting it into the context only to have the model repeat
-it is exactly the dead weight this tool exists to find. Each `SKILL.md` carries
-an explicit render spec so every invocation looks the same.
+**Skills consume `reap --agent`, never the plain report.** The human report is a
+long ANSI table; injecting it into the context only to have the model repeat
+it is exactly the dead weight this tool exists to find. `--agent` is compact
+plain text built to be pasted as it is, so every invocation looks the same
+with no render rules in the `SKILL.md`.

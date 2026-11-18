@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,42 @@ func ScanAgents(dir, platformID string) ([]Item, []Warning) {
 			filepath.Join(p.InstallPath, "agents"),
 			p.Name+":", "plugin:"+p.FullName, p.InstalledAt, false, platformID)
 	}
+	main := mainAgents(dir)
+	for _, p := range plugins { // a plugin's own settings can name one of its agents
+		for name := range mainAgents(p.InstallPath) {
+			main[strings.ToLower(p.Name)+":"+name] = true
+		}
+	}
+	if len(main) > 0 {
+		for i := range items {
+			items[i].MainAgent = main[strings.ToLower(items[i].Name)] || items[i].FrontmatterName != "" && main[strings.ToLower(items[i].FrontmatterName)]
+		}
+	}
 	return items, warns
+}
+
+// mainAgents names the agents the settings run the session itself as
+// (`"agent": "name"`, what `claude --agent name` does for one run). Such an
+// agent is the session, and no transcript records it as a use.
+func mainAgents(dir string) map[string]bool {
+	agent := ""
+	for _, base := range []string{"settings.json", "settings.local.json"} { // the local file has the last word
+		b, err := readCapped(filepath.Join(dir, base))
+		if err != nil {
+			continue
+		}
+		var s struct {
+			Agent string `json:"agent"`
+		}
+		if json.Unmarshal(b, &s) == nil && s.Agent != "" {
+			agent = s.Agent
+		}
+	}
+	main := map[string]bool{}
+	if agent != "" {
+		main[strings.ToLower(agent)] = true
+	}
+	return main
 }
 
 func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source string, installedAt time.Time, removable bool, platformID string) ([]Item, []Warning) {
@@ -51,23 +87,38 @@ func appendAgentsFromDir(items []Item, warns []Warning, dir, namePrefix, source 
 		}
 		stem := strings.TrimSuffix(e.Name(), ".md")
 		// The subagent_type recorded in transcripts is the file name (plus any
-		// plugin prefix); by convention it equals the stem. Frontmatter name is
-		// metadata and intentionally not used as the key.
-		_, desc, bodyChars := parseFrontmatter(b)
+		// plugin prefix); by convention it equals the stem. A differing frontmatter
+		// name stays the key's alias: it can fire under either.
+		fmName, desc, bodyChars := parseFrontmatter(b)
 		key := namePrefix + stem
 		items = append(items, Item{
-			Category:    CatAgent,
-			Name:        key,
-			Platform:    platformID,
-			Source:      source,
-			Path:        path,
-			Description: desc,
-			DescChars:   len(key) + len(desc),
-			BodyChars:   bodyChars,
-			InstalledAt: installedAt,
-			Removable:   removable,
-			ToolSurface: toolSurface(b, "tools", "allowed-tools"),
+			Category:        CatAgent,
+			Name:            key,
+			Platform:        platformID,
+			Source:          source,
+			Path:            path,
+			FrontmatterName: otherName(fmName, stem),
+			Description:     desc,
+			DescChars:       len(key) + len(desc),
+			BodyChars:       bodyChars,
+			InstalledAt:     datedOr(installedAt, path),
+			Removable:       removable,
+			ToolSurface:     toolSurface(b, "tools", "allowed-tools"),
+			Preloads:        frontmatterList(b, "skills"),
 		})
 	}
 	return items, warns
+}
+
+// datedOr is the install time a plugin records, or for an item of your own,
+// which has none, its file's last change. An edit counts as new: that errs
+// toward REVIEW(grace), never toward REAP.
+func datedOr(installedAt time.Time, path string) time.Time {
+	if !installedAt.IsZero() {
+		return installedAt
+	}
+	if info, err := os.Stat(path); err == nil {
+		return info.ModTime()
+	}
+	return time.Time{}
 }

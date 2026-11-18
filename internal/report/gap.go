@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -15,8 +14,11 @@ type GapCat struct {
 	Category  scan.Category
 	Loaded    int // inventory items whose description is injected
 	Fired     int // items invoked at least once in the window
-	LoadedTok int // sum of description tokens (0 for MCP — weight unknown)
-	FiredTok  int // tokens of fired items (0 for MCP)
+	LoadedTok int // sum of measured tokens
+	FiredTok  int // tokens of fired items
+	// UnknownWeight counts items whose weight was never measured (an MCP
+	// server never seen loading): they are in Loaded but not in LoadedTok.
+	UnknownWeight int `json:",omitempty"`
 }
 
 // Gap is the loaded-vs-fired snapshot for the window.
@@ -38,7 +40,7 @@ func utilPct(fired, loaded, sessions int) (int, string) {
 		return 0, "n/a"
 	}
 	pct := fired * 100 / loaded
-	return pct, fmt.Sprintf("%d%%", pct)
+	return pct, PctOf(fired, loaded) // "<1%" for a few in very many, as the agent view writes it
 }
 
 // utilBar renders a 10-segment bar filled proportionally to pct.
@@ -126,7 +128,7 @@ func RenderGap(w io.Writer, r *Report, color bool) {
 	g := r.Gap
 
 	fmt.Fprintf(w, "\n  %s\n", paint(cCyan,
-		rule(fmt.Sprintf("loaded vs fired · last %d days · %d sessions", r.WindowDays, r.Sessions), width-2)))
+		rule("loaded vs fired · "+windowOf(r.WindowDays, r.Sessions), width-2)))
 
 	if g == nil || g.Loaded == 0 {
 		fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, "no inventory found."))
@@ -134,42 +136,38 @@ func RenderGap(w io.Writer, r *Report, color bool) {
 	}
 
 	var cats, loaded, fired, util, bars, tokLoaded, tokUsed []string
-	add := func(label string, gc GapCat, mcp bool) {
+	add := func(label string, gc GapCat) {
 		pct, utilStr := utilPct(gc.Fired, gc.Loaded, r.Sessions)
 		cats = append(cats, label)
-		loaded = append(loaded, humanNum(gc.Loaded))
-		fired = append(fired, humanNum(gc.Fired))
+		loaded = append(loaded, HumanNum(gc.Loaded))
+		fired = append(fired, HumanNum(gc.Fired))
 		util = append(util, utilStr)
 		bars = append(bars, utilBar(pct))
-		if mcp {
-			// An MCP server's weight is built by the host at runtime. Unknown
-			// is not zero, and must not be rendered as a figure.
-			tokLoaded = append(tokLoaded, "?")
-			tokUsed = append(tokUsed, "?")
-			return
-		}
-		tokLoaded = append(tokLoaded, "~"+humanNum(gc.LoadedTok))
-		tokUsed = append(tokUsed, humanNum(gc.FiredTok))
+		// Unknown is not zero, and must not be rendered as a figure.
+		tokLoaded = append(tokLoaded, gapTok("~"+HumanNum(gc.LoadedTok), gc))
+		tokUsed = append(tokUsed, gapTok(HumanNum(gc.FiredTok), gc))
 	}
 	for _, gc := range g.PerCat {
 		if gc.Loaded == 0 {
 			continue
 		}
-		add(gapLabel(gc.Category), gc, gc.Category == scan.CatMCP)
+		add(gapLabel(gc.Category), gc)
 	}
 	// The total belongs to the same table, so its digits line up under the
 	// categories they sum. It is separated by a rule rather than by a second
 	// table, which would align to its own contents and stop comparing.
-	add("total", GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}, false)
+	add("total", g.total())
 
 	tbl := layout([]col{
 		{head: "CATEGORY", flex: true, cells: cats},
 		{head: "LOADED", right: true, cells: loaded},
 		{head: "FIRED", right: true, cells: fired},
 		{head: "UTIL", right: true, cells: util},
-		{cells: bars, shed: 1},
-		{head: "TOK LOADED", right: true, cells: tokLoaded},
-		{head: "TOK USED", right: true, cells: tokUsed},
+		// Given up in this order as the window narrows, the bar first: the
+		// category is what tells one row from another and goes last of all.
+		{cells: bars, shed: 3},
+		{head: "TOK LOADED", right: true, cells: tokLoaded, shed: 1},
+		{head: "TOK USED", right: true, cells: tokUsed, shed: 2},
 	}, width, 2)
 
 	fmt.Fprintln(w)
@@ -202,12 +200,33 @@ func renderMuteSavings(w io.Writer, r *Report, width int, paint func(code, s str
 	if r.MuteCount == 0 {
 		return
 	}
+	// What reap mute takes, not every MUTE row: one inside a plugin is not its
+	// to mute, and "recoverable with reap mute" would promise what it refuses.
+	n, tokens := Mutable(r.Rows)
+	said := fmt.Sprintf("MUTE — %d heavy low-use %s, ~%s tok/session recoverable with reap mute", n, Plural(n, "skill"), HumanNum(tokens))
+	if n == 0 {
+		// A bulk reap mute leaves these (a plugin's, or one reached through a
+		// link); what can be done differs for each, and reap why says it.
+		said = fmt.Sprintf("MUTE — %d heavy low-use %s a bulk reap mute leaves alone: reap why <name> says what can be done", r.MuteCount, Plural(r.MuteCount, "skill"))
+	}
+	if left := r.MuteCount - n; n > 0 && left > 0 { // the ones the figure leaves out
+		said += fmt.Sprintf(" (+%d a bulk reap mute leaves alone: reap why <name>)", left)
+	}
 	fmt.Fprintln(w)
-	for _, l := range wrap(fmt.Sprintf("MUTE — %d heavy low-use %s, ~%s tok/session recoverable with reap mute",
-		r.MuteCount, plural(r.MuteCount, "skill"), humanNum(r.MuteTokensPerSession)),
-		width, "  "+mark(VerdictMute)+"  ", "     ") {
+	for _, l := range wrap(said, width, "  "+mark(VerdictMute)+"  ", "     ") {
 		fmt.Fprintln(w, paint(cBold, l))
 	}
+}
+
+// Mutable counts the MUTE rows reap mute would take, and their weight.
+func Mutable(rows []Row) (n, tokens int) {
+	for _, row := range rows {
+		if row.Verdict == VerdictMute && MuteEligible(row) {
+			n++
+			tokens += MuteSaving(row) // as MuteTokensPerSession counts it
+		}
+	}
+	return n, tokens
 }
 
 // renderBrokenSkills lists skills that were invoked but only ever errored —
@@ -218,7 +237,7 @@ func renderBrokenSkills(w io.Writer, r *Report, width int, paint func(code, s st
 	for _, row := range r.Rows {
 		if row.Reason == ReasonBroken {
 			names = append(names, row.Name)
-			errs = append(errs, humanNum(row.ErrorCount))
+			errs = append(errs, HumanNum(row.ErrorCount))
 		}
 	}
 	if len(names) == 0 {
@@ -226,7 +245,7 @@ func renderBrokenSkills(w io.Writer, r *Report, width int, paint func(code, s st
 	}
 	fmt.Fprintf(w, "\n  %s\n", paint(cBold, truncate(
 		fmt.Sprintf("%s  BROKEN — %d %s invoked that only ever errored",
-			mark(VerdictReap), len(names), plural(len(names), "skill")), width-2)))
+			mark(VerdictReap), len(names), Plural(len(names), "skill")), width-2)))
 	for _, l := range layout([]col{
 		{head: "NAME", flex: true, cells: names},
 		{head: "ERRORS", right: true, cells: errs},
@@ -239,7 +258,7 @@ func renderBrokenSkills(w io.Writer, r *Report, width int, paint func(code, s st
 func RenderGapMarkdown(w io.Writer, r *Report) {
 	g := r.Gap
 	fmt.Fprintf(w, "# loaded vs fired\n\n")
-	fmt.Fprintf(w, "Window: last %d days · %d sessions\n\n", r.WindowDays, r.Sessions)
+	fmt.Fprintf(w, "Window: %s\n\n", windowOf(r.WindowDays, r.Sessions))
 	if g == nil || g.Loaded == 0 {
 		fmt.Fprintln(w, "_No inventory found._")
 		return
@@ -247,12 +266,9 @@ func RenderGapMarkdown(w io.Writer, r *Report) {
 	fmt.Fprintln(w, "| Category | Loaded | Fired | Util | Loaded tok | Fired tok |")
 	fmt.Fprintln(w, "|---|---|---|---|---|---|")
 
-	row := func(label string, gc GapCat, mcp bool) {
+	row := func(label string, gc GapCat) {
 		_, utilStr := utilPct(gc.Fired, gc.Loaded, r.Sessions)
-		lt, ft := fmt.Sprintf("~%d", gc.LoadedTok), fmt.Sprintf("~%d", gc.FiredTok)
-		if mcp {
-			lt, ft = "?", "?"
-		}
+		lt, ft := gapTok(fmt.Sprintf("~%d", gc.LoadedTok), gc), gapTok(fmt.Sprintf("~%d", gc.FiredTok), gc)
 		fmt.Fprintf(w, "| %s | %d | %d | %s | %s | %s |\n",
 			label, gc.Loaded, gc.Fired, utilStr, lt, ft)
 	}
@@ -260,28 +276,48 @@ func RenderGapMarkdown(w io.Writer, r *Report) {
 		if gc.Loaded == 0 {
 			continue
 		}
-		row(gapLabel(gc.Category), gc, gc.Category == scan.CatMCP)
+		row(gapLabel(gc.Category), gc)
 	}
-	row("total", GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}, false)
+	row("total", g.total())
 	renderPayloadMarkdown(w, r)
+}
+
+// total is the gap as one row, unknowns included, for the table's last line.
+func (g *Gap) total() GapCat {
+	t := GapCat{Loaded: g.Loaded, Fired: g.Fired, LoadedTok: g.LoadedTok, FiredTok: g.FiredTok}
+	for _, gc := range g.PerCat {
+		t.UnknownWeight += gc.UnknownWeight
+	}
+	return t
+}
+
+// gapTok shows a token figure, "?" when nothing in the category was measured,
+// and a "+?" suffix when only some of it was.
+func gapTok(measured string, gc GapCat) string {
+	switch {
+	case gc.UnknownWeight == 0:
+		return measured
+	case gc.UnknownWeight == gc.Loaded:
+		return "?"
+	default:
+		return measured + "+?"
+	}
 }
 
 // RenderGapJSON writes only the Gap snapshot as indented JSON.
 func RenderGapJSON(w io.Writer, r *Report) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
 	// Embed *Gap so its fields stay top-level (backwards compatible) and add the
 	// payload-quality axis alongside it.
 	out := struct {
 		*Gap
 		Payload []PayloadRow `json:"payload,omitempty"`
 	}{Gap: r.Gap, Payload: r.MCPPayload}
-	return enc.Encode(out)
+	return WriteJSON(w, out)
 }
 
 // computeGap derives the loaded-vs-fired snapshot from joined rows.
-// Only skill/agent/mcp participate. MCP token weight is unknown, so its
-// token sums are left at zero and excluded from totals.
+// Only skill/agent/mcp participate. An item whose weight was never measured
+// is counted in UnknownWeight and left out of the token sums.
 func computeGap(rows []Row) *Gap {
 	idx := map[scan.Category]int{}
 	g := &Gap{}
@@ -302,8 +338,9 @@ func computeGap(rows []Row) *Gap {
 			gc.Fired++
 			g.Fired++
 		}
-		if row.Category == scan.CatMCP {
-			continue // token weight unknown without running the server
+		if row.WeightUnknown {
+			gc.UnknownWeight++
+			continue
 		}
 		gc.LoadedTok += row.Tokens
 		g.LoadedTok += row.Tokens

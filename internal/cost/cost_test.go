@@ -144,3 +144,20 @@ func TestDefaultModel(t *testing.T) {
 		t.Errorf("DefaultModel %q is not in ModelPricing", DefaultModel)
 	}
 }
+
+// A model id is the same model with a date or a context window after it: for
+// the price and for the weight alike.
+func TestAModelIDWithASuffixIsTheSameModel(t *testing.T) {
+	for id := range TokenRatios {
+		if got, want := TokensFor(id+"-20250807", 4000), TokensFor(id, 4000); got != want {
+			t.Errorf("%s dated weighs %d, undated %d", id, got, want)
+		}
+	}
+	for id, price := range ModelPricing {
+		for _, suffix := range []string{"[1m]", "-20250807[1m]"} {
+			if got, ok := LookupPrice(id + suffix); !ok || got != price {
+				t.Errorf("%s%s: price %v, %v", id, suffix, got, ok)
+			}
+		}
+	}
+}

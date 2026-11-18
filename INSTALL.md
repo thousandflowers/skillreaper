@@ -29,8 +29,12 @@ npm install -g skillreaper
 skillreaper
 ```
 
-The npm package downloads the correct platform binary at install
-time and wraps it as a Node CLI. Same binary either way.
+The npm package downloads the correct platform binary the first time
+it runs, checks it against the release's checksums, and wraps it as a
+Node CLI. Same binary either way. It keeps the binary next to the
+package, or, when that folder is not yours to write (a global install
+made with sudo), in `skillreaper/<version>/` under `$XDG_CACHE_HOME`, else
+under `%LOCALAPPDATA%` on Windows, else under `~/.cache`.
 
 **Verify**:
 ```bash
@@ -76,13 +80,23 @@ Download from the
 
 Single static binary per archive. No dependencies.
 
+The example is macOS Apple Silicon: swap the filename for your row in the
+table above. `latest` resolves to the newest release, so the block cannot go
+stale. It is one chain: a download that fails, or a checksum that does not
+match, stops it there and installs nothing. The checksum line must say `OK`
+(on Linux write `sha256sum` in place of `shasum -a 256`). The archive ships
+the binary as `skillreaper`; the `mv` renames it to `reap`. The Windows
+archives hold `skillreaper.exe`, and the last two lines are for macOS and
+Linux: on Windows unpack the archive and put `skillreaper.exe` in a folder on
+your `PATH`, as `reap.exe` if you want that name.
+
 ```bash
-# Example: macOS Apple Silicon. `latest` resolves to the newest release, so this
-# block cannot go stale — swap the filename for your row in the table above.
-curl -LO https://github.com/thousandflowers/skillreaper/releases/latest/download/skillreaper_darwin_arm64.tar.gz
-tar xzf skillreaper_darwin_arm64.tar.gz
-mv skillreaper /usr/local/bin/reap   # the archive ships the binary as skillreaper; rename to reap
-rm skillreaper_darwin_arm64.tar.gz
+curl -fLO https://github.com/thousandflowers/skillreaper/releases/latest/download/skillreaper_darwin_arm64.tar.gz &&
+curl -fLO https://github.com/thousandflowers/skillreaper/releases/latest/download/checksums.txt &&
+shasum -a 256 -c --ignore-missing checksums.txt &&
+tar xzf skillreaper_darwin_arm64.tar.gz &&
+mv skillreaper /usr/local/bin/reap &&
+rm skillreaper_darwin_arm64.tar.gz checksums.txt
 ```
 
 **Verify**:
@@ -112,7 +126,16 @@ reap version
 | Go | `rm $(which reap)` |
 | Binary | `rm /usr/local/bin/reap` (or wherever placed) |
 
-Clean up quarantine manifests (optional):
+`~/.claude/reaped` is not a cache. It holds every item you pruned (the only
+copy), the descriptions `reap mute` took out, your keep list and the backups
+of `.claude.json`. Before you uninstall, put back what you want to keep. The
+third line is for those who ran `install-hook`: without it `settings.json`
+goes on calling a binary that is gone. `--yes` is there so that the block
+can be pasted whole: without it the first command asks, and what was pasted
+after it is dropped.
 ```bash
-rm -rf ~/.claude/reaped
+reap restore --all --yes
+reap unmute --all --yes
+reap uninstall-hook
 ```
+After that the folder can go. Whatever is still in it goes for good.

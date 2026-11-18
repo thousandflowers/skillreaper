@@ -6,7 +6,7 @@
 # Shape: ~300 skills of which 6 fire, 68 subagents that never fire, 12 MCP
 # servers of which 1 fires, 34 sessions in the window.
 #
-#   docs/gif-helpers/hero-fixture.sh /tmp/hero-claude
+#   export SOURCE_DATE_EPOCH="$(docs/gif-helpers/hero-fixture.sh /tmp/hero-claude)"
 #   reap -claude-dir /tmp/hero-claude -claude-json /tmp/hero-claude/.claude.json \
 #        -no-nudge --agent
 set -euo pipefail

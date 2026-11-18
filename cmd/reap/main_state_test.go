@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/thousandflowers/skillreaper/internal/clock"
 	"github.com/thousandflowers/skillreaper/internal/evidence"
 )
 
@@ -20,7 +21,20 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
+	// The fixtures date their sessions and files by the real clock; a
+	// SOURCE_DATE_EPOCH exported by the shell would pin reap to another day.
+	if err := os.Unsetenv(clock.EnvVar); err != nil {
+		panic(err)
+	}
 	if err := os.Setenv(evidence.StateDirEnv, dir); err != nil {
+		panic(err)
+	}
+	// The corpus cache hashes a temp directory that differs every run, so a real
+	// cache directory would gain files that nothing ever removes.
+	if err := os.Setenv("HOME", dir); err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("XDG_CACHE_HOME", dir); err != nil {
 		panic(err)
 	}
 	code := m.Run()

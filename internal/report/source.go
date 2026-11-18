@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 )
 
 // SourceTotal is the dead weight a single source accounts for.
@@ -18,6 +19,8 @@ type SourceTotal struct {
 	Items     int    `json:"items"`
 	Removable int    `json:"removable"`
 	Tokens    int    `json:"tokens"`
+	// Unmeasured counts the items whose weight Tokens leaves out.
+	Unmeasured int `json:"unmeasured,omitempty"`
 }
 
 // SourceTotals groups rows by Source, heaviest first.
@@ -46,6 +49,9 @@ func SourceTotals(rows []Row) []SourceTotal {
 		}
 		t.Items++
 		t.Tokens += r.Tokens
+		if r.WeightUnknown {
+			t.Unmeasured++
+		}
 		if r.Removable {
 			t.Removable++
 		}
@@ -78,25 +84,36 @@ func SourceTotals(rows []Row) []SourceTotal {
 // source is the flexible column now and gives way to the measure, because a
 // truncated plugin coordinate is still recognisable while a wrapped note is
 // not readable at all.
-func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int, humanTok func(int) string) {
+func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int) {
 	if len(totals) < 2 {
 		return
 	}
 	var srcs, items, toks, notes []string
 	for _, t := range totals {
 		srcs = append(srcs, t.Source)
-		items = append(items, fmt.Sprintf("%d %s", t.Items, plural(t.Items, "item")))
-		toks = append(toks, "~"+humanTok(t.Tokens)+" tok")
+		items = append(items, fmt.Sprintf("%d %s", t.Items, Plural(t.Items, "item")))
+		switch {
+		case t.Unmeasured >= t.Items: // never measured: "~0" would be a number
+			toks = append(toks, "?")
+		case t.Unmeasured > 0:
+			toks = append(toks, "≥"+HumanCount(t.Tokens)+" tok")
+		default:
+			toks = append(toks, "~"+HumanCount(t.Tokens)+" tok")
+		}
 		if t.Removable == 0 {
 			// reap can see these and cannot touch them: they are registered by
 			// a plugin, and the host agent owns that registration.
-			notes = append(notes, "disable via /plugin")
+			if IsPluginSource(t.Source) {
+				notes = append(notes, "disable via /plugin")
+			} else {
+				notes = append(notes, "remove by hand")
+			}
 			continue
 		}
 		notes = append(notes, fmt.Sprintf("%d prunable here", t.Removable))
 	}
 	fmt.Fprintf(w, "  by source — %d unused %s came from %d places:\n",
-		deadItems, plural(deadItems, "item"), len(totals))
+		deadItems, Plural(deadItems, "item"), len(totals))
 	for _, l := range layout([]col{
 		{head: "SOURCE", flex: true, cells: srcs},
 		{head: "ITEMS", right: true, cells: items},
@@ -107,3 +124,6 @@ func RenderSourceTotals(w io.Writer, totals []SourceTotal, deadItems int, humanT
 	}
 	fmt.Fprintln(w)
 }
+
+// IsPluginSource reports a source only Claude Code's /plugin can act on.
+func IsPluginSource(source string) bool { return strings.HasPrefix(source, "plugin:") }

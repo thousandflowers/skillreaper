@@ -41,6 +41,7 @@ func TestAllow(t *testing.T) {
 
 func TestPrintWritesOnlyToErrOut(t *testing.T) {
 	stubDetect(t, true, 80, true)
+	t.Setenv("NO_COLOR", "")
 	var errOut, stdOut bytes.Buffer
 
 	Print(&errOut, &stdOut, Options{})

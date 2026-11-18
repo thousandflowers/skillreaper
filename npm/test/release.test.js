@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  binaryHome,
+  downloadTo,
   checksumForAsset,
   checksumsDownloadUrl,
   isSourceCheckout,
@@ -84,6 +86,61 @@ test("checksum verification rejects mismatched archives", async () => {
       /checksum mismatch/
     );
   } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the binary lives next to the package when it can, else in the user's cache", () => {
+  const base = { packageDir: "/pkg/bin", version: "0.9.0", home: "/home/me", env: {}, platformName: "linux" };
+  assert.equal(binaryHome({ ...base, writable: () => true }), "/pkg/bin");
+  assert.equal(binaryHome({ ...base, writable: () => false }), join("/home/me", ".cache", "skillreaper", "0.9.0"));
+  assert.equal(
+    binaryHome({ ...base, writable: () => false, env: { XDG_CACHE_HOME: "/xdg" } }),
+    join("/xdg", "skillreaper", "0.9.0"),
+  );
+  assert.equal(
+    binaryHome({ ...base, platformName: "win32", writable: () => false, env: { LOCALAPPDATA: "C:\\Local" } }),
+    join("C:\\Local", "skillreaper", "0.9.0"),
+  );
+  assert.equal(binaryHome({ ...base, platformName: "win32", writable: () => false }), join("/home/me", ".cache", "skillreaper", "0.9.0"));
+  // a source checkout fetches "latest": a cache keyed on it would never move on
+  assert.equal(binaryHome({ ...base, version: "0.0.0", writable: () => false }), "/pkg/bin");
+});
+
+// A local server that sends n chunks, one every gapMs, then maybe stops sending.
+async function slowServer(n, gapMs, stallAfter = Infinity) {
+  const { createServer } = await import("node:http");
+  const server = createServer(async (_req, res) => {
+    res.writeHead(200, { "content-type": "application/octet-stream" });
+    for (let i = 0; i < n; i++) {
+      if (i === stallAfter) return; // keep the socket open, send nothing more
+      res.write("x".repeat(1024));
+      await new Promise((r) => setTimeout(r, gapMs));
+    }
+    res.end();
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  return { url: `http://127.0.0.1:${server.address().port}/asset`, close: () => server.closeAllConnections() || server.close() };
+}
+
+test("a slow download that keeps arriving is not cut off", async () => {
+  const srv = await slowServer(12, 50); // ~600 ms in all, far over the 200 ms limits below
+  const dir = await mkdtemp(join(tmpdir(), "skillreaper-npm-"));
+  try {
+    await downloadTo(srv.url, join(dir, "asset"), { headerMs: 200, idleMs: 200 });
+  } finally {
+    srv.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a download that stops arriving gives up with a reason", async () => {
+  const srv = await slowServer(12, 10, 2);
+  const dir = await mkdtemp(join(tmpdir(), "skillreaper-npm-"));
+  try {
+    await assert.rejects(downloadTo(srv.url, join(dir, "asset"), { headerMs: 200, idleMs: 200 }), /stalled/);
+  } finally {
+    srv.close();
     await rm(dir, { recursive: true, force: true });
   }
 });

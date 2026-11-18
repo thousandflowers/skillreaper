@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/thousandflowers/skillreaper/internal/clock"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/usage"
 )
@@ -55,7 +56,7 @@ func crowdedReport() *Report {
 // regardless of what shared the line. Nothing may now be wider than the
 // measure it was given, at any measure.
 func TestTextReportNeverExceedsMeasure(t *testing.T) {
-	for _, width := range []int{60, 72, 80, 96, 100, 120, 200} {
+	for _, width := range []int{40, 50, 60, 72, 80, 96, 100, 120, 200} {
 		t.Run(strconv.Itoa(width), func(t *testing.T) {
 			t.Setenv("COLUMNS", strconv.Itoa(width))
 			// Below minWidth the report holds at its floor rather than
@@ -116,7 +117,7 @@ func everyTextView() []struct {
 					dead = append(dead, row)
 				}
 			}
-			RenderSourceTotals(w, SourceTotals(dead), len(dead), func(n int) string { return humanNum(n) })
+			RenderSourceTotals(w, SourceTotals(dead), len(dead))
 		}},
 	}
 }
@@ -323,8 +324,8 @@ func TestHumanNumGroupsThousands(t *testing.T) {
 		in   int
 		want string
 	}{{0, "0"}, {999, "999"}, {1000, "1,000"}, {19755, "19,755"}, {-4200, "-4,200"}} {
-		if got := humanNum(c.in); got != c.want {
-			t.Errorf("humanNum(%d) = %q, want %q", c.in, got, c.want)
+		if got := HumanNum(c.in); got != c.want {
+			t.Errorf("HumanNum(%d) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -333,13 +334,13 @@ func TestAgeAnswersStalenessNotDate(t *testing.T) {
 	if got := age(time.Time{}); got != "never" {
 		t.Errorf("zero time = %q, want never", got)
 	}
-	if got := age(time.Now()); got != "today" {
+	if got := age(clock.Now()); got != "today" {
 		t.Errorf("now = %q, want today", got)
 	}
-	if got := age(time.Now().AddDate(0, 0, -8)); got != "8d" {
+	if got := age(clock.Now().AddDate(0, 0, -8)); got != "8d" {
 		t.Errorf("8 days ago = %q", got)
 	}
-	if got := age(time.Now().AddDate(0, 0, -400)); got != "13mo" {
+	if got := age(clock.Now().AddDate(0, 0, -400)); got != "13mo" {
 		t.Errorf("400 days ago = %q", got)
 	}
 }

@@ -38,6 +38,23 @@ const (
 	// ReasonClaudeMDRef holds an item at KEEP because its name is referenced
 	// in a CLAUDE.md file, so the user clearly relies on it.
 	ReasonClaudeMDRef = "claude-md-ref"
+	// ReasonMuted sets apart a skill the user muted: reap has no evidence on it.
+	ReasonMuted = "muted"
+	// ReasonHookLoaded holds a skill at KEEP because its plugin's SessionStart
+	// hook injects it: it is in use with no invocation on record.
+	ReasonHookLoaded = "hook-loaded"
+	// ReasonAgentLoaded holds a skill at KEEP because an agent names it under
+	// `skills:`: it is loaded into that agent whenever the agent starts.
+	ReasonAgentLoaded = "agent-loaded"
+	// ReasonMainAgent holds an agent at KEEP because settings.json runs the
+	// session itself as it.
+	ReasonMainAgent = "main-agent"
+	// ReasonSkillAgent holds an agent at KEEP because a skill names it under
+	// `agent:` and runs in it.
+	ReasonSkillAgent = "skill-agent"
+	// ReasonUsedElsewhere holds a skill at REVIEW because another tool that
+	// loads the same folder used it.
+	ReasonUsedElsewhere = "used-elsewhere"
 )
 
 // VerdictOpts configures the smart verdict logic.
@@ -77,14 +94,18 @@ type VerdictOpts struct {
 //
 // Logic (in order):
 //  1. Used → KEEP(used), or MUTE(heavy-rare) when heavy and rarely fired
-//  2. Invoked but only errored → REAP(broken)
 //  3. Tiny weight → KEEP(tiny)
 //  4. Installed within grace period → REVIEW(grace)
 //  5. No sessions → REVIEW(needs-data)
 //  6. Proportional minSessions if installed mid-window
 //  7. Not enough sessions → REVIEW(needs-data)
 //  8. Fired before the window, per the durable record → REVIEW(rare)
-//  9. Unused with enough evidence → REAP(unused)
+//  9. Invoked, and only ever errored, more than once → REAP(broken)
+//  10. Unused with enough evidence → REAP(unused)
+//
+// minErrorsForBroken is how many real failures it takes to call an item broken.
+const minErrorsForBroken = 2
+
 func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts) (string, string) {
 	// 1. Used — keep items that have been invoked, unless the item is heavy
 	//    and fires in too few sessions to justify the per-session weight.
@@ -95,12 +116,6 @@ func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts
 			return VerdictMute, ReasonHeavyRare
 		}
 		return VerdictKeep, ReasonUsed
-	}
-
-	// 2. Broken-cold — invoked but only ever errored. The error is concrete
-	//    evidence the item is dead weight, independent of session volume.
-	if opts.ErrorCount > 0 {
-		return VerdictReap, ReasonBroken
 	}
 
 	// 3. Tiny weight — negligible cost, not worth pruning
@@ -126,24 +141,8 @@ func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts
 	// 6. Proportional threshold
 	//    If item was installed mid-window, scale minSessions down
 	//    proportionally so newer items aren't unfairly REAP'd.
-	effectiveMinSessions := opts.MinSessions
-	if !installedAt.IsZero() {
-		windowStart := opts.Cutoff
-		daysSinceInstall := installedAt.Sub(windowStart).Hours() / 24
-		if daysSinceInstall > 0 && daysSinceInstall < float64(opts.WindowDays) {
-			ratio := daysSinceInstall / float64(opts.WindowDays)
-			scaled := int(float64(opts.MinSessions) * ratio)
-			if scaled < 1 {
-				scaled = 1
-			}
-			if scaled < effectiveMinSessions {
-				effectiveMinSessions = scaled
-			}
-		}
-	}
-
 	// 7. Not enough sessions for this item's age
-	if sessions < effectiveMinSessions {
+	if sessions < minSessionsFor(installedAt, opts.Cutoff, opts.MinSessions, opts.WindowDays) {
 		return VerdictReview, ReasonNeedsData
 	}
 
@@ -160,6 +159,32 @@ func Verdict(uses, sessions, tokens int, installedAt time.Time, opts VerdictOpts
 		return VerdictReview, ReasonRare
 	}
 
-	// 9. Unused with sufficient evidence → safe to reap
+	// 9. Broken — invoked and only ever failed, more than once. One failure can
+	//    be a bad day. It comes after the gates above because a new item, thin
+	//    evidence or a history of real use each outrank it.
+	if opts.ErrorCount >= minErrorsForBroken {
+		return VerdictReap, ReasonBroken
+	}
+
+	// 10. Unused with sufficient evidence → safe to reap
 	return VerdictReap, ReasonUnused
+}
+
+// minSessionsFor is the session count a verdict asks of an item: the minimum,
+// scaled down for one installed inside the window. The verdict and the hint of
+// `reap why` both read it, so the hint counts against what the verdict uses.
+func minSessionsFor(installedAt, windowStart time.Time, minSessions, windowDays int) int {
+	if installedAt.IsZero() {
+		return minSessions
+	}
+	// The part of the window the item was there for. It was the part before
+	// the install that scaled the bar: an item 29 days old needed one session
+	// and one 31 days old ten.
+	before := installedAt.Sub(windowStart).Hours() / 24
+	if before <= 0 || before >= float64(windowDays) {
+		return minSessions
+	}
+	existed := float64(windowDays) - before
+	scaled := max(1, int(float64(minSessions)*existed/float64(windowDays)))
+	return min(scaled, minSessions)
 }

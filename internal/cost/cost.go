@@ -6,6 +6,11 @@
 // tokenizer dependency.
 package cost
 
+import (
+	"regexp"
+	"strings"
+)
+
 // ModelPricing maps known model IDs to input price per million tokens.
 // When a provider releases a new model, just add its pricing here
 // instead of changing core logic.
@@ -48,10 +53,24 @@ const DefaultModel = "claude-sonnet-4-6"
 
 // LookupPrice returns the per-MTok input price for a model ID.
 // The second result is false when the model is unknown.
+// An id with a release date ("claude-haiku-4-5-20251001") names a snapshot of
+// the undated model, at its price.
 func LookupPrice(modelID string) (float64, bool) {
-	p, ok := ModelPricing[modelID]
+	if p, ok := ModelPricing[modelID]; ok {
+		return p, true
+	}
+	p, ok := ModelPricing[undated(modelID)]
 	return p, ok
 }
+
+// undated is a model id without what a transcript or a person may put after
+// it: a context window ("[1m]") and a release date.
+func undated(modelID string) string {
+	id, _, _ := strings.Cut(modelID, "[")
+	return datedSuffix.ReplaceAllString(id, "")
+}
+
+var datedSuffix = regexp.MustCompile(`-\d{8}$`)
 
 // CharsPerToken is the documented estimation ratio (x10 to stay integer).
 const charsPerTokenX10 = 37
@@ -87,6 +106,9 @@ func Tokens(chars int) int {
 func TokensFor(modelID string, chars int) int {
 	ratio, ok := TokenRatios[modelID]
 	if !ok {
+		ratio, ok = TokenRatios[undated(modelID)]
+	}
+	if !ok {
 		ratio = charsPerTokenX10
 	}
 	return tokensWithRatio(chars, ratio)
@@ -104,4 +126,22 @@ func tokensWithRatio(chars, ratioX10 int) int {
 // million input tokens.
 func MoneyPerMonth(tokensPerSession, sessionsPerMonth int, pricePerMTok float64) float64 {
 	return float64(tokensPerSession) * float64(sessionsPerMonth) * pricePerMTok / 1e6
+}
+
+// Blended is the input price for a mix of models, weighted by how often each was
+// used. Models with no known price are left out; without any known model there is
+// no price to give. A context-window suffix ("...[1m]") is not part of the id.
+func Blended(use map[string]int) (float64, bool) {
+	total, sum := 0, 0.0
+	for model, n := range use {
+		id, _, _ := strings.Cut(model, "[")
+		if p, ok := LookupPrice(id); ok && n > 0 {
+			total += n
+			sum += p * float64(n)
+		}
+	}
+	if total == 0 {
+		return 0, false
+	}
+	return sum / float64(total), true
 }

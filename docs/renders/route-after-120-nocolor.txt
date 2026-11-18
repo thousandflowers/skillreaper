@@ -15,7 +15,7 @@
      audit-invoice       4   12%  frequent
 
   ROUTED  loaded on demand · ~0 tok deferred
-     (none — every surviving skill fires often enough to stay exposed)
+     (none — every surviving skill is frequent or has no evidence yet)
 
   Net: ~0 tok/session moved out of resident context.
   A plan only — nothing is applied. Pair with reap mute to strip the descriptions of routed skills

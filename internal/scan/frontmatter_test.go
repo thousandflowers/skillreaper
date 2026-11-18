@@ -1,6 +1,10 @@
 package scan
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseFrontmatter(t *testing.T) {
 	src := []byte("---\nname: my-skill\ndescription: \"Does a thing\"\n---\nbody text here")
@@ -87,5 +91,49 @@ func TestParseFrontmatterUnknownEscapeFallsBack(t *testing.T) {
 	_, desc, _ := parseFrontmatter(src)
 	if desc != `C:\Users\me` {
 		t.Errorf("desc = %q, want the raw text back", desc)
+	}
+}
+
+// A description written as a YAML block or across lines is injected whole by
+// Claude Code, so it must be read whole: reading only the "description:" line
+// weighed a 400-character skill at the 1-2 characters of its indicator.
+func TestParseFrontmatterMultilineDescription(t *testing.T) {
+	cases := map[string]struct{ src, want string }{
+		"folded":             {"---\nname: a\ndescription: >\n  one two\n  three\n\n  four\nother: x\n---\nbody", "one two three\nfour\n"},
+		"literal":            {"---\ndescription: |\n  line one\n  line two\n---\n", "line one\nline two\n"},
+		"strip":              {"---\ndescription: >-\n  folded\n  text\n---\n", "folded text"},
+		"plain continued":    {"---\ndescription: starts here\n  and goes on\nname: a\n---\n", "starts here and goes on"},
+		"nested key ignored": {"---\ndescription: top\nmetadata:\n  description: nested\n---\n", "top"},
+		"single line":        {"---\ndescription: \"quoted: yes\"\n---\n", "quoted: yes"},
+	}
+	for name, c := range cases {
+		if _, got, _ := parseFrontmatter([]byte(c.src)); got != c.want {
+			t.Errorf("%s: description = %q, want %q", name, got, c.want)
+		}
+	}
+}
+
+// A skill with disable-model-invocation is only run by hand: Claude Code
+// leaves it out of the injected listing, so it weighs nothing per session.
+func TestScanSkillsManualOnlyWeighsNothing(t *testing.T) {
+	dir := t.TempDir()
+	for name, fm := range map[string]string{
+		"manual": "---\nname: manual\ndescription: a long description\ndisable-model-invocation: true\n---\nbody",
+		"auto":   "---\nname: auto\ndescription: a long description\n---\nbody",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, "skills", name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "skills", name, "SKILL.md"), []byte(fm), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, _ := ScanSkills(dir, "claude-code")
+	got := map[string]int{}
+	for _, it := range items {
+		got[it.Name] = it.DescChars
+	}
+	if got["manual"] != 0 || got["auto"] == 0 {
+		t.Errorf("DescChars = %v, want manual 0 and auto > 0", got)
 	}
 }

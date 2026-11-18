@@ -1,5 +1,13 @@
 # Launch Posts
 
+> Drafts from the first launch, kept for their wording. Their figures are
+> the June 2026 measurement of the author's own stack (187 items scanned,
+> 142 never used = 76%, 45 left, ~8,000 tokens a session). The README now
+> carries the 2026-08-23 one (382 loaded, 13 fired, ~19,755 dead tokens a
+> session): post with the newest measured numbers. reap does not measure
+> latency or wrong tool picks (README, roadmap #55), so the lines that
+> promise those need a source or have to go.
+
 ## Hacker News
 
 **Title**: Show HN: Reap – Find and prune unused AI agent skills from your transcripts
@@ -15,17 +23,17 @@ actually used, and quarantines the rest:
 
 ```
 brew install thousandflowers/tap/skillreaper
-reap         # see everything loaded + verdicts
-reap prune   # quarantine unused items (reversible)
+reap
+reap prune
 ```
 
-The output groups items by verdict (REAP -> REVIEW -> KEEP) with token weight
-bars, dead token costs, and monthly spend - all from your own transcript data.
+The output groups items by verdict (REAP -> REVIEW -> KEEP) with token
+weights, dead token costs, and monthly spend - all from your own transcript data.
 
-Nothing is ever deleted. `reap restore --all` undos everything.
+`reap prune` deletes nothing. `reap restore --all` undoes everything.
 
-100% local, zero deps, single binary. Supports Claude Code, OpenCode, Codex
-CLI, and Cursor. Written in Go.
+100% local, zero deps, single binary. Measures Claude Code, Codex CLI and
+OpenCode; inventories Cursor, Gemini CLI, Hermes and OpenClaw. Written in Go.
 
 https://github.com/thousandflowers/skillreaper
 
@@ -37,9 +45,9 @@ https://github.com/thousandflowers/skillreaper
 
 Your AI agent reads 187 skill descriptions every session.
 
-You use 4.
+You use 45.
 
-The other 183 are dead weight - consuming context, increasing latency,
+The other 142 are dead weight - consuming context, increasing latency,
 and causing wrong tool picks.
 
 I built `reap` to find and quarantine them.
@@ -56,7 +64,7 @@ How it works:
 2. `reap prune` - moves unused items to a quarantine folder
 3. `reap restore --all` - undos everything
 
-100% local. Zero config. Nothing is ever deleted.
+100% local. Zero config. `reap prune` deletes nothing.
 
 ---
 
@@ -74,7 +82,7 @@ First-token latency improves.
 
 **Post 4**:
 
-Supports Claude Code, OpenCode, Codex CLI, Cursor.
+Measures Claude Code, Codex CLI, OpenCode. Inventories Cursor, Gemini CLI, Hermes, OpenClaw.
 Homebrew, npm, Go install - take your pick.
 
 ```

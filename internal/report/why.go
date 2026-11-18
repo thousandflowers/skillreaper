@@ -1,9 +1,9 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"time"
 
@@ -20,10 +20,15 @@ type Explanation struct {
 	Summary      string `json:"summary"`
 
 	TokenWeight int `json:"token_weight"`
-	DescChars   int `json:"desc_chars"`
-	Sessions    int `json:"sessions"`
-	Uses        int `json:"uses"`
-	Errors      int `json:"errors"`
+	// WeightUnknown tells a weight that was never measured from zero.
+	WeightUnknown bool `json:"weight_unknown,omitempty"`
+	// ManualOnly is a skill that runs only by hand: its weight is known, and zero.
+	ManualOnly  bool `json:"manual_only,omitempty"`
+	DescChars   int  `json:"desc_chars"`
+	ListedChars int  `json:"listed_chars,omitempty"`
+	Sessions    int  `json:"sessions"`
+	Uses        int  `json:"uses"`
+	Errors      int  `json:"errors"`
 
 	LastSeen         string `json:"last_seen"`
 	LastAttempt      string `json:"last_attempt,omitempty"`
@@ -32,9 +37,11 @@ type Explanation struct {
 	GraceDays        int    `json:"grace_days"`
 	GraceExpired     bool   `json:"grace_expired"`
 
-	KeepList    bool   `json:"keep_list"`
-	ClaudeMD    bool   `json:"claude_md_referenced"`
-	ToolSurface string `json:"tool_surface"`
+	KeepList bool `json:"keep_list"`
+	ClaudeMD bool `json:"claude_md_referenced"`
+	// ClaudeMDPlain is a name that is in a CLAUDE.md only as a sentence's word.
+	ClaudeMDPlain bool   `json:"claude_md_plain_word,omitempty"`
+	ToolSurface   string `json:"tool_surface"`
 
 	// MUTE-specific (omitted from JSON when not applicable).
 	FiringRate    float64 `json:"firing_rate,omitempty"`
@@ -53,6 +60,7 @@ type ExplainInput struct {
 	WindowDays    int
 	Muted         bool // is this skill currently muted
 	ClaudeMDRef   bool // referenced in a CLAUDE.md
+	ClaudeMDPlain bool // in a CLAUDE.md only as a plain word, which protects nothing
 	Now           time.Time
 }
 
@@ -62,16 +70,22 @@ type ExplainInput struct {
 // namespaced key (so "plan" matches "ecc:plan").
 func MatchItems(r *Report, arg string) []Row {
 	cat, name := splitCategory(arg)
-	var out []Row
+	var whole, leaf []Row
 	for _, row := range r.Rows {
 		if cat != "" && string(row.Category) != cat {
 			continue
 		}
-		if rowMatchesName(row, name) {
-			out = append(out, row)
+		switch i := strings.LastIndexByte(row.Name, ':'); {
+		case row.Name == name, row.DiskName() == name: // as shown, or as it is on disk
+			whole = append(whole, row)
+		case i >= 0 && row.Name[i+1:] == name:
+			leaf = append(leaf, row)
 		}
 	}
-	return out
+	if len(whole) > 0 { // one item's whole name is not also the tail of another's
+		return whole
+	}
+	return leaf
 }
 
 func splitCategory(arg string) (cat, name string) {
@@ -85,16 +99,6 @@ func splitCategory(arg string) (cat, name string) {
 	return "", arg
 }
 
-func rowMatchesName(row Row, name string) bool {
-	if row.Name == name {
-		return true
-	}
-	if i := strings.LastIndexByte(row.Name, ':'); i >= 0 && row.Name[i+1:] == name {
-		return true
-	}
-	return false
-}
-
 // CanonicalName is the category:name key used as the explanation header and in
 // follow-up command suggestions.
 func CanonicalName(row Row) string {
@@ -104,23 +108,27 @@ func CanonicalName(row Row) string {
 // BuildExplanation assembles the full explanation for one row.
 func BuildExplanation(row Row, sessions int, in ExplainInput) Explanation {
 	e := Explanation{
-		Name:         CanonicalName(row),
-		Category:     string(row.Category),
-		Verdict:      row.Verdict,
-		Reason:       row.Reason,
-		VerdictLabel: verdictLabel(row),
-		Summary:      summaryFor(row),
-		TokenWeight:  row.Tokens,
-		DescChars:    row.DescChars,
-		Sessions:     sessions,
-		Uses:         row.Uses,
-		Errors:       row.ErrorCount,
-		LastSeen:     dateOrNever(row.LastUsed),
-		Installed:    dateOrUnknown(row.InstalledAt),
-		GraceDays:    in.GraceDays,
-		KeepList:     row.Kept,
-		ClaudeMD:     in.ClaudeMDRef,
-		ToolSurface:  permDisplay(row),
+		Name:          CanonicalName(row),
+		Category:      string(row.Category),
+		Verdict:       row.Verdict,
+		Reason:        row.Reason,
+		VerdictLabel:  verdictLabel(row),
+		Summary:       summaryFor(row),
+		TokenWeight:   row.Tokens,
+		WeightUnknown: row.WeightUnknown,
+		ManualOnly:    row.ManualOnly,
+		DescChars:     row.DescChars,
+		ListedChars:   row.ListedChars,
+		Sessions:      sessions,
+		Uses:          row.Uses,
+		Errors:        row.ErrorCount,
+		LastSeen:      lastSeen(row),
+		Installed:     dateOrUnknown(row.InstalledAt),
+		GraceDays:     in.GraceDays,
+		KeepList:      row.Kept,
+		ClaudeMD:      in.ClaudeMDRef,
+		ClaudeMDPlain: in.ClaudeMDPlain && !in.ClaudeMDRef,
+		ToolSurface:   permDisplay(row),
 	}
 
 	if !row.InstalledAt.IsZero() {
@@ -154,55 +162,120 @@ func summaryFor(row Row) string {
 	case ReasonUnused:
 		return "zero uses in the evidence window"
 	case ReasonBroken:
-		return fmt.Sprintf("invoked but only ever errored (%d error(s)) — broken, not merely cold", row.ErrorCount)
+		return fmt.Sprintf("invoked but only ever errored (%s) — broken, not merely cold", nOf(row.ErrorCount, "error"))
 	case ReasonUsed:
-		return fmt.Sprintf("used %d time(s) in the window", row.Uses)
+		return fmt.Sprintf("used %s in the window", nOf(row.Uses, "time"))
 	case ReasonHeavyRare:
 		return "used, but heavy and fired in too few sessions to justify the per-session weight"
 	case ReasonTiny:
 		return "token weight below the prune floor — negligible cost"
 	case ReasonGrace:
-		return "installed too recently — still inside the grace period"
+		return "new here (installed, added, restored or unmuted recently) — still inside the grace period"
 	case ReasonNeedsData:
 		return "not enough sessions yet to make a confident call"
+	case ReasonRare:
+		return "used before this window, on a longer cadence than it covers — held, not condemned"
 	case ReasonNoEvidence:
-		return "this platform's transcripts can't be parsed yet — no usage evidence"
+		switch {
+		case row.UnreadReader != "" && row.Uses > 0:
+			// This tool's sessions were read: what is missing is another's.
+			return "used here, and held all the same: " + row.EvidenceNote
+		case row.UnreadReader != "":
+			return "no use in this tool's sessions, but " + row.EvidenceNote
+		case row.EvidenceNote != "":
+			return "no usage evidence: " + row.EvidenceNote
+		}
+		return "no usage evidence for this platform"
 	case ReasonUserKeep:
 		return "manually protected via the keep-list"
 	case ReasonClaudeMDRef:
 		return "referenced in CLAUDE.md — protected from pruning"
+	case ReasonMuted:
+		return "you muted it, so it cannot fire on its own and its uses prove nothing"
+	case ReasonHookLoaded:
+		return "read into the session by a hook — in use without being invoked"
+	case ReasonAgentLoaded:
+		return "an agent names it under `skills:` and loads it when it starts — in use without being invoked"
+	case ReasonMainAgent:
+		return "settings.json runs the session itself as this agent — in use without being invoked"
+	case ReasonSkillAgent:
+		return "a skill names it under `agent:` and runs in it — in use whenever that skill is"
+	case ReasonUsedElsewhere:
+		return "another tool that loads this folder used it — Claude Code's sessions alone do not show it"
 	default:
+		if row.Reason == "" {
+			return "measured and reported, not judged"
+		}
 		return row.Reason
 	}
 }
 
 func recommendationFor(row Row, sessions int, in ExplainInput) string {
+	if row.PruneLost {
+		return "prune lost: you pruned it and a plugin update brought it back. run: reap prune " + scan.ShellArg(CanonicalName(row)) + " to take it again"
+	}
 	switch row.Verdict {
 	case VerdictReap:
+		if row.FolderLink {
+			// The link is the whole skills folder: reap prune refuses to take it.
+			return "unused, but its whole skills folder is a link to " + row.ViaLink + ": reap will not take that link. remove it by hand from " + row.Path
+		}
+		if row.ViaLink != "" {
+			return "unused, reached through a link to " + row.ViaLink + ". run: reap prune " + scan.ShellArg(CanonicalName(row)) + " takes the link and leaves that"
+		}
+		if row.Category == scan.CatSkill && !row.Removable && !IsPluginSource(row.Source) {
+			return "unused, in a shared folder other tools read. run: reap prune " + scan.ShellArg(CanonicalName(row)) + " takes it from them too"
+		}
+		if !row.Removable && !IsPluginSource(row.Source) {
+			return "unused, but reap cannot edit it. remove it by hand from " + row.Path
+		}
+		if !row.Removable {
+			return "unused, inside a plugin. disable it via /plugin, or run: reap prune " + scan.ShellArg(CanonicalName(row)) + " (an update can bring it back)"
+		}
 		if row.Reason == ReasonBroken {
 			return "broken — safe to prune. run: reap prune"
 		}
 		return "safe to prune. run: reap prune"
 	case VerdictMute:
-		return "run: reap mute " + CanonicalName(row)
+		switch {
+		case row.ViaLink != "":
+			// reap mute edits files in the folders it knows, and refuses this one.
+			return "heavy and rarely used, but reached through a link to " + row.ViaLink + ": reap mute does not edit files there. shorten its description by hand, or leave it"
+		case IsPluginSource(row.Source):
+			return "run: reap mute " + scan.ShellArg(CanonicalName(row)) + " (a plugin update can bring the description back)"
+		}
+		return "run: reap mute " + scan.ShellArg(CanonicalName(row))
 	case VerdictKeep:
 		return "kept — nothing to do"
 	case VerdictReview:
 		switch row.Reason {
 		case ReasonGrace:
-			left := in.GraceDays - in.daysSinceInstall(row)
-			if left < 0 {
-				left = 0
+			left := in.GraceDays
+			if !row.InstalledAt.IsZero() { // to the day the verdict lets go: a date in the future pushes it out
+				ends := row.InstalledAt.AddDate(0, 0, in.GraceDays)
+				left = max(0, int(math.Ceil(ends.Sub(in.Now).Hours()/24)))
 			}
-			return fmt.Sprintf("wait — %d day(s) left in the %d-day grace period", left, in.GraceDays)
+			return graceLeft(left, in.GraceDays)
 		case ReasonNoEvidence:
-			return "judge manually until this platform's transcripts are parseable"
+			if row.UnreadReader != "" {
+				return "judge it yourself: reap could not read " + row.UnreadReader + "'s history, where it may be in use"
+			}
+			return "judge it yourself: reap has no record of its use on this platform"
+		case ReasonUsedElsewhere:
+			return "used by another tool from this same folder, so reap will not condemn it. if you are sure, run: reap prune " + scan.ShellArg(CanonicalName(row))
+		case ReasonRare:
+			// More sessions change nothing here: it is held for a use on record.
+			return "used before this window, so reap will not condemn it. if you are sure, run: reap prune " + scan.ShellArg(CanonicalName(row))
 		default:
-			need := in.MinSessions - sessions
+			if !row.HistoricalLast.IsZero() {
+				// Enough sessions would only turn this into "held for a use on record".
+				return "used before this window, so reap will not condemn it. if you are sure, run: reap prune " + scan.ShellArg(CanonicalName(row))
+			}
+			need := minSessionsFor(row.InstalledAt, in.Now.AddDate(0, 0, -in.WindowDays), in.MinSessions, in.WindowDays) - sessions
 			if need < 1 {
 				need = 1
 			}
-			return fmt.Sprintf("collect ~%d more session(s) until the verdict stabilizes", need)
+			return fmt.Sprintf("collect ~%d more %s until the verdict stabilizes", need, Plural(need, "session"))
 		}
 	default:
 		return "report-only item — no verdict"
@@ -218,6 +291,20 @@ func (in ExplainInput) daysSinceInstall(row Row) int {
 		return 0
 	}
 	return d
+}
+
+// lastSeen is the most that is known of when an item last fired. Uses with no
+// date are not "never", and a use before the window has its date from history.
+func lastSeen(row Row) string {
+	switch {
+	case !row.LastUsed.IsZero():
+		return row.LastUsed.Format("2006-01-02")
+	case row.Uses > 0:
+		return "unknown (its events have no date)"
+	case !row.HistoricalLast.IsZero():
+		return row.HistoricalLast.Format("2006-01-02") + " (before this window)"
+	}
+	return "never"
 }
 
 func dateOrNever(t time.Time) string {
@@ -236,9 +323,12 @@ func dateOrUnknown(t time.Time) string {
 
 // RenderWhyJSON writes the explanation as indented JSON (never colored).
 func RenderWhyJSON(w io.Writer, e Explanation) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(e)
+	return WriteJSON(w, e)
+}
+
+// graceLeft is the advice for an item still inside its grace period.
+func graceLeft(left, graceDays int) string {
+	return fmt.Sprintf("wait — %s left in the %d-day grace period", nOf(left, "day"), graceDays)
 }
 
 // RenderWhy writes the human-readable explanation block. The verdict line is
@@ -254,37 +344,64 @@ func RenderWhy(w io.Writer, e Explanation, color bool) {
 	field("reason", e.Summary)
 
 	weight := "? (weight unknown)"
-	if e.DescChars > 0 || e.TokenWeight > 0 {
+	switch {
+	case e.ManualOnly:
+		weight = "0 tok  (runs only by hand: Claude Code does not load it)"
+	case e.Category == string(scan.CatMCP) && e.TokenWeight > 0:
+		weight = fmt.Sprintf("~%d tok  (tool names + instructions, last session that loaded it)", e.TokenWeight)
+	case e.Category == string(scan.CatMCP):
+		weight = "? (never seen loading in a session, so never measured)"
+	case e.ListedChars > 0 && e.ListedChars < e.DescChars:
+		weight = fmt.Sprintf("~%d tok  (%d of the description's %d chars, as the last session listed it)", e.TokenWeight, e.ListedChars, e.DescChars)
+	case e.Category == string(scan.CatProse): // a prose file has no description: all of it is loaded
+		weight = fmt.Sprintf("~%d tok  (the whole file: %d chars)", e.TokenWeight, e.DescChars)
+	case e.DescChars > 0 || e.TokenWeight > 0:
 		weight = fmt.Sprintf("~%d tok  (description: %d chars)", e.TokenWeight, e.DescChars)
 	}
 	field("token weight", weight)
-	field("sessions", fmt.Sprintf("%d total in window", e.Sessions))
-	field("uses", fmt.Sprintf("%d", e.Uses))
-
-	if e.Errors > 0 {
-		field("errors", fmt.Sprintf("%d", e.Errors))
-		field("last attempt", e.LastAttempt)
+	// A hook and always-loaded prose are not used or unused: no use lines,
+	// which read as "never used".
+	if e.Category != string(scan.CatHook) && e.Category != string(scan.CatProse) {
+		field("sessions", fmt.Sprintf("%d total in window", e.Sessions))
+		field("uses", fmt.Sprintf("%d", e.Uses))
+		if e.Errors > 0 {
+			field("errors", fmt.Sprintf("%d", e.Errors))
+			field("last attempt", e.LastAttempt)
+		}
+		field("last seen", e.LastSeen)
 	}
-	field("last seen", e.LastSeen)
 
 	if e.Installed != "unknown" {
-		field("installed", fmt.Sprintf("%s (%d days ago)", e.Installed, e.InstalledAgeDays))
+		field("installed", fmt.Sprintf("%s (%s ago)", e.Installed, nOf(e.InstalledAgeDays, "day")))
 		grace := "within grace period"
 		if e.GraceExpired {
 			grace = "grace period expired"
 		}
-		field("", fmt.Sprintf("%s (grace: %d days)", grace, e.GraceDays))
+		field("", fmt.Sprintf("%s (grace: %s)", grace, nOf(e.GraceDays, "day")))
 	} else {
 		field("installed", "unknown")
 	}
 
 	if e.Verdict == VerdictMute {
-		field("firing rate", fmt.Sprintf("%.0f%% (below %.0f%% threshold)",
+		field("uses/session", fmt.Sprintf("%.0f%% (below %.0f%% threshold)",
 			e.FiringRate*100, e.MuteThreshold*100))
 	}
 
 	field("keep-list", yesNo(e.KeepList))
-	field("claude-md", referencedStr(e.ClaudeMD))
+	switch {
+	case e.Category != string(scan.CatSkill):
+		// A name in CLAUDE.md protects a skill and nothing else: no line.
+	case e.ClaudeMDPlain:
+		name := strings.TrimPrefix(e.Name, e.Category+":") // a plain word: letters only
+		// The full key: an agent of the same name makes the bare one ambiguous.
+		keep := ", or run reap keep skill:" + name
+		if e.KeepList {
+			keep = "" // kept already
+		}
+		field("claude-md", fmt.Sprintf("in it as a plain word, which protects nothing: write it there as `%s` or /%s%s", name, name, keep))
+	default:
+		field("claude-md", referencedStr(e.ClaudeMD))
+	}
 	if e.Verdict == VerdictMute {
 		field("muted", yesNo(e.Muted))
 	}

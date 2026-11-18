@@ -7,17 +7,18 @@ description: Measure the loaded-versus-fired gap - what fraction of each categor
 Run `reap gap --agent`, then paste its output verbatim.
 
 Do not reformat, re-order, summarise, truncate or re-align anything, and do not
-add a heading or a table of your own: the binary already renders the report,
-including its closing attribution line.
+add a heading or a table of your own: the binary already renders the report.
+Paste all of it, to its last line: the attribution line, and any note that
+follows it.
 
 ## Arguments
 
-Append any `$ARGUMENTS` tokens that begin with `-`; ignore anything else and say
-so. `--days N` sets the evidence window (default 30).
+Append any `$ARGUMENTS` tokens that begin with `-`, each with the value that
+follows it (`--days 7`, `--model <id>`); ignore anything else and say so. `--days N` sets the evidence window (default 30).
 
 ## If reap is not installed
 
-Decide with `command -v reap` and nothing else - never an absolute path, never a
+Decide with `command -v reap || command -v skillreaper` and nothing else (use whichever name it finds) - never an absolute path, never a
 filesystem search: a copy found off `PATH` may be an older build, and silently
 using it hides a broken install.
 

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { arch, platform } from "node:os";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 const REPO_RELEASES = "https://github.com/thousandflowers/skillreaper/releases";
@@ -101,12 +102,47 @@ export async function verifySha256File(filePath, expectedHash) {
   }
 }
 
-async function fetchOk(url) {
-  const resp = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+// fetchOk waits at most headerMs for the answer to start. The time it then
+// takes to arrive is not bounded: a slow link is still a link. downloadTo
+// bounds the silence between chunks instead.
+async function fetchOk(url, headerMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(`no answer from ${url} in ${headerMs / 1000} s`)), headerMs);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText} (${url})`);
+    }
+    return { resp, controller };
+  } finally {
+    clearTimeout(timer);
   }
-  return resp;
+}
+
+// downloadTo saves url at destination, giving up only when nothing has
+// arrived for idleMs, however long the whole download takes.
+export async function downloadTo(url, destination, { headerMs = FETCH_TIMEOUT_MS, idleMs = FETCH_TIMEOUT_MS } = {}) {
+  const { resp, controller } = await fetchOk(url, headerMs);
+  if (!resp.body) {
+    throw new Error(`empty response body for ${basename(destination)}`);
+  }
+  let timer;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(new Error(`download stalled: nothing arrived for ${idleMs / 1000} s`)), idleMs);
+  };
+  arm();
+  const watch = new Transform({
+    transform(chunk, _encoding, done) {
+      arm();
+      done(null, chunk);
+    },
+  });
+  try {
+    await pipeline(resp.body, watch, createWriteStream(destination));
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function downloadVerifiedReleaseAsset({ version, assetName, destination }) {
@@ -120,14 +156,18 @@ export async function downloadVerifiedReleaseAsset({ version, assetName, destina
 
   // Checksums and asset come from the same release, so the hash check below
   // still guarantees integrity even when resolving "latest".
-  const checksumsResp = await fetchOk(checksumsUrl);
+  const { resp: checksumsResp } = await fetchOk(checksumsUrl);
   const expectedHash = checksumForAsset(await checksumsResp.text(), assetName);
-  const assetResp = await fetchOk(assetUrl);
-
-  if (!assetResp.body) {
-    throw new Error(`empty response body for ${assetName}`);
-  }
-
-  await pipeline(assetResp.body, createWriteStream(destination));
+  await downloadTo(assetUrl, destination);
   await verifySha256File(destination, expectedHash);
+}
+
+// binaryHome is the folder the binary is kept in: next to the package, or, when
+// that is not writable (a global install owned by root), the user's own cache.
+// A source checkout fetches "latest", and a cache keyed on that would never
+// move on, so it stays next to the package.
+export function binaryHome({ packageDir, version, home, env, platformName, writable }) {
+  if (writable(packageDir) || isSourceCheckout(version)) return packageDir;
+  const base = env.XDG_CACHE_HOME || (platformName === "win32" && env.LOCALAPPDATA) || join(home, ".cache");
+  return join(base, "skillreaper", version);
 }

@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -40,8 +41,71 @@ const (
 	sqliteColSep = "\x1f"
 )
 
+// sqliteCopyLimit bounds the private copy ParseSQLite makes of a database.
+const sqliteCopyLimit = 2 << 30
+
+// copySQLite copies a database and its -wal and -shm files, when present, to a
+// private temp folder. Querying the copy leaves the other tool's folder exactly
+// as it was, and it reads a cleanly closed WAL database the same with every
+// sqlite3 build: Apple's refuses one read-only with no -shm beside it, others
+// leave -shm and -wal behind. A write racing the copy can only fail the read.
+func copySQLite(path string) (copyPath string, cleanup func(), err error) {
+	dir, err := os.MkdirTemp("", "skillreaper-sqlite-")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup = func() { os.RemoveAll(dir) }
+	copyPath = filepath.Join(dir, filepath.Base(path))
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		info, serr := os.Stat(path + suffix)
+		if serr != nil && suffix != "" {
+			continue
+		}
+		if serr != nil || !info.Mode().IsRegular() || info.Size() > sqliteCopyLimit {
+			cleanup()
+			return "", nil, fmt.Errorf("%s cannot be copied for reading (over %d bytes, or not a regular file)", path+suffix, int64(sqliteCopyLimit))
+		}
+		if err := copyFile(path+suffix, copyPath+suffix); err != nil {
+			cleanup()
+			return "", nil, err
+		}
+	}
+	return copyPath, cleanup, nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
+// The two layouts OpenCode has used. Today's keeps one row per part in part, and
+// a session with no tool call is only visible in session.
+const (
+	sqliteLegacyQuery = "SELECT session_id, created_at, content FROM messages ORDER BY session_id, created_at;"
+	sqlitePartQuery   = `SELECT id, time_updated, '' FROM session WHERE parent_id IS NULL
+UNION ALL SELECT session_id, time_created, data FROM part WHERE data LIKE '%"tool"%'
+ORDER BY 1, 2;`
+)
+
+// sqliteHasTable asks the database whether it has a table.
+func sqliteHasTable(ctx context.Context, bin, path, table string) bool {
+	out, err := exec.CommandContext(ctx, bin, "-noheader", "-init", os.DevNull, path,
+		"SELECT 1 FROM sqlite_master WHERE type='table' AND name='"+table+"';").Output()
+	return err == nil && strings.TrimSpace(string(out)) == "1"
+}
+
 // ParseSQLite extracts skill/agent/MCP usage from an OpenCode SQLite database
-// by querying it with the sqlite3 CLI in read-only mode. The real engine is
+// by querying a private copy of it with the sqlite3 CLI. The real engine is
 // used on purpose: it reads WAL-mode databases and overflow pages correctly,
 // which a hand-rolled page parser would not.
 //
@@ -54,15 +118,24 @@ func ParseSQLite(path string, cutoff time.Time, windowDays int) (*Stats, error) 
 		return nil, ErrNoSQLite
 	}
 
+	dbCopy, cleanup, err := copySQLite(path)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
 	ctx, cancel := context.WithTimeout(context.Background(), sqliteTimeout)
 	defer cancel()
 
-	// -readonly: never lock or mutate a database OpenCode may have open.
+	parts := sqliteHasTable(ctx, bin, dbCopy, "part")
+	query := sqliteLegacyQuery
+	if parts {
+		query = sqlitePartQuery
+	}
 	// -init os.DevNull: skip ~/.sqliterc so a hostile init file cannot run shell
 	// commands or load extensions when we invoke the CLI.
-	query := "SELECT session_id, created_at, content FROM messages ORDER BY session_id, created_at;"
-	cmd := exec.CommandContext(ctx, bin, "-readonly", "-noheader", "-init", os.DevNull,
-		"-separator", sqliteColSep, "-newline", sqliteRowSep, path, query)
+	cmd := exec.CommandContext(ctx, bin, "-noheader", "-init", os.DevNull,
+		"-separator", sqliteColSep, "-newline", sqliteRowSep, dbCopy, query)
 	// Inherit the parent environment for platform runtime variables such as
 	// SystemRoot/TEMP/TMP; bin is already resolved and -init skips user config.
 
@@ -78,7 +151,17 @@ func ParseSQLite(path string, cutoff time.Time, windowDays int) (*Stats, error) 
 
 	st := NewStats(windowDays)
 	limitedStdout := &byteLimitReader{r: stdout, limit: sqliteOutputLimit}
-	sessionCount, scanErr := parseSQLiteRows(limitedStdout, st, cutoff)
+	var sessionCount int
+	var scanErr error
+	if parts {
+		// Skill and task tool names and every MCP tool name are from OpenCode's
+		// source, not seen in real data here: a fire is proof, no fire is not.
+		st.PositiveOnly = true
+		st.ToolSep = "_"
+		sessionCount, scanErr = scanSQLiteRows(limitedStdout, st, cutoff, partRow)
+	} else {
+		sessionCount, scanErr = parseSQLiteRows(limitedStdout, st, cutoff)
+	}
 	if scanErr != nil && cmd.Process != nil {
 		_ = cmd.Process.Kill()
 	}
@@ -129,17 +212,74 @@ func (r *byteLimitReader) Read(p []byte) (int, error) {
 }
 
 func parseSQLiteRows(r io.Reader, st *Stats, cutoff time.Time) (int, error) {
+	return scanSQLiteRows(r, st, cutoff, messageRow)
+}
+
+// sqliteRow turns one row's content into blocks, and says whether the row itself
+// marks a session.
+type sqliteRow func(content []byte, st *Stats, ts time.Time) (blocks []contentBlock, isSession bool)
+
+// messageRow reads the old layout: one row per message, content a block array.
+func messageRow(content []byte, _ *Stats, _ time.Time) ([]contentBlock, bool) {
+	var blocks []contentBlock
+	if json.Unmarshal(content, &blocks) != nil {
+		return nil, true // content that is not a block array (e.g. plain text)
+	}
+	return blocks, true
+}
+
+// partRow reads today's layout. An empty content is a session row. A tool part is
+// {"type":"tool","tool":name,"state":{"status":...,"input":...}}, confirmed
+// against a real database. MCP tools are named <server>_<tool>.
+func partRow(content []byte, st *Stats, ts time.Time) ([]contentBlock, bool) {
+	if len(bytes.TrimSpace(content)) == 0 {
+		return nil, true
+	}
+	var p struct {
+		Type  string `json:"type"`
+		Tool  string `json:"tool"`
+		State struct {
+			Status string `json:"status"`
+			Input  struct {
+				Name         string `json:"name"`
+				SubagentType string `json:"subagent_type"`
+			} `json:"input"`
+		} `json:"state"`
+	}
+	if json.Unmarshal(content, &p) != nil || p.Type != "tool" {
+		return nil, false
+	}
+	switch p.Tool {
+	case "skill":
+		if p.State.Status == "error" {
+			st.recordError(scan.CatSkill, skillKey(p.State.Input.Name), ts)
+		} else {
+			st.record(scan.CatSkill, skillKey(p.State.Input.Name), ts)
+		}
+	case "task":
+		st.record(scan.CatAgent, p.State.Input.SubagentType, ts)
+	default:
+		st.recordTool(scan.SafeText(p.Tool), ts)
+	}
+	return nil, false
+}
+
+func scanSQLiteRows(r io.Reader, st *Stats, cutoff time.Time, decode sqliteRow) (int, error) {
 	sessions := map[string]bool{}
 	pending := map[string]pendingSkill{}
-	mcpPending := map[string]string{}
+	mcpPending := map[string]pendingMCP{}
 	curSession := ""
 
-	// A Skill tool_use with no matching result is counted as a use; pending is
+	// A Skill or MCP tool_use with no matching result is counted as a use; pending is
 	// flushed when the session changes and again at the end.
 	flush := func() {
 		for id, ps := range pending {
 			st.record(scan.CatSkill, ps.key, ps.ts)
 			delete(pending, id)
+		}
+		for id, call := range mcpPending {
+			recordMCPCall(st, call.tool, call.ts)
+			delete(mcpPending, id)
 		}
 	}
 
@@ -178,11 +318,9 @@ func parseSQLiteRows(r io.Reader, st *Stats, cutoff time.Time) (int, error) {
 			flush()
 			curSession = session
 		}
-		sessions[session] = true
-
-		var blocks []contentBlock
-		if json.Unmarshal(content, &blocks) != nil {
-			continue // content that is not a block array (e.g. plain text)
+		blocks, isSession := decode(content, st, ts)
+		if isSession {
+			sessions[session] = true
 		}
 		// project "" — OpenCode messages carry no cwd to bucket by; used nil —
 		// no init block, so no dead-tool weight.

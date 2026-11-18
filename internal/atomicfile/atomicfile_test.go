@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestWriteCreatesWithContentAndPerm(t *testing.T) {
@@ -54,5 +55,22 @@ func TestWriteFailureKeepsOriginal(t *testing.T) {
 	os.Chmod(dir, 0o755)
 	if b, _ := os.ReadFile(p); string(b) != "original" {
 		t.Errorf("original file was clobbered: %q", b)
+	}
+}
+
+// The file arrives with its date: one given after the rename leaves a moment in
+// which a killed run has put new content in place under today's date.
+func TestWriteDatedPutsTheFileInPlaceWithItsDate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "f.md")
+	when := time.Date(2024, 1, 1, 0, 1, 0, 0, time.UTC)
+	if err := WriteDated(path, []byte("x"), 0o640, when); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(when) || info.Mode().Perm() != 0o640 {
+		t.Errorf("mtime %s, mode %v", info.ModTime(), info.Mode().Perm())
 	}
 }

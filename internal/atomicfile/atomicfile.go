@@ -6,14 +6,26 @@
 package atomicfile
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // Write writes data to path atomically with the given permissions. It also
 // fsyncs the file and its parent directory so the new entry survives a crash
 // rather than being held only in memory.
 func Write(path string, data []byte, perm os.FileMode) error {
+	return WriteDated(path, data, perm, time.Time{})
+}
+
+// WriteDated is Write for a file that keeps the date it had. A personal skill
+// is dated by its file, so a mute or an unmute that left today's date on it
+// would make a skill installed months ago read as new. The date goes on the
+// temporary file, before the rename: a run killed right after it leaves no new
+// content under today's date. A date that cannot be set is no reason to fail.
+// The zero time leaves the date to the system.
+func WriteDated(path string, data []byte, perm os.FileMode, mtime time.Time) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
 	if err != nil {
@@ -37,6 +49,9 @@ func Write(path string, data []byte, perm os.FileMode) error {
 	if err := os.Chmod(tmpName, perm); err != nil {
 		return err
 	}
+	if !mtime.IsZero() {
+		_ = os.Chtimes(tmpName, mtime, mtime)
+	}
 	if err := os.Rename(tmpName, path); err != nil {
 		return err
 	}
@@ -54,4 +69,35 @@ func syncDir(dir string) {
 	}
 	defer d.Close()
 	_ = d.Sync()
+}
+
+// LoadJSON decodes the JSON file at path into a T. A missing file is the zero
+// T, not an error: state files start out absent.
+func LoadJSON[T any](path string) (T, error) {
+	var v T
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return v, nil
+	}
+	if err == nil {
+		err = json.Unmarshal(b, &v)
+	}
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return v, nil
+}
+
+// SaveJSON writes v as indented JSON to path atomically, creating its
+// directory, readable by the owner only.
+func SaveJSON(path string, v any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return Write(path, b, 0o600)
 }

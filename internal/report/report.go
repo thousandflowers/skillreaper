@@ -3,15 +3,20 @@
 package report
 
 import (
+	"cmp"
 	"math"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/thousandflowers/skillreaper/internal/clock"
 	"github.com/thousandflowers/skillreaper/internal/cost"
+	"github.com/thousandflowers/skillreaper/internal/platform"
 	"github.com/thousandflowers/skillreaper/internal/scan"
 	"github.com/thousandflowers/skillreaper/internal/usage"
+	"slices"
 )
 
 // Opts tunes report generation.
@@ -34,8 +39,35 @@ type Opts struct {
 	// separates a rarely-used item from an abandoned one, a distinction the
 	// window alone cannot make. Nil disables the check and restores the
 	// previous behaviour exactly.
-	History func(category, name string) (uses int, last time.Time, ok bool)
-	// ClaudeMDLines holds the non-comment lines of every detected CLAUDE.md.
+	History func(platformID, category, name string) (uses int, last time.Time, ok bool)
+	// PerPlatform holds each platform's own stats. An item is judged only on the
+	// evidence of its own platform: a use in one tool says nothing about the copy
+	// installed in another. Nil judges everything against the merged stats.
+	PerPlatform map[string]*usage.Stats
+	// SkillFolderReaders names, for a platform, the other tools that also load
+	// its skills folder: a use there is a use of the same file.
+	SkillFolderReaders map[string][]string
+	// BlindReason says, per evidence-blind platform, why it has no evidence.
+	BlindReason map[string]string
+	// HistoryUnread holds the platforms whose history is there and could not
+	// be read (OpenCode's SQLite store without the sqlite3 CLI), with why. A
+	// skill in a folder such a tool loads too may be in use there, unseen.
+	HistoryUnread map[string]string
+	// ClaudeMDUnread says that a CLAUDE.md or rules file is there and could
+	// not be read: it may name any skill.
+	ClaudeMDUnread bool
+	// ProtectionUnread says why another file that tells what is at work
+	// (settings.json, an agent's file) could not be read; empty when all were.
+	ProtectionUnread string
+	// ProjectLoaded names the skills the agents and SessionStart hooks of the
+	// projects sessions ran in load, with the reason each is kept for.
+	ProjectLoaded map[string]string
+	// ProjectSkillAgents names, in lower case, the agents those projects'
+	// own skills run in (`agent:` in a skill's header).
+	ProjectSkillAgents map[string]bool
+	// RetentionDays is Claude Code's transcript retention, 0 when unknown.
+	RetentionDays int
+	// ClaudeMDLines holds the lines of every detected CLAUDE.md, headings included.
 	// A skill whose name appears here is held at KEEP(claude-md-ref).
 	ClaudeMDLines []string
 	// MuteThreshold / MuteMinTokens drive the MUTE verdict for skills: a used
@@ -43,13 +75,32 @@ type Opts struct {
 	// of sessions is a MUTE candidate. MuteThreshold == 0 disables MUTE.
 	MuteThreshold float64
 	MuteMinTokens int
+	// PriceBasis says what PricePerMTok rests on; empty when it was asked for.
+	PriceBasis string
+	// PrunedCopies maps paths to the manifest id of a copy in quarantine.
+	PrunedCopies map[string]string
+	// PlatformNames maps platform ids to display names, for machine readers.
+	PlatformNames map[string]string
+	// Muted holds the paths of the items whose description reap has stripped and
+	// that are still without one.
+	Muted map[string]bool
+	// MuteLost holds the paths of items reap muted that have a description again.
+	MuteLost map[string]bool
+	// PruneLost holds the plugin items in quarantine, by PruneLostKey.
+	PruneLost map[string]bool
+}
+
+// PruneLostKey says which item a quarantined plugin item is, wherever a new version
+// of the plugin puts it.
+func PruneLostKey(platform, category, source, name string) string {
+	return platform + "\x00" + category + "\x00" + source + "\x00" + name
 }
 
 // Row is one inventory item with its evidence and verdict.
 type Row struct {
 	scan.Item
 	Uses     int
-	LastUsed time.Time
+	LastUsed time.Time `json:",omitzero"` // absent for an item never used, not year 1
 	Verdict  string
 	Reason   string // why this verdict was assigned
 	Tokens   int    // estimated per-session weight
@@ -61,12 +112,61 @@ type Row struct {
 	// record declares them. Tokens stays 0 for these, and without this flag a
 	// reader takes that 0 for "free" instead of "never measured".
 	WeightUnknown bool
-	ErrorCount    int       // invocations that errored in the window
-	LastAttempt   time.Time // most recent attempt (success or error)
+	// ListedChars is how much of a skill's description the last session's
+	// listing carried, when that is what its weight was taken from.
+	ListedChars int       `json:",omitempty"`
+	ErrorCount  int       // invocations that errored in the window
+	LastAttempt time.Time `json:",omitzero"` // most recent attempt (success or error)
+	// EvidenceNote says why a platform has no usage evidence, for a no-transcript
+	// row. One text for every surface.
+	EvidenceNote string `json:",omitempty"`
+	// UnreadReader names the other tool that loads this item's folder and
+	// whose history could not be read, when that is why the item is held:
+	// this tool's own sessions were read, and may show uses.
+	UnreadReader string `json:",omitempty"`
+	// PrunedCopyID is the manifest id of a copy of this item in quarantine: it was
+	// pruned and is live again, reinstalled by hand or by an update.
+	PrunedCopyID string `json:",omitempty"`
+	// MuteLost marks a row reap muted whose description has come back, by a plugin
+	// update or an edit. It is a normal row with its full weight, and can be muted
+	// again; reap never does that by itself.
+	MuteLost bool `json:",omitempty"`
+	// PruneLost marks a plugin item reap pruned that an update brought back. It is
+	// a normal row, and can be pruned again; reap never does that by itself.
+	PruneLost bool `json:",omitempty"`
+	// HistoricalLast is when the durable record last saw it fire, for an item
+	// with no use in this window but one before it.
+	HistoricalLast time.Time `json:",omitzero"`
+	// RawName and RawSource are Name and Source as they are on disk, set only
+	// where cleaning them for the screen changed them. A config file is edited
+	// by the real name: the cleaned one names nothing there.
+	RawName   string `json:",omitempty"`
+	RawSource string `json:",omitempty"`
 }
+
+// DiskName is the name as it is on disk, for anything that acts on the item.
+func (r Row) DiskName() string { return cmp.Or(r.RawName, r.Name) }
+
+// DiskSource is the source as it is on disk, for anything that acts on the item.
+func (r Row) DiskSource() string { return cmp.Or(r.RawSource, r.Source) }
+
+// MuteSaving is what muting a row takes off each session. A muted item stays
+// installed and its name stays loaded, so the name's tokens are not saved.
+func MuteSaving(row Row) int {
+	kept := int(math.Ceil(float64(utf8.RuneCountInString(row.Name)) / nameCharsPerToken))
+	return max(row.Tokens-kept, 0)
+}
+
+// nameCharsPerToken is the estimate for a name, the same one the menu uses.
+const nameCharsPerToken = 3.7
 
 // Report is the full result of a scan.
 type Report struct {
+	// MemoryLines are the lines of the CLAUDE.md and rules files the verdicts
+	// were made on, for reap why to read the same ones.
+	MemoryLines []string `json:"-"`
+	// MutedCount is how many installed items the user has muted.
+	MutedCount  int
 	GeneratedAt time.Time
 	WindowDays  int
 	Sessions    int
@@ -94,8 +194,26 @@ type Report struct {
 	DeadToolChars        int // from init-based tool-declaration tracking
 	SessionsPerMonth     int
 	MoneyPerMonth        float64
-	Warnings             []scan.Warning
-	Gap                  *Gap
+	// Platforms maps the platform ids on the rows to their display names.
+	Platforms map[string]string `json:",omitempty"`
+	// PriceBasis says what the price rests on, when it was not asked for by hand.
+	PriceBasis string `json:",omitempty"`
+	// PricePerToken is the input price behind the money figures, in dollars per
+	// token, whether or not anything is dead. Absent when no price is known.
+	PricePerToken float64 `json:",omitempty"`
+	// MonthlyBasisDays is how many days of history SessionsPerMonth is scaled
+	// from. Below WindowDays, the monthly figures are an extrapolation.
+	MonthlyBasisDays int
+	// PlatformSessions is each platform's own session count, which is what an
+	// item's tokens are multiplied by.
+	PlatformSessions map[string]int `json:",omitempty"`
+	// PlatformSessionsPerMonth is the same, scaled to a month: the figure to
+	// multiply one row's tokens by.
+	PlatformSessionsPerMonth map[string]int `json:",omitempty"`
+	// ProjectPaths maps a project bucket to the real path its transcripts recorded.
+	ProjectPaths map[string]string `json:",omitempty"`
+	Warnings     []scan.Warning
+	Gap          *Gap
 	// SkillProjects maps a skill key to the projects that fired it (see
 	// usage.Stats.SkillProjects). Powers the by-project view.
 	SkillProjects map[string]map[string]int
@@ -108,8 +226,13 @@ type Report struct {
 // Build joins inventory items with usage stats and computes verdicts
 // and totals.
 func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) *Report {
+	agentLoaded, skillAgents := scan.AgentLoaded(items), scan.SkillAgents(items)
 	r := &Report{
+		MemoryLines:     opts.ClaudeMDLines,
 		GeneratedAt:     clock.Now(),
+		Platforms:       opts.PlatformNames,
+		PricePerToken:   opts.PricePerMTok / 1e6,
+		PriceBasis:      opts.PriceBasis,
 		WindowDays:      st.WindowDays,
 		Sessions:        st.Sessions,
 		Measured:        st.Measured,
@@ -119,29 +242,49 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 		OversizedLines:  st.OversizedLines,
 		UnparsableLines: st.UnparsableLines,
 		DeadToolChars:   st.DeadToolChars,
-		Warnings:        warns,
-	}
-	if st.WindowDays > 0 {
-		// Round rather than truncate, and never floor an active user to 0:
-		// a low-frequency user (e.g. 1 session in 31 days) still costs money.
-		r.SessionsPerMonth = int(math.Round(float64(st.Sessions) * 30 / float64(st.WindowDays)))
-		if r.SessionsPerMonth == 0 && st.Sessions > 0 {
-			r.SessionsPerMonth = 1
-		}
+		Warnings:        cleanWarnings(warns),
+		ProjectPaths:    st.ProjectPaths,
 	}
 
 	items = append(items, synthesizeTranscriptOnlyMCP(items, st)...)
+	evidenceFor := evidenceByPlatform(items, st, opts)
+	tally := platformTally{dead: map[string]int{}, mute: map[string]int{}}
 
 	itemKey := func(it scan.Item) string {
 		return strings.ToLower(string(it.Category) + ":" + it.Name)
 	}
 
+	var lost []string
 	for _, it := range items {
-		row := Row{Item: it, Tokens: cost.TokensFor(opts.Model, it.DescChars)}
-		row.WeightUnknown = it.Category == scan.CatMCP || it.Category == scan.CatHook
+		if isSelf(it) {
+			continue
+		}
+		ev := evidenceFor(it.Platform)
+		row := Row{Item: cleanItem(it), Tokens: cost.TokensFor(opts.Model, it.DescChars), MuteLost: opts.MuteLost[it.Path], PruneLost: opts.PruneLost[PruneLostKey(it.Platform, string(it.Category), it.Source, it.Name)], PrunedCopyID: prunedCopy(opts.PrunedCopies, it)}
+		if row.Name != it.Name {
+			row.RawName = it.Name
+		}
+		if row.Source != it.Source {
+			row.RawSource = it.Source
+		}
+		row.WeightUnknown = it.Category == scan.CatHook
+		if it.Category == scan.CatMCP {
+			chars, ok := lookupMCPWeight(ev.raw, it)
+			row.Tokens, row.WeightUnknown = cost.TokensFor(opts.Model, chars), !ok
+		}
+		// Claude Code's listing keeps only some descriptions; what it injected
+		// is the weight. A skill it never listed keeps the SKILL.md estimate.
+		// The listing is from the last session, so it can predate a mute: the
+		// next injection cannot exceed what the file holds now.
+		if it.Category == scan.CatSkill && it.Platform == string(platform.ClaudeCode) {
+			if w, ok := ev.raw.SkillWeight[it.Name]; ok {
+				row.ListedChars = min(w.Chars, it.DescChars)
+				row.Tokens = cost.TokensFor(opts.Model, row.ListedChars)
+			}
+		}
 		switch it.Category {
 		case scan.CatSkill, scan.CatAgent, scan.CatMCP:
-			row.Uses, row.LastUsed = lookupUses(st, it)
+			row.Uses, row.LastUsed = lookupUses(ev.canon, it)
 			// A server known only from transcript evidence has no config entry
 			// to read, so absence of a call cannot be told apart from absence of
 			// the server. It is reported, never judged: no verdict path, so it
@@ -151,7 +294,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				r.Rows = append(r.Rows, row)
 				continue
 			}
-			row.ErrorCount, row.LastAttempt = lookupErrors(st, it)
+			row.ErrorCount, row.LastAttempt = lookupErrors(ev.canon, it)
 			vo := VerdictOpts{
 				MinSessions: opts.MinSessions,
 				GraceDays:   opts.GraceDays,
@@ -161,9 +304,9 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				ErrorCount:  row.ErrorCount,
 			}
 			if opts.History != nil {
-				if hUses, hLast, ok := opts.History(string(it.Category), it.Name); ok {
-					vo.HistoricalUses = hUses
-					vo.HistoricalLast = hLast
+				vo.HistoricalUses, vo.HistoricalLast = lookupHistory(opts.History, it)
+				if row.Uses == 0 && vo.HistoricalUses > 0 {
+					row.HistoricalLast = vo.HistoricalLast
 				}
 			}
 			// Only skills carry a strippable description, so MUTE applies to them.
@@ -172,7 +315,7 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				vo.MuteThreshold = opts.MuteThreshold
 				vo.MuteMinTokens = opts.MuteMinTokens
 			}
-			row.Verdict, row.Reason = Verdict(row.Uses, st.Sessions, row.Tokens, it.InstalledAt, vo)
+			row.Verdict, row.Reason = Verdict(row.Uses, ev.raw.Sessions, row.Tokens, it.InstalledAt, vo)
 			if opts.KeepSet != nil && opts.KeepSet[itemKey(it)] {
 				row.Verdict = VerdictKeep
 				row.Reason = ReasonUserKeep
@@ -183,17 +326,68 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 			// REAP or MUTE it out from under them.
 			if it.Category == scan.CatSkill &&
 				(row.Verdict == VerdictReap || row.Verdict == VerdictMute) &&
-				scan.ClaudeMDReferences(opts.ClaudeMDLines, it.Name) {
+				NamedInClaudeMD(opts.ClaudeMDLines, it) {
 				row.Verdict = VerdictKeep
 				row.Reason = ReasonClaudeMDRef
+			}
+			if it.HookLoaded && (row.Verdict == VerdictReap || row.Verdict == VerdictMute) {
+				row.Verdict = VerdictKeep
+				row.Reason = ReasonHookLoaded
+			}
+			// At work with no use of its own on record: a skill an agent names
+			// under `skills:`, the agent a skill runs in, the agent the session
+			// itself runs as. Named by any name the item goes by.
+			condemned := row.Verdict == VerdictReap || row.Verdict == VerdictMute
+			namedIn := func(names map[string]bool) bool {
+				return slices.ContainsFunc(evidenceKeys(it), func(key string) bool { return names[key] })
+			}
+			switch {
+			case !condemned:
+			case it.Category == scan.CatSkill && namedIn(agentLoaded[it.Platform]):
+				row.Verdict, row.Reason = VerdictKeep, ReasonAgentLoaded
+			case it.Category == scan.CatAgent && it.MainAgent:
+				row.Verdict, row.Reason = VerdictKeep, ReasonMainAgent
+			case it.Category == scan.CatAgent && (namedIn(skillAgents[it.Platform]) || namedIn(opts.ProjectSkillAgents)):
+				row.Verdict, row.Reason = VerdictKeep, ReasonSkillAgent
+			case it.Category == scan.CatSkill && !IsPluginSource(it.Source) && usedByAReader(opts, evidenceFor, it):
+				row.Verdict, row.Reason = VerdictReview, ReasonUsedElsewhere
+			case it.Category == scan.CatSkill && loadedByProject(opts, it) != "":
+				row.Verdict, row.Reason = VerdictKeep, loadedByProject(opts, it)
+			case (it.Category == scan.CatSkill || it.Category == scan.CatAgent) && opts.ProtectionUnread != "":
+				row.Verdict, row.Reason = VerdictReview, ReasonNoEvidence
+				row.EvidenceNote = opts.ProtectionUnread
+			case it.Category == scan.CatSkill && opts.ClaudeMDUnread:
+				row.Verdict, row.Reason = VerdictReview, ReasonNoEvidence
+				row.EvidenceNote = "a CLAUDE.md or rules file could not be read, and may name it"
+			case it.Category == scan.CatSkill && !IsPluginSource(it.Source) && unreadReader(opts, it) != "":
+				// No use seen is no use only where every tool that loads the
+				// folder was read: this one may call the skill daily.
+				row.Verdict, row.Reason = VerdictReview, ReasonNoEvidence
+				row.UnreadReader = unreadReader(opts, it)
+				row.EvidenceNote = row.UnreadReader + " loads this folder too, and " + opts.HistoryUnread[unreadReaderID(opts, it)]
+			}
+			// Muting removed the description that makes a skill fire, so its
+			// zero uses are the mute's doing and say nothing about the skill.
+			if opts.Muted[it.Path] {
+				row.Verdict = VerdictInfo
+				row.Reason = ReasonMuted
+				r.MutedCount++
 			}
 			// Absence of evidence is not evidence of absence: an item from a
 			// platform whose transcripts we could not parse (e.g. OpenCode's
 			// SQLite store) has no complete usage signal, so REAP or MUTE would
 			// be unsafe. Hold it at REVIEW and let the user decide.
-			if (row.Verdict == VerdictReap || row.Verdict == VerdictMute) && opts.EvidenceBlind[it.Platform] {
+			// On a history that proves use but not disuse, a use seen reads as used.
+			// MUTE needs a firing rate, which that history cannot give.
+			if ev.raw.PositiveOnly && row.Verdict == VerdictMute {
+				row.Verdict = VerdictKeep
+				row.Reason = ReasonUsed
+			}
+			if opts.EvidenceBlind[it.Platform] && (row.Verdict == VerdictReap || row.Verdict == VerdictMute ||
+				(row.Verdict == VerdictReview && row.Reason == ReasonNeedsData)) {
 				row.Verdict = VerdictReview
 				row.Reason = ReasonNoEvidence
+				row.EvidenceNote = opts.BlindReason[it.Platform]
 			}
 		default:
 			row.Verdict = VerdictInfo
@@ -207,14 +401,24 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 				r.DeadUnknownWeight++
 			}
 			r.DeadTokensPerSession += row.Tokens
+			tally.dead[it.Platform] += row.Tokens
 		case VerdictMute:
 			r.MuteCount++
-			r.MuteTokensPerSession += row.Tokens
+			r.MuteTokensPerSession += MuteSaving(row)
+			tally.mute[it.Platform] += MuteSaving(row)
 		}
 		r.Rows = append(r.Rows, row)
+		if row.PruneLost {
+			lost = append(lost, row.Name)
+		}
+	}
+	if len(lost) > 0 {
+		r.Warnings = append(r.Warnings, scan.Warning{Advisory: true, Path: "prune lost", Msg: "a plugin update brought back " + strings.Join(lost, ", ") + ", which you pruned: reap prune <name> takes it again"})
 	}
 
-	r.MoneyPerMonth = cost.MoneyPerMonth(r.DeadTokensPerSession, r.SessionsPerMonth, opts.PricePerMTok)
+	applyMonthlyFigures(r, st, tally, opts, func(tokens, perMonth int) float64 {
+		return cost.MoneyPerMonth(tokens, perMonth, opts.PricePerMTok)
+	})
 	r.SkillProjects = st.SkillProjects
 	r.MCPPayload = computePayload(st)
 	sortRows(r.Rows)
@@ -233,25 +437,37 @@ func Build(items []scan.Item, st *usage.Stats, warns []scan.Warning, opts Opts) 
 // item is not possible. This inflates both rows symmetrically and only in the
 // rare collision case.
 func lookupUses(st *usage.Stats, it scan.Item) (int, time.Time) {
-	uses := st.Uses[it.Category][it.Name]
-	last := st.Last[it.Category][it.Name]
-	for _, alias := range aliasKeys(it) {
-		uses += st.Uses[it.Category][alias]
-		if t := st.Last[it.Category][alias]; t.After(last) {
+	uses := 0
+	var last time.Time
+	for _, key := range evidenceKeys(it) {
+		uses += st.Uses[it.Category][key]
+		if t := st.Last[it.Category][key]; t.After(last) {
 			last = t
 		}
 	}
 	return uses, last
 }
 
+// lookupMCPWeight is the server's latest injected weight in chars, under its
+// own name or its plugin alias. False when no session recorded loading it.
+func lookupMCPWeight(st *usage.Stats, it scan.Item) (int, bool) {
+	var best usage.Injected
+	for _, key := range rawKeys(it) {
+		if w, ok := st.MCPWeight[key]; ok && w.At.After(best.At) {
+			best = w
+		}
+	}
+	return best.Chars, best.Chars > 0
+}
+
 // lookupErrors mirrors lookupUses for errored invocations, folding the same
 // aliases into one total.
 func lookupErrors(st *usage.Stats, it scan.Item) (int, time.Time) {
-	errs := st.Errors[it.Category][it.Name]
-	last := st.LastAttempt[it.Category][it.Name]
-	for _, alias := range aliasKeys(it) {
-		errs += st.Errors[it.Category][alias]
-		if t := st.LastAttempt[it.Category][alias]; t.After(last) {
+	errs := 0
+	var last time.Time
+	for _, key := range evidenceKeys(it) {
+		errs += st.Errors[it.Category][key]
+		if t := st.LastAttempt[it.Category][key]; t.After(last) {
 			last = t
 		}
 	}
@@ -282,9 +498,13 @@ func synthesizeTranscriptOnlyMCP(items []scan.Item, st *usage.Stats) []scan.Item
 		if it.Category != scan.CatMCP {
 			continue
 		}
-		known[it.Name] = true
-		for _, alias := range aliasKeys(it) {
-			known[alias] = true
+		for _, key := range rawKeys(it) {
+			known[key] = true
+			// A server named a__b fires as mcp__a__b__tool, which the parser first
+			// reads as a server "a". That is this row's use, not another server.
+			// The same for one whose name ends in "_": under_ fires as
+			// mcp__under___tool, read as "under".
+			known[usage.CreditedServer(key+usage.ToolSepDefault+"x")] = true
 		}
 	}
 
@@ -321,18 +541,50 @@ func synthesizeTranscriptOnlyMCP(items []scan.Item, st *usage.Stats) []scan.Item
 // the recorded key on purpose: "plugin_ecc_sequential-thinking" cannot be split
 // into plugin and server by scanning for a separator, because either half may
 // itself contain one.
+//
+// Skills and agents also fire under a frontmatter name that differs from the
+// folder or file name. An mcp key takes the form tool names carry, where any
+// character outside [A-Za-z0-9_-] is "_".
 func aliasKeys(it scan.Item) []string {
 	switch it.Category {
-	case scan.CatSkill:
+	case scan.CatSkill, scan.CatAgent:
+		var keys []string
+		prefix, bare := "", it.Name
 		if i := strings.LastIndexByte(it.Name, ':'); i >= 0 {
-			return []string{it.Name[i+1:]}
+			prefix, bare = it.Name[:i+1], it.Name[i+1:]
+			keys = append(keys, bare)
 		}
+		if fm := it.FrontmatterName; fm != "" {
+			keys = append(keys, prefix+fm, fm)
+		}
+		return keys
 	case scan.CatMCP:
+		keys := []string{usage.MCPServerKey(it.Name)}
 		if p, ok := sourcePluginName(it.Source); ok {
-			return []string{"plugin_" + p + "_" + it.Name}
+			keys = append(keys, "plugin_"+usage.MCPServerKey(p)+"_"+usage.MCPServerKey(it.Name))
 		}
+		return keys
 	}
 	return nil
+}
+
+// cleanItem makes an item's text safe to print. Path stays as it is on disk,
+// because prune and mute need it. Everything printed takes the clean copy.
+func cleanItem(it scan.Item) scan.Item {
+	it.Name = scan.SafeText(it.Name)
+	it.Source = scan.SafeText(it.Source)
+	it.Description = scan.SafeText(it.Description)
+	it.FrontmatterName = scan.SafeText(it.FrontmatterName)
+	return it
+}
+
+func cleanWarnings(warns []scan.Warning) []scan.Warning {
+	out := make([]scan.Warning, len(warns))
+	for i, w := range warns {
+		w.Path, w.Msg = scan.SafeText(w.Path), scan.SafeText(w.Msg)
+		out[i] = w
+	}
+	return out
 }
 
 // sourcePluginName extracts "ecc" from a scan Source of "plugin:ecc@ecc".
@@ -342,10 +594,7 @@ func sourcePluginName(source string) (string, bool) {
 	if !strings.HasPrefix(source, prefix) {
 		return "", false
 	}
-	full := source[len(prefix):]
-	if i := strings.IndexByte(full, '@'); i >= 0 {
-		full = full[:i]
-	}
+	full, _, _ := strings.Cut(source[len(prefix):], "@")
 	return full, full != ""
 }
 
@@ -388,4 +637,126 @@ func surfaceRank(s int) int {
 		return 1 << 30
 	}
 	return s
+}
+
+// selfName is this tool's own name as a skill, plugin or server.
+const selfName = "skillreaper"
+
+// isSelf reports an item that is this tool. It is never offered for removal, by
+// any surface: the tool must not list itself as waste or take itself away.
+func isSelf(it scan.Item) bool {
+	lead, _, _ := strings.Cut(it.Name, ":")
+	plugin, _, _ := strings.Cut(strings.TrimPrefix(it.Source, "plugin:"), "@")
+	return lead == selfName || (IsPluginSource(it.Source) && plugin == selfName)
+}
+
+// prunedCopy finds a quarantined copy of an item. A skill is pruned as its folder.
+func prunedCopy(copies map[string]string, it scan.Item) string {
+	if id, ok := copies[it.Path]; ok {
+		return id
+	}
+	return copies[filepath.Dir(it.Path)]
+}
+
+// MuteEligible says whether a bulk reap mute takes this row.
+func MuteEligible(row Row) bool {
+	// Not a skill that runs only by hand: its description is in no context,
+	// so a mute saves nothing and takes the text its slash menu shows.
+	// Nor an item whose mute would save nothing: a description that is empty,
+	// or no longer than the name that stays.
+	// Nor a skill that is a link into the folder other tools read too: the
+	// file a mute edits is theirs as well. By name it can be muted, and says so.
+	return row.Path != "" && MuteSaving(row) > 0 && row.LinkTarget == "" &&
+		row.Removable && !row.ManualOnly &&
+		(row.Category == scan.CatSkill || row.Category == scan.CatAgent) &&
+		(row.Verdict == VerdictReap || row.Verdict == VerdictMute)
+}
+
+// SessionsOf is how many sessions an item of that platform is judged against:
+// its own platform's, as its verdict is, and every session when the platforms
+// were not counted apart.
+// SessionsPerMonthOf is the same, scaled to a month: what a row of that
+// platform is priced with.
+func (r *Report) SessionsPerMonthOf(platformID string) int {
+	if r.PlatformSessionsPerMonth == nil || platformID == "" {
+		return r.SessionsPerMonth
+	}
+	return r.PlatformSessionsPerMonth[platformID]
+}
+
+func (r *Report) SessionsOf(platformID string) int {
+	if len(r.PlatformSessions) == 0 || platformID == "" {
+		return r.Sessions
+	}
+	return r.PlatformSessions[platformID]
+}
+
+// claudeMDNames are the names a rules file can call a skill by: its folder's,
+// and the one in its header, which is the one it is invoked by.
+func claudeMDNames(it scan.Item) []string {
+	names := []string{it.Name}
+	if it.FrontmatterName != "" && it.FrontmatterName != it.Name {
+		names = append(names, it.FrontmatterName)
+		if prefix, _, isPlugin := strings.Cut(it.Name, ":"); isPlugin {
+			names = append(names, prefix+":"+it.FrontmatterName)
+		}
+	}
+	return names
+}
+
+// NamedInClaudeMD says whether the lines name the skill, by any name it has.
+func NamedInClaudeMD(lines []string, it scan.Item) bool {
+	return slices.ContainsFunc(claudeMDNames(it), func(name string) bool { return scan.ClaudeMDReferences(lines, name) })
+}
+
+// MentionedInClaudeMD says whether any of its names stands in the lines,
+// written as a name or not.
+func MentionedInClaudeMD(lines []string, it scan.Item) bool {
+	return slices.ContainsFunc(claudeMDNames(it), func(name string) bool { return scan.ClaudeMDMentions(lines, name) })
+}
+
+// loadedByProject is the reason a skill is kept for when a project's agent
+// or hook loads it, by any name it has; empty when none does. The names are
+// the ones a user's agent is matched by: a plugin's skill by its bare name
+// too, which was kept under a user's agent and REAP under a project's.
+func loadedByProject(opts Opts, it scan.Item) string {
+	keys := evidenceKeys(it)
+	for loaded, reason := range opts.ProjectLoaded {
+		if slices.Contains(keys, foldKey(loaded)) {
+			return reason
+		}
+	}
+	return ""
+}
+
+// unreadReaderID is another tool that loads this item's folder and whose
+// history could not be read; empty when every such tool was read.
+func unreadReaderID(opts Opts, it scan.Item) string {
+	for _, reader := range opts.SkillFolderReaders[it.Platform] {
+		if _, unread := opts.HistoryUnread[reader]; unread {
+			return reader
+		}
+	}
+	return ""
+}
+
+// unreadReader is that tool by the name it is shown under.
+func unreadReader(opts Opts, it scan.Item) string {
+	id := unreadReaderID(opts, it)
+	if name := opts.PlatformNames[id]; name != "" {
+		return name
+	}
+	return id
+}
+
+// usedByAReader says whether another tool that loads this item's folder used
+// it. OpenCode reads ~/.claude/skills: a skill there that only OpenCode calls
+// has no use in Claude Code's sessions, and is not dead.
+func usedByAReader(opts Opts, evidenceFor func(string) platformEvidence, it scan.Item) bool {
+	for _, reader := range opts.SkillFolderReaders[it.Platform] {
+		if uses, _ := lookupUses(evidenceFor(reader).canon, it); uses > 0 {
+			return true
+		}
+	}
+	return false
 }

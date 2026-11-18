@@ -20,10 +20,10 @@ func TestFormatting(t *testing.T) {
 	}
 	// Truncation, not rounding: the page must agree with what reap prints for
 	// the same run, and reap truncates.
-	if got, want := pct(11, 380), "2%"; got != want {
+	if got, want := report.PctOf(11, 380), "2%"; got != want {
 		t.Errorf("pct = %q, want %q", got, want)
 	}
-	if got, want := pct(1, 500), "<1%"; got != want {
+	if got, want := report.PctOf(1, 500), "<1%"; got != want {
 		t.Errorf("pct = %q, want %q", got, want)
 	}
 }

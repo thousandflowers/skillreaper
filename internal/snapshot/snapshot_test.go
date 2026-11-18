@@ -3,6 +3,7 @@ package snapshot
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func row(cat, name, verdict string, uses int) report.Row {
 }
 
 func rep(dead int, rows ...report.Row) *report.Report {
-	return &report.Report{Rows: rows, DeadTokensPerSession: dead}
+	return &report.Report{Rows: rows, DeadTokensPerSession: dead, GeneratedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)}
 }
 
 func TestCompareClassifiesEveryKindOfChange(t *testing.T) {
@@ -66,7 +67,7 @@ func TestCompareFlagsAnItemBackAfterAPrune(t *testing.T) {
 		row("skill", "reinstalled", "REAP", 0),
 		row("skill", "brand-new", "REAP", 0),
 	)
-	pruned := map[string]bool{"skill:reinstalled": true}
+	pruned := map[string]time.Time{prunedKey("", "skill", "reinstalled"): to.GeneratedAt.Add(-time.Hour)}
 
 	d := Compare(from, to, "a.json", "b.json", pruned)
 
@@ -92,11 +93,11 @@ func TestSaveListLoadRoundTrip(t *testing.T) {
 	claudeDir := t.TempDir()
 	r := rep(99, row("skill", "one", "REAP", 0))
 
-	first, err := Save(claudeDir, r, time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC))
+	first, err := Save(claudeDir, r, time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Save(claudeDir, r, time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)); err != nil {
+	if _, err := Save(claudeDir, r, time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC), nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -131,12 +132,9 @@ func TestLoadRejectsAFileThatIsNotASnapshot(t *testing.T) {
 }
 
 func TestRenderTextLeadsWithTheReturn(t *testing.T) {
-	d := Compare(
-		rep(0),
-		rep(0, row("skill", "reinstalled", "REAP", 0)),
-		"a.json", "b.json",
-		map[string]bool{"skill:reinstalled": true},
-	)
+	to := rep(0, row("skill", "reinstalled", "REAP", 0))
+	d := Compare(rep(0), to, "a.json", "b.json",
+		map[string]time.Time{prunedKey("", "skill", "reinstalled"): to.GeneratedAt.Add(-time.Hour)})
 	var buf bytes.Buffer
 	RenderText(&buf, d)
 
@@ -146,5 +144,110 @@ func TestRenderTextLeadsWithTheReturn(t *testing.T) {
 	}
 	if strings.Index(out, "back after a prune") > strings.Index(out, "dead tokens") {
 		t.Error("the return must come before the totals")
+	}
+}
+
+func TestCompareKeepsPlatformsApart(t *testing.T) {
+	on := func(platform string) report.Row {
+		r := row("skill", "foo", "KEEP", 1)
+		r.Platform = platform
+		return r
+	}
+	from := rep(0, on("claude-code"), on("codex"))
+	to := rep(0, on("codex"))
+	d := Compare(from, to, "a", "b", nil)
+	if len(d.Changes) != 1 || d.Changes[0].Kind != Disappeared || d.Changes[0].Platform != "claude-code" {
+		t.Fatalf("changes = %+v", d.Changes)
+	}
+	// Another platform's item with the name of a pruned one is not a return.
+	at := map[string]time.Time{prunedKey("claude-code", "skill", "foo"): to.GeneratedAt.Add(-time.Hour)}
+	back := Compare(rep(0), rep(0, on("codex")), "a", "b", at)
+	if len(back.Returned()) != 0 {
+		t.Errorf("false return: %+v", back.Changes)
+	}
+}
+
+func TestReturnNeedsAPruneBeforeTheLaterSnapshot(t *testing.T) {
+	to := rep(0, row("skill", "zed", "REAP", 0))
+	key := prunedKey("", "skill", "zed")
+	later := Compare(rep(0), to, "a", "b", map[string]time.Time{key: to.GeneratedAt.Add(time.Hour)})
+	if len(later.Returned()) != 0 {
+		t.Errorf("an item pruned after the snapshot called a return: %+v", later.Changes)
+	}
+	earlier := Compare(rep(0), to, "a", "b", map[string]time.Time{key: to.GeneratedAt.Add(-time.Hour)})
+	if len(earlier.Returned()) != 1 {
+		t.Errorf("a real return missed: %+v", earlier.Changes)
+	}
+}
+
+func TestChangesIsNeverNull(t *testing.T) {
+	if d := Compare(rep(0), rep(0), "a", "b", nil); d.Changes == nil {
+		t.Error("Changes is nil")
+	}
+}
+
+func TestSameSecondSnapshotsDoNotOverwrite(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	claude := filepath.Join(os.Getenv("HOME"), ".claude")
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	r := rep(0, row("skill", "a", "KEEP", 1))
+	r.GeneratedAt = now
+	first, err := Save(claude, r, now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Save(claude, r, now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, _ := List(claude)
+	if first == second || len(list) != 2 || list[0] != first || list[1] != second {
+		t.Fatalf("first=%s second=%s list=%v", first, second, list)
+	}
+}
+
+func TestLoadRefusesWhatIsNotASnapshot(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"empty object": `{}`,
+		"null":         `null`,
+		"package.json": `{"name":"my-pkg","version":"1.0.0"}`,
+		"null rows":    `{"GeneratedAt":"2026-01-01T00:00:00Z","Rows":null}`,
+		"negative":     `{"GeneratedAt":"2026-01-01T00:00:00Z","Rows":[],"DeadTokensPerSession":-5}`,
+		"newer":        `{"GeneratedAt":"2026-01-01T00:00:00Z","Rows":[],"SnapshotFormat":99}`,
+	} {
+		p := filepath.Join(dir, "x.json")
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(p); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}
+
+func TestNewestSkipsBadFutureAndStrayFiles(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	claude := filepath.Join(os.Getenv("HOME"), ".claude")
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	r := rep(0)
+	r.GeneratedAt = now
+	a, _ := Save(claude, r, now.Add(-2*time.Hour), nil)
+	b, _ := Save(claude, r, now.Add(-time.Hour), nil)
+	dir := Dir(claude)
+	for _, name := range []string{"2099-12-31T000000Z.json", "2026-01-02T030000Z_02.json", "zz-my-backup.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("{"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, skipped, err := Newest(claude, 2, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != a || got[1] != b {
+		t.Errorf("got %v, want %s %s; skipped %v", got, a, b, skipped)
+	}
+	if len(skipped) != 2 {
+		t.Errorf("skipped = %v", skipped)
 	}
 }

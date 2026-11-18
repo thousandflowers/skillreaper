@@ -1,18 +1,17 @@
 package snapshot
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
+
+	"github.com/thousandflowers/skillreaper/internal/report"
 )
 
 // RenderJSON writes the diff as JSON.
 func RenderJSON(w io.Writer, d Diff) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(d)
+	return report.WriteJSON(w, d)
 }
 
 func signed(n int) string {
@@ -32,10 +31,16 @@ func RenderText(w io.Writer, d Diff) {
 		strings.TrimSuffix(filepath.Base(d.FromPath), ".json"),
 		strings.TrimSuffix(filepath.Base(d.ToPath), ".json"))
 
+	for _, warning := range d.Warnings {
+		fmt.Fprintf(w, "  warning: %s\n", warning)
+	}
+	if len(d.Warnings) > 0 {
+		fmt.Fprintln(w)
+	}
 	if back := d.Returned(); len(back) > 0 {
-		fmt.Fprintf(w, "  !  %d %s back after a prune\n", len(back), plural(len(back), "item"))
+		fmt.Fprintf(w, "  !  %d %s back after a prune\n", len(back), report.Plural(len(back), "item"))
 		for _, c := range back {
-			fmt.Fprintf(w, "       %-6s %s\n", c.Category, c.Name)
+			fmt.Fprintf(w, "       %-6s %s  (%s)\n", c.Category, c.Name, c.Platform)
 		}
 		fmt.Fprintln(w)
 	}
@@ -61,8 +66,11 @@ func RenderText(w io.Writer, d Diff) {
 
 	fmt.Fprintf(w, "  dead tokens   %d → %d  (%s)\n",
 		d.DeadTokensFrom, d.DeadTokensTo, signed(d.DeadTokenDelta()))
-	fmt.Fprintf(w, "  utilization   %.0f%% → %.0f%%  (%d/%d → %d/%d fired)\n\n",
-		d.UtilizationFrom()*100, d.UtilizationTo()*100,
+	if d.MutedCount > 0 {
+		fmt.Fprintf(w, "  muted         %d %s · ~%d tok/session saved\n", d.MutedCount, report.Plural(d.MutedCount, "item"), d.MutedTokens)
+	}
+	fmt.Fprintf(w, "  utilization   %d%% → %d%%  (%d/%d → %d/%d fired)\n\n",
+		percent(d.FiredFrom, d.LoadedFrom), percent(d.FiredTo, d.LoadedTo),
 		d.FiredFrom, d.LoadedFrom, d.FiredTo, d.LoadedTo)
 }
 
@@ -72,14 +80,11 @@ func section(w io.Writer, title string, cs []Change, detail func(Change) string)
 	}
 	fmt.Fprintf(w, "  %s (%d)\n", title, len(cs))
 	for _, c := range cs {
-		fmt.Fprintf(w, "       %-6s %-28s %s\n", c.Category, c.Name, detail(c))
+		weight := ""
+		if c.Tokens > 0 {
+			weight = fmt.Sprintf("  ~%d tok", c.Tokens)
+		}
+		fmt.Fprintf(w, "       %-6s %-28s %s%s  (%s)\n", c.Category, c.Name, detail(c), weight, c.Platform)
 	}
 	fmt.Fprintln(w)
-}
-
-func plural(n int, word string) string {
-	if n == 1 {
-		return word
-	}
-	return word + "s"
 }

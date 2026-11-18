@@ -296,3 +296,130 @@ func TestShouldNudgeNever(t *testing.T) {
 		t.Error("ShouldNudge should block same-day repeat")
 	}
 }
+
+// Install and uninstall leave the file as it was: bytes, mode, and the fields
+// of other hooks this tool has no struct for.
+func TestInstallUninstallLeavesTheFileAsItWas(t *testing.T) {
+	docs := []string{
+		"{\n    \"z\": 1,\n    \"a\": \"x & y <z>\"\n}\n",
+		"{\n  \"hooks\": {\n    \"SessionStart\": [\n      {\n        \"matcher\": \"m\",\n        \"hooks\": [\n          {\"type\": \"command\", \"command\": \"a && b < c\", \"timeout\": 5}\n        ]\n      }\n    ],\n    \"Stop\": []\n  },\n  \"model\": \"m\"\n}\n",
+		"{\"hooks\":{\"Stop\":[]},\"b\":2}",
+		"{\n  \"env\": {\"ANTHROPIC_API_KEY\": \"k\"}\n}\n",
+	}
+	for _, mode := range []os.FileMode{0o600, 0o644} {
+		for _, doc := range docs {
+			settings := filepath.Join(t.TempDir(), "settings.json")
+			if err := os.WriteFile(settings, []byte(doc), mode); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Install(settings, Command("/bin/reap"), false); err != nil {
+				t.Fatal(err)
+			}
+			mid, _ := os.ReadFile(settings)
+			if !strings.Contains(string(mid), Marker) || strings.Contains(string(mid), `\u0026`) {
+				t.Errorf("after install: %s", mid)
+			}
+			if info, _ := os.Stat(settings); info.Mode().Perm() != mode {
+				t.Errorf("install changed mode %v to %v", mode, info.Mode().Perm())
+			}
+			if err := Uninstall(settings); err != nil {
+				t.Fatal(err)
+			}
+			if got, _ := os.ReadFile(settings); string(got) != doc {
+				t.Errorf("round trip:\n got %q\nwant %q", got, doc)
+			}
+			if info, _ := os.Stat(settings); info.Mode().Perm() != mode {
+				t.Errorf("uninstall changed mode %v to %v", mode, info.Mode().Perm())
+			}
+		}
+	}
+}
+
+func TestInstallCreatesWithDefaultMode(t *testing.T) {
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	if _, err := Install(settings, Command("/bin/reap"), false); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := os.Stat(settings); info.Mode().Perm() != 0o644 {
+		t.Errorf("mode = %v", info.Mode().Perm())
+	}
+}
+
+func TestInstallWritesThroughALink(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "dot", "s.json")
+	if err := os.MkdirAll(filepath.Dir(real), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := "{\n  \"a\": 1\n}\n"
+	if err := os.WriteFile(real, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "settings.json")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip(err)
+	}
+	if _, err := Install(link, Command("/bin/reap"), false); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := os.Lstat(link); info.Mode()&os.ModeSymlink == 0 {
+		t.Error("the link was replaced by a file")
+	}
+	if b, _ := os.ReadFile(real); !strings.Contains(string(b), Marker) {
+		t.Errorf("the target was not written: %s", b)
+	}
+	if err := Uninstall(link); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(real); string(b) != doc {
+		t.Errorf("got %q", b)
+	}
+}
+
+// A settings file whose SessionStart is not a list is refused with what is
+// wrong and where, not with the decoder's own words.
+func TestOddSessionStartIsNamedWithItsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"hooks":{"SessionStart":{"a":1}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := Installed(path, Command("/usr/local/bin/reap"), false)
+	if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "hooks.SessionStart is not a list") {
+		t.Errorf("install: %v", err)
+	}
+	if _, err := Uninstalled(path); err == nil || !strings.Contains(err.Error(), path) {
+		t.Errorf("uninstall: %v", err)
+	}
+}
+
+// "SessionStart": null is an empty list, as "hooks": null is an empty object.
+func TestInstallWhenSessionStartIsNull(t *testing.T) {
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(settings, []byte(`{"hooks":{"SessionStart":null,"Stop":[]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Install(settings, Command("/usr/local/bin/reap"), false); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(settings)
+	for _, want := range []string{Marker, `"Stop"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("settings missing %q: %s", want, b)
+		}
+	}
+}
+
+// A dry run says what a real run would: with settings.json a link that leads
+// nowhere, that is an error, not "would write".
+func TestInstallDryRunOnALinkThatLeadsNowhere(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.Symlink(filepath.Join(t.TempDir(), "missing.json"), path); err != nil {
+		t.Skip(err)
+	}
+
+	_, err := Install(path, Command("reap"), true)
+
+	if err == nil || !strings.Contains(err.Error(), "leads nowhere") {
+		t.Errorf("dry run: %v", err)
+	}
+}

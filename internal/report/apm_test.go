@@ -81,7 +81,9 @@ func TestBuildAPMDiffAddDropAndReviewProtection(t *testing.T) {
 		"removed-skill":   true, // declared, never fired here → drop
 		"coldreview":      true, // declared, maps to a REVIEW skill → protected
 	}
-	m := BuildAPM(apmReport(), apmCwd, lock, declared, "/tmp/apm.yml")
+	r := apmReport()
+	r.Rows = append(r.Rows, Row{Item: scan.Item{Category: scan.CatSkill, Name: "removed-skill"}, Verdict: VerdictKeep})
+	m := BuildAPM(r, apmCwd, lock, declared, "/tmp/apm.yml")
 
 	if !m.Diff {
 		t.Fatal("expected diff mode")
@@ -227,4 +229,19 @@ func depNames(deps []APMDep) []string {
 		out = append(out, d.Name)
 	}
 	return out
+}
+
+// A drop needs evidence: an item not in the inventory is unknown here, not cold,
+// and with no sessions nothing is.
+func TestBuildAPMDropNeedsEvidence(t *testing.T) {
+	declared := map[string]bool{"not-installed": true}
+	if m := BuildAPM(apmReport(), apmCwd, nil, declared, "/tmp/apm.yml"); len(m.Drop) != 0 {
+		t.Errorf("a skill that is not installed was suggested for dropping: %+v", m.Drop)
+	}
+	r := apmReport()
+	r.Sessions = 0
+	r.Rows = append(r.Rows, Row{Item: scan.Item{Category: scan.CatSkill, Name: "not-installed"}, Verdict: VerdictKeep})
+	if m := BuildAPM(r, apmCwd, nil, declared, "/tmp/apm.yml"); len(m.Drop) != 0 {
+		t.Errorf("a drop was suggested with zero sessions: %+v", m.Drop)
+	}
 }

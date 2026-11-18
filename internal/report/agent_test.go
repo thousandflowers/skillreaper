@@ -13,7 +13,7 @@ import (
 // deadRow builds a REAP row with the given name and token weight.
 func deadRow(name string, tokens int) Row {
 	return Row{
-		Item:    scan.Item{Category: scan.CatSkill, Name: name},
+		Item:    scan.Item{Category: scan.CatSkill, Name: name, Removable: true}, // a personal skill: reap prune takes it
 		Verdict: VerdictReap,
 		Reason:  ReasonUnused,
 		Tokens:  tokens,
@@ -69,8 +69,8 @@ func TestPlural(t *testing.T) {
 		n    int
 		want string
 	}{{0, "warnings"}, {1, "warning"}, {2, "warnings"}} {
-		if got := plural(c.n, "warning"); got != c.want {
-			t.Errorf("plural(%d) = %q, want %q", c.n, got, c.want)
+		if got := Plural(c.n, "warning"); got != c.want {
+			t.Errorf("Plural(%d) = %q, want %q", c.n, got, c.want)
 		}
 	}
 }
@@ -386,8 +386,31 @@ func TestPctOf(t *testing.T) {
 		{50, 100, "50%"},
 	}
 	for _, c := range cases {
-		if got := pctOf(c.part, c.whole); got != c.want {
-			t.Errorf("pctOf(%d, %d) = %q, want %q", c.part, c.whole, got, c.want)
+		if got := PctOf(c.part, c.whole); got != c.want {
+			t.Errorf("PctOf(%d, %d) = %q, want %q", c.part, c.whole, got, c.want)
 		}
+	}
+}
+
+// With no session in the window nothing was read, so a ratio of fired items is
+// no measurement: the agent views say n/a, as the report and the gap view do,
+// and never "0%", which reads as "all of it is unused".
+func TestAgentViewsWithNoSessionsGiveNoPercent(t *testing.T) {
+	r := agentFixture()
+	r.Sessions = 0
+	for name, out := range map[string]string{"RenderAgent": renderAgentString(r), "RenderGapAgent": renderGapAgentString(r)} {
+		if strings.Contains(out, "%") {
+			t.Errorf("%s gives a percent with no sessions:\n%s", name, out)
+		}
+		if !strings.Contains(out, "n/a utilization") {
+			t.Errorf("%s: want n/a utilization:\n%s", name, out)
+		}
+	}
+	gap := renderGapAgentString(r)
+	if !strings.Contains(gap, "no sessions in the last 30 days") {
+		t.Errorf("RenderGapAgent does not say why:\n%s", gap)
+	}
+	if strings.Contains(gap, "tool schemas") {
+		t.Errorf("RenderGapAgent explains n/a by tool schemas when it is the missing sessions:\n%s", gap)
 	}
 }

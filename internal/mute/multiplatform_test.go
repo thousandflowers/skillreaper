@@ -43,7 +43,7 @@ func TestMuteAcceptsAnotherPlatformRoot(t *testing.T) {
 		t.Error("the description was not stripped")
 	}
 
-	if err := Unmute(claudeDir, "some-skill"); err != nil {
+	if _, err := Unmute(claudeDir, "some-skill"); err != nil {
 		t.Fatalf("Unmute: %v", err)
 	}
 	restored, err := os.ReadFile(skill)

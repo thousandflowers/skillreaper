@@ -53,3 +53,10 @@ func Now() time.Time {
 	}
 	return pinned
 }
+
+// Pinned is the instant SOURCE_DATE_EPOCH pins the clock to, and whether it
+// does. A caller that can see the pin disagrees with its evidence says so.
+func Pinned() (time.Time, bool) {
+	Now()
+	return pinned, !pinned.IsZero()
+}

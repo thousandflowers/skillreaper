@@ -1,6 +1,6 @@
 # Regenerate every measured block in README.md from a generated sample stack, so
 # the page cannot drift from what reap actually prints, and so the blocks cannot
-# drift from each other: all three come from one run against one fixture.
+# drift from each other: all of them come from one run against one fixture.
 #
 # Idempotent by construction: each block between its two markers is replaced
 # wholesale, so running the target twice leaves README.md byte-identical.
@@ -30,8 +30,9 @@ readme-numbers:
 	dir="$$(mktemp -d)/hero-claude"; \
 	SOURCE_DATE_EPOCH="$$(docs/gif-helpers/hero-fixture.sh "$$dir")"; \
 	export SOURCE_DATE_EPOCH; \
+	SKILLREAPER_STATE_DIR="$$(mktemp -d)"; export SKILLREAPER_STATE_DIR; \
 	reap() { go run ./cmd/reap -claude-dir "$$dir" -claude-json "$$dir/.claude.json" \
-		-no-nudge -no-color "$$@"; }; \
+		-no-nudge -no-color -no-cache "$$@"; }; \
 	trim() { awk 'NF { seen = 1 } seen { buf[++n] = $$0 } \
 		END { while (n > 0 && buf[n] ~ /^[[:space:]]*$$/) n--; \
 		      for (i = 1; i <= n; i++) print buf[i] }'; }; \
@@ -51,9 +52,13 @@ readme-numbers:
 	{ cat docs/wordmark.txt; echo '$(SAMPLE_NOTE)'; echo; reap -agent | trim; } > "$$dir/numbers.txt"; \
 	reap gap | trim > "$$dir/gap.txt"; \
 	reap | grep utilization | trim > "$$dir/utilization.txt"; \
+	reap why import-timesheet | trim > "$$dir/why.txt"; \
+	reap share | trim > "$$dir/share.txt"; \
 	replace numbers "$$dir/numbers.txt"; \
 	replace gap "$$dir/gap.txt"; \
 	replace utilization "$$dir/utilization.txt"; \
+	replace why "$$dir/why.txt"; \
+	replace share "$$dir/share.txt"; \
 	echo "README.md: measured blocks regenerated"
 
 # MAINTAINER ONLY — do not run this unless the README's "measured on my own
@@ -139,6 +144,8 @@ renders-check:
 	for f in docs/renders/*-after-*.txt; do \
 		diff -u "$$f" "$$tmp/$$(basename "$$f")" || status=1; \
 	done; \
+	grep ' after ' docs/renders/summary.txt > "$$tmp/summary.committed"; \
+	grep ' after ' "$$tmp/summary.txt" | diff -u "$$tmp/summary.committed" - || status=1; \
 	if [ "$$status" -eq 0 ]; then \
 		echo "docs/renders: the after captures match the working tree binary"; \
 	else \

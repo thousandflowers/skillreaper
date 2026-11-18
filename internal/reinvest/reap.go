@@ -1,0 +1,117 @@
+package reinvest
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+const (
+	reapTimeout  = 10 * time.Minute // reap reads every transcript: seconds on a warm cache, never this long
+	verdictReap  = "REAP"
+	categoryMCP  = "mcp"
+	reapTailSize = 200
+)
+
+// reapFlags ask reap for its report as JSON, without the prompt it shows a person.
+var reapFlags = []string{"--json", "--no-nudge"}
+
+// reapState is what reap knows: installed skills, which ones fired, the REAP
+// pool and MCP weights.
+type reapState struct {
+	Installed []skill
+	Used      []skill
+	Reap      []skill
+	MCP       map[string]*int // by server name; nil when reap has not weighed it yet
+	Dead      int             // dead tokens per session
+}
+
+func skillFromRow(row *obj) skill {
+	s := skill{}
+	s.Name, _ = row.str("Name")
+	s.Called, _ = row.str("FrontmatterName")
+	s.Path, _ = row.str("Path")
+	s.Desc, _ = row.str("Description")
+	s.Tokens, _ = pyInt(row.val("Tokens"))
+	s.Uses, _ = pyInt(row.val("Uses"))
+	s.Verdict, _ = row.str("Verdict")
+	return s
+}
+
+// mutedPlainly says whether a mute of this skill is what the screen says and
+// no more: not a link into the folder other tools read too (the file edited
+// is theirs as well), not a skill reap mute refuses (a skills folder that is
+// a link, a link out of the folders reap edits: the swap failed, and was
+// offered again at every run), not a path that cannot be printed as it is
+// (the undo line would name another file).
+func mutedPlainly(row *obj, s skill) bool {
+	for _, key := range []string{"LinkTarget", "ViaLink", "FolderLink"} {
+		if truthy(row.val(key)) {
+			return false
+		}
+	}
+	return printable(s.Path) == s.Path
+}
+
+// parseReapState reads the output of `reap --json`.
+func parseReapState(output string) (reapState, error) {
+	v, err := parseJSON(output)
+	if err != nil {
+		return reapState{}, fmt.Errorf("`reap --json` did not answer with JSON: %w", err)
+	}
+	// A report has its rows, were it none ("Rows": null). Anything else is
+	// another version's answer or not a report: read as an empty stack, the
+	// run went on and checked a new skill against no installed one.
+	data, _ := v.(*obj)
+	rows, isReport := data.get("Rows")
+	if _, isList := rows.([]any); !isReport || (rows != nil && !isList) {
+		return reapState{}, errors.New("`reap --json` did not answer with a report (no \"Rows\" in it): is it this version's reap?")
+	}
+	state := reapState{MCP: map[string]*int{}}
+	state.Dead, _ = pyInt(data.val("DeadTokensPerSession"))
+	for _, raw := range data.list("Rows") {
+		row, _ := raw.(*obj)
+		name, named := row.str("Name")
+		if !named {
+			continue
+		}
+		switch row.val("Category") {
+		case kindSkill:
+			s := skillFromRow(row)
+			state.Installed = append(state.Installed, s)
+			if s.Uses > 0 {
+				state.Used = append(state.Used, s)
+			}
+			if s.Verdict == verdictReap && mutedPlainly(row, s) {
+				state.Reap = append(state.Reap, s)
+			}
+		case categoryMCP:
+			state.MCP[name] = nil
+			if !truthy(row.val("WeightUnknown")) {
+				tokens, _ := pyInt(row.val("Tokens"))
+				state.MCP[name] = intPtr(tokens)
+			}
+		}
+	}
+	return state, nil
+}
+
+// loadReapState asks the running reap for its report: weights and verdicts
+// come from there, so the numbers match the reap report.
+func (a *app) loadReapState() (reapState, error) {
+	reap, err := a.reapCommand()
+	if err != nil || len(reap) == 0 {
+		return reapState{}, fmt.Errorf("reinvest could not find the reap binary to ask (set %s to its path): %v", reapVariable, err)
+	}
+	res := a.runProcess(procSpec{argv: append(append([]string{}, reap...), reapFlags...), timeout: reapTimeout})
+	switch {
+	case res.timedOut:
+		return reapState{}, fmt.Errorf("`%s --json` gave no answer in %s", reap[0], reapTimeout)
+	case res.err != nil:
+		return reapState{}, fmt.Errorf("reinvest could not run reap (set %s to its path): %w", reapVariable, res.err)
+	}
+	if res.code != 0 { // a failed scan still prints JSON, with no rows: that is not an empty stack
+		return reapState{}, fmt.Errorf("`%s --json` exited %d: %s", reap[0], res.code, lastRunes(pyStrip(res.stderr), reapTailSize))
+	}
+	return parseReapState(res.stdout)
+}

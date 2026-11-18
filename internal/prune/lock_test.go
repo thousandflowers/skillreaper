@@ -2,7 +2,9 @@ package prune
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -84,4 +86,44 @@ func TestReleaseOnNilLockIsSafe(t *testing.T) {
 	var l *Lock
 	l.Release()
 	(&Lock{}).Release()
+}
+
+// A lock whose process has exited is not a running prune.
+func TestLockOfADeadProcessIsTakenOverAtOnce(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("true")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("no true command: %v", err)
+	}
+	path := filepath.Join(dir, ".reap-prune.lock")
+	body := fmt.Sprintf("pid %d at now\n", cmd.Process.Pid)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l, err := AcquireLock(dir)
+	if err != nil {
+		t.Fatalf("lock of a dead process must be taken over: %v", err)
+	}
+	l.Release()
+}
+
+// AcquireLockWait waits for a holder and gives up when told to.
+func TestAcquireLockWait(t *testing.T) {
+	dir := t.TempDir()
+	held, err := AcquireLock(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AcquireLockWait(dir, 30*time.Millisecond); !errors.Is(err, ErrLocked) {
+		t.Fatalf("err = %v, want ErrLocked", err)
+	}
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		held.Release()
+	}()
+	l, err := AcquireLockWait(dir, 5*time.Second)
+	if err != nil {
+		t.Fatalf("did not wait for the holder: %v", err)
+	}
+	l.Release()
 }

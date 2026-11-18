@@ -45,23 +45,37 @@ const MinStarCtaTokens = 200
 // RenderStarCta prints a single sober line asking for a GitHub star,
 // personalized with the saved-token figure. It must only be called when
 // the throttling and output-format gates have already passed.
-func RenderStarCta(w io.Writer, deadTokens int, color bool) {
+// saved is true after a prune, with what it moved: after a report nothing has
+// been saved yet, and the figure is what reap can save.
+func RenderStarCta(w io.Writer, tokens int, saved, color bool) {
 	paint := painter(color)
-	tokStr := fmt.Sprintf("%d", deadTokens)
-	if deadTokens >= 1000 {
-		tokStr = fmt.Sprintf("%.1fk", float64(deadTokens)/1000)
+	tokStr := fmt.Sprintf("%d", tokens)
+	if tokens >= 1000 {
+		tokStr = fmt.Sprintf("%.1fk", float64(tokens)/1000)
 	}
-	line := "⭐ reap saved you ~" + tokStr + " tok/session. If it helps: github.com/thousandflowers/skillreaper"
+	verb := "can save you"
+	if saved {
+		verb = "saved you"
+	}
+	line := "⭐ reap " + verb + " ~" + tokStr + " tok/session. If it helps: github.com/thousandflowers/skillreaper"
 	fmt.Fprintf(w, "\n  %s\n\n", paint(cDim, line))
 }
 
 // RenderValueFeedback prints a single line after a successful prune or mute
-// operation, showing real savings with a conservative annualised money estimate.
-func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, sessionsPerMonth int, price float64, color bool) {
+// operation, showing real savings with a conservative monthly money estimate.
+// tokensPerMonth is each moved row's tokens times the sessions a month of its
+// own tool: a tool with no session on record adds nothing to the money.
+func RenderValueFeedback(w io.Writer, verb string, items, unmeasured, tokensPerSession, tokensPerMonth int, price float64, color bool) {
 	if items == 0 {
 		return
 	}
 	paint := painter(color)
+	if unmeasured >= items {
+		// An MCP server's or a hook's weight was never measured: "~0" would
+		// be a number, and a wrong one.
+		fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ")+paint(cDim, fmt.Sprintf("%s %s · weight not measured", verb, nOf(items, "item"))))
+		return
+	}
 	tokStr := fmt.Sprintf("%d", tokensPerSession)
 	if tokensPerSession >= 1000 {
 		tokStr = fmt.Sprintf("%.1fk", float64(tokensPerSession)/1000)
@@ -74,15 +88,15 @@ func RenderValueFeedback(w io.Writer, verb string, items, tokensPerSession, sess
 	// destructive action, where it carries the most weight. Every other
 	// surface that shows money shows it per month; this one now agrees.
 	money := ""
-	if sessionsPerMonth > 0 && price > 0 {
-		mPerM := cost.MoneyPerMonth(tokensPerSession, sessionsPerMonth, price)
+	if tokensPerMonth > 0 && price > 0 {
+		mPerM := cost.MoneyPerMonth(tokensPerMonth, 1, price)
 		if mPerM < 0.01 {
 			money = " (< $0.01/month at your usage)"
 		} else {
 			money = fmt.Sprintf(" (≈$%.2f/month at your usage)", mPerM)
 		}
 	}
-	fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ")+paint(cDim, fmt.Sprintf("%s %d items · saving ~%s tok/session%s", verb, items, tokStr, money)))
+	fmt.Fprintf(w, "\n  %s\n", paint(cGreen, "✓ ")+paint(cDim, fmt.Sprintf("%s %d %s · saving %s~%s tok/session%s", verb, items, Plural(items, "item"), atLeast(unmeasured), tokStr, money)))
 }
 
 // RenderShareHint prints a single sober line pointing users at reap share.
@@ -104,57 +118,56 @@ func RenderFooter(w io.Writer, color bool) {
 	fmt.Fprintf(w, "  %s\n\n", paint(cDim, "⟡ skillreaper · github.com/thousandflowers/skillreaper"))
 }
 
-// RenderShareText prints a ready-to-paste share message for team channels.
-func RenderShareText(w io.Writer, tokensPerSession int) {
-	line := shareMessage(tokensPerSession)
-	fmt.Fprintln(w, line)
+// RenderShareText prints a ready-to-paste share message for team channels. cut
+// is what prune has actually taken and still holds; could is what the report
+// says is left to take.
+func RenderShareText(w io.Writer, cut, could int) {
+	fmt.Fprintln(w, shareMessage(cut, could))
 }
 
 // RenderShareMarkdown prints a share message formatted as a Markdown code block.
-func RenderShareMarkdown(w io.Writer, tokensPerSession int) {
-	line := shareMessage(tokensPerSession)
-	fmt.Fprintf(w, "```\n%s\n```\n", line)
+func RenderShareMarkdown(w io.Writer, cut, could int) {
+	fmt.Fprintf(w, "```\n%s\n```\n", shareMessage(cut, could))
 }
 
 // RenderShareJSON prints the share message as structured JSON.
-func RenderShareJSON(w io.Writer, tokensPerSession int) {
+func RenderShareJSON(w io.Writer, cut, could int) error {
 	type shareJSON struct {
 		Message               string `json:"message"`
 		TokensSavedPerSession int    `json:"tokens_saved_per_session"`
+		TokensCouldCut        int    `json:"tokens_could_cut_per_session"`
 		URL                   string `json:"url"`
 		Install               string `json:"install"`
 	}
-	msg := shareMessage(tokensPerSession)
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(shareJSON{
-		Message:               msg,
-		TokensSavedPerSession: tokensPerSession,
+	return WriteJSON(w, shareJSON{
+		Message:               shareMessage(cut, could),
+		TokensSavedPerSession: cut,
+		TokensCouldCut:        could,
 		URL:                   "https://github.com/thousandflowers/skillreaper",
 		Install:               "brew install thousandflowers/tap/skillreaper",
 	})
 }
 
-// shareMessage builds the human-readable share text.
-// When tokens are available, it includes the real savings figure.
-// When no data is available (0), it falls back to a generic message.
-func shareMessage(tokensPerSession int) string {
-	if tokensPerSession > 0 {
-		tokStr := fmt.Sprintf("%d", tokensPerSession)
-		if tokensPerSession >= 1000 {
-			tokStr = fmt.Sprintf("%.1fk", float64(tokensPerSession)/1000)
-		}
-		return fmt.Sprintf(`Just cut ~%s tokens/session of dead context from my AI agent with skillreaper.
-One read-only command, 100%% local:
+// ShareCould is what share says could be cut: the dead context, as the report
+// counts it. What MUTE would give back belongs to skills that fired, and is
+// not "dead" in a line meant to be posted.
+func ShareCould(r *Report) int { return r.DeadTokensPerSession }
 
-  brew install thousandflowers/tap/skillreaper
-  github.com/thousandflowers/skillreaper`, tokStr)
-	}
-	return `Check your AI agent's context diet with skillreaper.
+// shareMessage builds the human-readable share text. It claims a cut only for
+// what was cut. Without a prune, the same figure is what could be cut.
+func shareMessage(cut, could int) string {
+	const pitch = `
 One read-only command, 100% local:
 
   brew install thousandflowers/tap/skillreaper
   github.com/thousandflowers/skillreaper`
+	switch {
+	case cut > 0:
+		return fmt.Sprintf("Just cut ~%s tokens/session of dead context from my AI agent with skillreaper.", HumanCount(cut)) + pitch
+	case could > 0:
+		return fmt.Sprintf("skillreaper says I could cut ~%s tokens/session of dead context from my AI agent.", HumanCount(could)) + pitch
+	}
+	return "Check your AI agent's context diet with skillreaper." + pitch
 }
 
 // sectionTitles names each category. title is the single string Markdown has
@@ -168,10 +181,10 @@ var sectionTitles = []struct {
 	short string
 	gloss string
 }{
-	{scan.CatSkill, "SKILLS (description injected every session)",
-		"SKILLS", "description injected every session"},
-	{scan.CatMCP, "MCP SERVERS (tool schemas injected; weight unknown without running them)",
-		"MCP SERVERS", "tool schemas injected; weight unknown without running them"},
+	{scan.CatSkill, "SKILLS (listed every session: name, and description while it fits)",
+		"SKILLS", "listed every session: name, and description while it fits"},
+	{scan.CatMCP, "MCP SERVERS (tool names + instructions injected; ? = never loaded)",
+		"MCP SERVERS", "tool names + instructions injected; ? = never loaded"},
 	{scan.CatAgent, "AGENTS (description injected every session)",
 		"AGENTS", "description injected every session"},
 	{scan.CatHook, "HOOKS (report-only: output cost varies per event)",
@@ -182,9 +195,14 @@ var sectionTitles = []struct {
 
 // RenderJSON writes the report as indented JSON.
 func RenderJSON(w io.Writer, r *Report) error {
+	return WriteJSON(w, r)
+}
+
+// WriteJSON writes v as indented JSON, the one shape every --json view uses.
+func WriteJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(r)
+	return enc.Encode(v)
 }
 
 // RenderText writes the human-readable report. color toggles ANSI codes.
@@ -206,14 +224,17 @@ func RenderText(w io.Writer, r *Report, color bool) {
 	// These are one thought — how far the numbers below can be trusted — and a
 	// reader who discovers four warnings only after scrolling past the
 	// verdicts has already read the verdicts wrong.
-	head := fmt.Sprintf("skillreaper · last %d days · %d sessions", r.WindowDays, r.Sessions)
+	var caveats []string
 	if r.MalformedLines > 0 {
-		head += " · " + MalformedSummary(r)
+		caveats = append(caveats, MalformedSummary(r))
 	}
 	if n := len(r.Warnings); n > 0 {
-		head += fmt.Sprintf(" · %d %s below", n, plural(n, "warning"))
+		caveats = append(caveats, nOf(n, "warning")+" below")
 	}
-	fmt.Fprintf(w, "\n  %s\n", paint(cBold, truncate(head, width-2)))
+	fmt.Fprintln(w)
+	for _, line := range mastheadLines("skillreaper · "+windowOf(r.WindowDays, r.Sessions), caveats, width-2) {
+		fmt.Fprintf(w, "  %s\n", paint(cBold, line))
+	}
 
 	if r.Sessions == 0 {
 		fmt.Fprintln(w)
@@ -249,8 +270,8 @@ func renderHeadline(w io.Writer, r *Report, width int, paint func(code, s string
 	deadVal, deadUnit := head.Figure()
 	figs := []struct{ val, unit string }{
 		{deadVal, deadUnit},
-		{"~" + humanNum(r.DeadTokensPerSession), "dead tokens per session"},
-		{fmt.Sprintf("~$%.2f", r.MoneyPerMonth), "per month at your usage"},
+		{"~" + HumanNum(r.DeadTokensPerSession), "dead tokens per session"},
+		{fmt.Sprintf("~$%.2f", r.MoneyPerMonth), moneyNote(r)},
 	}
 	vw := 0
 	for _, f := range figs {
@@ -284,6 +305,15 @@ func headlineNotes(r *Report) []string {
 	if v := NewHeadline(r).Verdict(); v != "" {
 		out = append(out, v)
 	}
+	if s := NewHeadline(r).Split(); s != "" {
+		out = append(out, s)
+	}
+	if m := NewHeadline(r).MutedLine(); m != "" {
+		out = append(out, m)
+	}
+	if r.MonthlyBasisDays > 0 && r.MonthlyBasisDays < r.WindowDays && r.Sessions > 0 {
+		out = append(out, "monthly figures are extrapolated from "+nOf(r.MonthlyBasisDays, "day")+" of history")
+	}
 	// The figures above are an estimate, per session and per item. This is
 	// neither: it is what the provider billed, and the only place the cache
 	// split can be seen. Resident context is paid once as a cache creation and
@@ -292,15 +322,20 @@ func headlineNotes(r *Report) []string {
 	// always asserted and never measured.
 	if r.Measured.Messages > 0 && r.Measured.CacheRead > 0 {
 		out = append(out, fmt.Sprintf(
-			"measured over the window: %s tokens re-read from cache across %d messages, against %s of fresh input",
-			humanBig(r.Measured.CacheRead), r.Measured.Messages, humanBig(r.Measured.Input)))
+			"measured over the window: %s tokens re-read from cache across %s, against %s of fresh input",
+			humanBig(r.Measured.CacheRead), nOf(int(r.Measured.Messages), "message"), humanBig(r.Measured.Input)))
+	}
+	// With two tools the figure is an average over all their sessions, and the
+	// rows under it are not: without a word the reader adds them up and misses.
+	if note := averageNote(r); note != "" {
+		out = append(out, note)
 	}
 	// Without this line the total reads as the whole bill. It is not: the dead
 	// items whose weight could never be measured contribute 0 to it.
 	if r.DeadUnknownWeight > 0 {
 		out = append(out, fmt.Sprintf(
-			"a floor, not a total: %d unused %s (MCP servers, hooks) carry weight that was never measured",
-			r.DeadUnknownWeight, plural(r.DeadUnknownWeight, "item")))
+			"a floor, not a total: %s (MCP servers) %s weight that was never measured",
+			nOf(r.DeadUnknownWeight, "unused item"), map[bool]string{true: "carries", false: "carry"}[r.DeadUnknownWeight == 1]))
 	}
 	if r.DeadToolChars > 0 {
 		// DeadToolChars is a total summed across every session; divide to show
@@ -371,9 +406,9 @@ func renderGroups(w io.Writer, rows []Row, width int, paint func(code, s string)
 		for _, it := range items {
 			total += it.Tokens
 		}
-		head := fmt.Sprintf("%s  %-22s %d %s", mark(v), label, len(items), plural(len(items), "item"))
+		head := fmt.Sprintf("%s  %-22s %d %s", mark(v), label, len(items), Plural(len(items), "item"))
 		if total > 0 {
-			head += fmt.Sprintf(" · ~%s tok/session", humanNum(total))
+			head += fmt.Sprintf(" · ~%s tok/session", HumanNum(total))
 		}
 		// Bold on the two groups that carry an action, dim on the rest. Weight
 		// is the only emphasis a terminal has that a monochrome reader also
@@ -404,7 +439,7 @@ func renderGroups(w io.Writer, rows []Row, width int, paint func(code, s string)
 			}
 			more := fmt.Sprintf("… %d more", rest)
 			if restTok > 0 {
-				more += fmt.Sprintf(" · ~%s tok/session", humanNum(restTok))
+				more += fmt.Sprintf(" · ~%s tok/session", HumanNum(restTok))
 			}
 			more += " · full list: reap --md"
 			fmt.Fprintf(w, "    %s\n", paint(cDim, truncate(more, width-4)))
@@ -484,7 +519,7 @@ func renderWarnings(w io.Writer, r *Report, width int, paint func(code, s string
 	if len(r.Warnings) == 0 {
 		return
 	}
-	title := fmt.Sprintf("%d %s", len(r.Warnings), plural(len(r.Warnings), "warning"))
+	title := fmt.Sprintf("%d %s", len(r.Warnings), Plural(len(r.Warnings), "warning"))
 	fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule(title, width-2)))
 	for _, warn := range r.Warnings {
 		for _, l := range wrap(warn.Path+": "+warn.Msg, width, "    ", "      ") {
@@ -502,25 +537,37 @@ func renderWarnings(w io.Writer, r *Report, width int, paint func(code, s string
 // what running it buys.
 func renderActions(w io.Writer, r *Report, width int, paint func(code, s string) string) {
 	var muteNames []string
-	muteTokens := 0
+	muteTokens, pruneCount, pruneTokens, pruneUnmeasured := 0, 0, 0, 0
 	for _, row := range r.Rows {
-		if row.Verdict == VerdictMute {
+		// What reap mute and a bare reap prune themselves take, so these lines
+		// and the commands agree: an unused link or plugin item is not prune's.
+		if MuteEligible(row) {
 			muteNames = append(muteNames, row.Name)
-			muteTokens += row.Tokens
+			muteTokens += MuteSaving(row)
+		}
+		if row.Verdict == VerdictReap && row.Removable {
+			pruneCount++
+			pruneTokens += row.Tokens
+			if row.WeightUnknown {
+				pruneUnmeasured++
+			}
 		}
 	}
 
-	if r.DeadCount > 0 || len(muteNames) > 0 {
+	if pruneCount > 0 || len(muteNames) > 0 {
 		fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule("DO", width-2)))
 		type action struct{ cmd, gain string }
 		var acts []action
-		if r.DeadCount > 0 {
-			acts = append(acts, action{"reap prune", fmt.Sprintf("%d %s · ~%s tok/session reclaimed",
-				r.DeadCount, plural(r.DeadCount, "item"), humanNum(r.DeadTokensPerSession))})
+		if pruneCount > 0 {
+			gain := "weight not measured" // as reap prune says it: "~0" would be a number
+			if pruneUnmeasured < pruneCount {
+				gain = atLeast(pruneUnmeasured) + "~" + HumanNum(pruneTokens) + " tok/session reclaimed"
+			}
+			acts = append(acts, action{"reap prune", nOf(pruneCount, "item") + " · " + gain})
 		}
 		if len(muteNames) > 0 {
 			acts = append(acts, action{"reap mute", fmt.Sprintf("%d %s · ~%s tok · %s",
-				len(muteNames), plural(len(muteNames), "skill"), humanNum(muteTokens),
+				len(muteNames), Plural(len(muteNames), "item"), HumanNum(muteTokens),
 				strings.Join(muteNames, ", "))})
 		}
 		cw := 0
@@ -568,15 +615,41 @@ func permDisplay(row Row) string {
 	}
 }
 
+// averageNote says that the dead-token figure is an average over the sessions
+// of several tools, when it is; empty otherwise. Every format that prints the
+// figure above per-item weights carries it.
+func averageNote(r *Report) string {
+	tools := 0
+	for _, n := range r.PlatformSessions {
+		if n > 0 {
+			tools++
+		}
+	}
+	if tools < 2 || r.DeadTokensPerSession == 0 {
+		return ""
+	}
+	return fmt.Sprintf("the dead-token figure is an average over the %d sessions of %d tools: an item weighs in its own tool's sessions only", r.Sessions, tools)
+}
+
+// sentence is a note as a line of its own: capital first, full stop last.
+func sentence(note string) string { return strings.ToUpper(note[:1]) + note[1:] + "." }
+
 // RenderMarkdown writes the report as a shareable Markdown document.
 func RenderMarkdown(w io.Writer, r *Report) {
 	fmt.Fprintf(w, "# skillreaper report\n\n")
-	fmt.Fprintf(w, "Window: last %d days · %d sessions analyzed\n\n", r.WindowDays, r.Sessions)
+	fmt.Fprintf(w, "Window: %s analyzed\n\n", windowOf(r.WindowDays, r.Sessions))
 	fmt.Fprintf(w, "**%s · ~%d dead tokens/session · ~$%.2f/month**\n",
 		NewHeadline(r).Line(), r.DeadTokensPerSession, r.MoneyPerMonth)
+	if note := averageNote(r); note != "" {
+		fmt.Fprintf(w, "\n%s\n", sentence(note))
+	}
 	if r.DeadUnknownWeight > 0 {
-		fmt.Fprintf(w, "\nA floor, not a total: %d unused items (MCP servers, hooks) carry weight that was never measured.\n",
-			r.DeadUnknownWeight)
+		carry := "carry"
+		if r.DeadUnknownWeight == 1 {
+			carry = "carries"
+		}
+		fmt.Fprintf(w, "\nA floor, not a total: %d unused %s (MCP servers) %s weight that was never measured.\n",
+			r.DeadUnknownWeight, Plural(r.DeadUnknownWeight, "item"), carry)
 	}
 
 	for _, sec := range sectionTitles {
@@ -605,7 +678,7 @@ func RenderMarkdown(w io.Writer, r *Report) {
 				reason = "user-kept"
 			}
 			fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %s |\n",
-				row.Name, shortSource(row.Source), weight, uses, last, row.Verdict, reason)
+				mdText(row.Name), mdText(shortSource(row.Source)), weight, uses, last, row.Verdict, reason)
 		}
 	}
 }
@@ -618,9 +691,22 @@ func groupByVerdict(rows []Row) map[string][]Row {
 		m[v] = nil
 	}
 	for _, r := range rows {
+		if r.Reason == ReasonMuted {
+			continue // counted in the headline, listed by reap unmute
+		}
 		m[r.Verdict] = append(m[r.Verdict], r)
 	}
 	return m
+}
+
+// SourceIs says whether --source names src: by its id, or by the label the
+// report shows for it where that label is one source's alone ("own", "usr").
+func SourceIs(src, want string) bool {
+	if src == want {
+		return true
+	}
+	label := shortSource(src)
+	return label != src && (label == "own" || label == "usr") && label == want
 }
 
 func shortSource(s string) string {
@@ -758,7 +844,46 @@ func MalformedSummary(r *Report) string {
 // needed here, and a count of one is not a rare edge: a single held-back item
 // produces exactly one warning, which is the moment the tool is asking to be
 // trusted about evidence.
-func plural(n int, word string) string {
+// Plural returns word, with an "s" unless n is 1.
+// atLeast marks a total that leaves out items whose weight is not known.
+func atLeast(unmeasured int) string {
+	if unmeasured > 0 {
+		return "at least "
+	}
+	return ""
+}
+
+// ReclaimSaid is what a prune would give back, in the plan's opening line.
+func ReclaimSaid(figure string, unmeasured, items int) string {
+	if items > 0 && unmeasured >= items {
+		return "weight not measured"
+	}
+	return "reclaim " + atLeast(unmeasured) + "~" + figure + " tok/session"
+}
+
+// nOf is a count with its word: "1 day", "30 days".
+func nOf(n int, word string) string { return fmt.Sprintf("%d %s", n, Plural(n, word)) }
+
+// windowOf says what a report was measured over.
+func windowOf(days, sessions int) string {
+	return "last " + nOf(days, "day") + " · " + nOf(sessions, "session")
+}
+
+// mastheadLines is the opening line with its caveats beside it, or under it
+// when they do not fit: cut short, the line lost the words that say warnings
+// follow.
+func mastheadLines(head string, caveats []string, width int) []string {
+	if len(caveats) == 0 {
+		return []string{truncate(head, width)}
+	}
+	rest := strings.Join(caveats, " · ")
+	if one := head + " · " + rest; utf8.RuneCountInString(one) <= width {
+		return []string{one}
+	}
+	return append([]string{truncate(head, width)}, wrap(rest, width, "", "")...)
+}
+
+func Plural(n int, word string) string {
 	if n == 1 {
 		return word
 	}
@@ -778,4 +903,15 @@ func humanBig(n int64) string {
 		return fmt.Sprintf("%.1fk", float64(n)/1e3)
 	}
 	return fmt.Sprintf("%d", n)
+}
+
+// moneyNote names what the monthly figure rests on, since no one can check it.
+func moneyNote(r *Report) string {
+	switch {
+	case r.PriceBasis == "":
+		return "per month at your usage"
+	case strings.HasPrefix(r.PriceBasis, "assumed"):
+		return fmt.Sprintf("per month, $%.2f/M assumed", r.PricePerToken*1e6)
+	}
+	return fmt.Sprintf("per month, $%.2f/M from your models", r.PricePerToken*1e6)
 }

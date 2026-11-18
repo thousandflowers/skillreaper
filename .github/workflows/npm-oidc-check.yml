@@ -45,9 +45,11 @@ jobs:
 
       - name: What setup-node left in .npmrc
         run: |
-          echo "--- ~/.npmrc"
-          cat "$HOME/.npmrc" 2>/dev/null || echo "(no ~/.npmrc)"
-          if grep -q '_authToken' "$HOME/.npmrc" 2>/dev/null; then
+          # setup-node writes its file where NPM_CONFIG_USERCONFIG points, not in $HOME.
+          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          echo "--- $npmrc"
+          cat "$npmrc" 2>/dev/null || echo "(no $npmrc)"
+          if grep -q '_authToken' "$npmrc" 2>/dev/null; then
             echo ">>> _authToken present: npm will treat auth as configured and skip OIDC"
           else
             echo ">>> no _authToken line: OIDC is free to run"

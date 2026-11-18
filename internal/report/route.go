@@ -1,7 +1,6 @@
 package report
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -45,12 +44,16 @@ const (
 
 // RouteSkill is one skill placed in the plan.
 type RouteSkill struct {
-	Name   string  `json:"name"`
-	Tier   string  `json:"tier"`   // exposed | routed
-	Reason string  `json:"reason"` // frequent | rare | no-evidence
-	Uses   int     `json:"uses"`
-	Tokens int     `json:"tokens"`
-	Rate   float64 `json:"rate"` // uses/sessions; ≥0, can exceed 1 if fired many times per session
+	Name string `json:"name"`
+	// Platform is the tool the skill is installed in. twin marks a skill whose
+	// name another tool's skill in the plan has too: it is shown with its tool.
+	Platform string `json:"platform,omitempty"`
+	twin     bool
+	Tier     string  `json:"tier"`   // exposed | routed
+	Reason   string  `json:"reason"` // frequent | rare | no-evidence
+	Uses     int     `json:"uses"`
+	Tokens   int     `json:"tokens"`
+	Rate     float64 `json:"rate"` // uses/sessions; ≥0, can exceed 1 if fired many times per session
 }
 
 // RouteCategory is one leaf router holding rarely-fired skills, derived from
@@ -90,6 +93,12 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 	plan := &RoutePlan{Sessions: r.Sessions, ExposeThreshold: exposeThreshold}
 	cats := map[string]*RouteCategory{}
 
+	named := map[string]int{}
+	for _, row := range r.Rows {
+		if row.Category == scan.CatSkill && row.Verdict != VerdictReap {
+			named[row.Name]++
+		}
+	}
 	for _, row := range r.Rows {
 		if row.Category != scan.CatSkill || row.Verdict == VerdictReap {
 			continue
@@ -97,10 +106,10 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 		plan.TotalSkills++
 
 		rate := 0.0
-		if r.Sessions > 0 {
-			rate = float64(row.Uses) / float64(r.Sessions)
+		if sessions := r.SessionsOf(row.Platform); sessions > 0 {
+			rate = float64(row.Uses) / float64(sessions)
 		}
-		rs := RouteSkill{Name: row.Name, Uses: row.Uses, Tokens: row.Tokens, Rate: rate}
+		rs := RouteSkill{Name: row.Name, Platform: row.Platform, twin: named[row.Name] > 1, Uses: row.Uses, Tokens: row.Tokens, Rate: rate}
 
 		switch {
 		case r.Sessions == 0 || row.Uses == 0:
@@ -115,7 +124,7 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 			plan.ExposedTok += rs.Tokens
 		default:
 			rs.Tier, rs.Reason = RouteTierRouted, routeReasonRare
-			name, src := routeCategory(r, row.Name)
+			name, src := routeCategory(r, row.Item)
 			key := src + ":" + name
 			c := cats[key]
 			if c == nil {
@@ -134,27 +143,35 @@ func BuildRoutePlan(r *Report, exposeThreshold float64) *RoutePlan {
 	return plan
 }
 
+// label is the skill's name, with its tool when another skill has that name.
+func (s RouteSkill) label() string {
+	if s.twin && s.Platform != "" {
+		return s.Name + " (" + s.Platform + ")"
+	}
+	return s.Name
+}
+
 // routeCategory derives a leaf-router name for a rarely-fired skill from
 // evidence: its namespace prefix ("ecc:plan" → "ecc"), else its dominant firing
 // project, else "misc".
-func routeCategory(r *Report, name string) (catName, source string) {
+func routeCategory(r *Report, it scan.Item) (catName, source string) {
+	name := it.Name
 	if i := strings.IndexByte(name, ':'); i > 0 {
 		return name[:i], "namespace"
 	}
-	if projs := skillProjects(r, name); len(projs) > 0 {
+	if projs := skillProjects(r, it); len(projs) > 0 {
 		top := sortedProjects(projs)
 		if len(top) > 0 {
-			return prettyProject(top[0].name), "project"
+			return projectLabel(r, top[0].name), "project"
 		}
 	}
 	return "misc", "misc"
 }
 
-// skillProjects returns a skill's project-firing buckets. It is only reached for
-// non-namespaced names (routeCategory handles namespaced skills before calling),
-// so a plain name lookup is sufficient.
-func skillProjects(r *Report, name string) map[string]int {
-	return r.SkillProjects[name]
+// skillProjects returns a skill's project-firing buckets, under every name its
+// uses are counted under.
+func skillProjects(r *Report, it scan.Item) map[string]int {
+	return projectUses(r, it)
 }
 
 // sortRouteSkills orders skills by firing count desc, then tokens desc, then name.
@@ -200,8 +217,8 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 		width := termWidth(w)
 		fmt.Fprintf(w, "\n  %s\n", paint(cBold, "reap route"))
 		for _, l := range wrap(fmt.Sprintf(
-			"Only %d skills survive a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first.",
-			plan.TotalSkills, plan.MinSkills), width, "  ", "  ") {
+			"Only %s a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first.",
+			survivors(plan.TotalSkills), plan.MinSkills), width, "  ", "  ") {
 			fmt.Fprintln(w, paint(cDim, l))
 		}
 		return
@@ -215,28 +232,28 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 	width := termWidth(w)
 	fmt.Fprintf(w, "\n  %s\n", paint(cCyan, rule("reap route · usage-informed lazy-load plan", width-2)))
 	for _, l := range wrap(fmt.Sprintf(
-		"Proposed, never applied. %d skills survive a prune · %d sessions · expose threshold %.0f%%.",
-		plan.TotalSkills, plan.Sessions, plan.ExposeThreshold*100), width, "  ", "  ") {
+		"Proposed, never applied. %s a prune · %s · expose threshold %.0f%%.",
+		survivors(plan.TotalSkills), nOf(plan.Sessions, "session"), plan.ExposeThreshold*100), width, "  ", "  ") {
 		fmt.Fprintln(w, paint(cDim, l))
 	}
 
 	if plan.BelowFloor {
 		fmt.Fprintln(w)
 		for _, l := range wrap(fmt.Sprintf(
-			"%d skills is below ~%d — native skill loading is usually enough here. Routing trades a "+
+			"%s is below ~%d — native skill loading is usually enough here. Routing trades a "+
 				"little selection accuracy for token savings. Prune first; route only if context is tight.",
-			plan.TotalSkills, RouteAdviceFloor), width, "  !  ", "     ") {
+			nOf(plan.TotalSkills, "skill"), RouteAdviceFloor), width, "  !  ", "     ") {
 			fmt.Fprintln(w, paint(cBold, l))
 		}
 	}
 
 	routeGroup(w, width, paint, "EXPOSED", "stay top-level",
-		humanChars(plan.ExposedTok)+" tok resident", plan.Exposed, "(none)", true)
+		HumanCount(plan.ExposedTok)+" tok resident", plan.Exposed, "(none)", true)
 
 	fmt.Fprintf(w, "\n  %s  %s\n", paint(cBold, "ROUTED"),
-		paint(cDim, fmt.Sprintf("loaded on demand · ~%s tok deferred", humanChars(plan.RoutedTok))))
+		paint(cDim, fmt.Sprintf("loaded on demand · ~%s tok deferred", HumanCount(plan.RoutedTok))))
 	if len(plan.Categories) == 0 {
-		for _, l := range wrap("(none — every surviving skill fires often enough to stay exposed)",
+		for _, l := range wrap("(none — every surviving skill is frequent or has no evidence yet)",
 			width, "     ", "     ") {
 			fmt.Fprintln(w, paint(cDim, l))
 		}
@@ -261,7 +278,7 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 		at := 1
 		for _, c := range plan.Categories {
 			fmt.Fprintf(w, "\n     %s  %s\n", paint(cBold, routeCatLabel(c)),
-				paint(cDim, fmt.Sprintf("~%s tok", humanChars(c.RoutedTok))))
+				paint(cDim, fmt.Sprintf("~%s tok", HumanCount(c.RoutedTok))))
 			for range c.Skills {
 				fmt.Fprintln(w, tbl[at])
 				at++
@@ -271,7 +288,7 @@ func RenderRoutePlan(w io.Writer, plan *RoutePlan, color bool) {
 
 	fmt.Fprintln(w)
 	for _, l := range wrap(fmt.Sprintf("Net: ~%s tok/session moved out of resident context.",
-		humanChars(plan.RoutedTok)), width, "  ", "  ") {
+		HumanCount(plan.RoutedTok)), width, "  ", "  ") {
 		fmt.Fprintln(w, paint(cBold, l))
 	}
 	for _, l := range wrap("A plan only — nothing is applied. Pair with reap mute to strip the "+
@@ -300,8 +317,8 @@ func routeGroup(w io.Writer, width int, paint func(code, s string) string,
 func routeRows(width, indent int, skills []RouteSkill, reason bool) []string {
 	var names, uses, rates, reasons []string
 	for _, s := range skills {
-		names = append(names, s.Name)
-		uses = append(uses, humanNum(s.Uses))
+		names = append(names, s.label())
+		uses = append(uses, HumanNum(s.Uses))
 		rates = append(rates, ratePct(s.Rate))
 		if reason {
 			reasons = append(reasons, s.Reason)
@@ -339,40 +356,46 @@ func ratePct(rate float64) string {
 
 // RenderRoutePlanJSON writes the plan as indented JSON.
 func RenderRoutePlanJSON(w io.Writer, plan *RoutePlan) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(plan)
+	return WriteJSON(w, plan)
 }
 
 // RenderRoutePlanMarkdown writes the plan as Markdown.
 func RenderRoutePlanMarkdown(w io.Writer, plan *RoutePlan) {
 	if plan.Skipped {
-		fmt.Fprintf(w, "# reap route\n\n_Only %d skills survive a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first._\n", plan.TotalSkills, plan.MinSkills)
+		fmt.Fprintf(w, "# reap route\n\n_Only %s a prune (below --route-min-skills=%d). Routing isn't worth it yet — prune first._\n", survivors(plan.TotalSkills), plan.MinSkills)
 		return
 	}
 	fmt.Fprintf(w, "# reap route — usage-informed lazy-load plan\n\n")
-	fmt.Fprintf(w, "_Proposed, never applied. %d skills survive a prune · %d sessions · expose threshold %.0f%%._\n\n",
-		plan.TotalSkills, plan.Sessions, plan.ExposeThreshold*100)
+	fmt.Fprintf(w, "_Proposed, never applied. %s a prune · %s · expose threshold %.0f%%._\n\n",
+		survivors(plan.TotalSkills), nOf(plan.Sessions, "session"), plan.ExposeThreshold*100)
 	if plan.BelowFloor {
-		fmt.Fprintf(w, "> ⓘ %d skills is below ~%d — native skill loading is usually enough. Prune first; route only if context is tight.\n\n", plan.TotalSkills, RouteAdviceFloor)
+		fmt.Fprintf(w, "> ⓘ %s is below ~%d — native skill loading is usually enough. Prune first; route only if context is tight.\n\n", nOf(plan.TotalSkills, "skill"), RouteAdviceFloor)
 	}
 
-	fmt.Fprintf(w, "## Exposed (stay top-level) — ~%s tok resident\n\n", humanChars(plan.ExposedTok))
+	fmt.Fprintf(w, "## Exposed (stay top-level) — ~%s tok resident\n\n", HumanCount(plan.ExposedTok))
 	fmt.Fprintln(w, "| Skill | Uses | Rate | Reason |")
 	fmt.Fprintln(w, "|---|---|---|---|")
 	for _, s := range plan.Exposed {
-		fmt.Fprintf(w, "| %s | %d | %s | %s |\n", s.Name, s.Uses, ratePct(s.Rate), s.Reason)
+		fmt.Fprintf(w, "| %s | %d | %s | %s |\n", mdText(s.label()), s.Uses, ratePct(s.Rate), s.Reason)
 	}
 
-	fmt.Fprintf(w, "\n## Routed (loaded on demand) — ~%s tok deferred\n\n", humanChars(plan.RoutedTok))
+	fmt.Fprintf(w, "\n## Routed (loaded on demand) — ~%s tok deferred\n\n", HumanCount(plan.RoutedTok))
 	for _, c := range plan.Categories {
-		fmt.Fprintf(w, "### ▸ %s — ~%s tok\n\n", routeCatLabel(c), humanChars(c.RoutedTok))
+		fmt.Fprintf(w, "### ▸ %s — ~%s tok\n\n", mdText(routeCatLabel(c)), HumanCount(c.RoutedTok))
 		fmt.Fprintln(w, "| Skill | Uses | Rate |")
 		fmt.Fprintln(w, "|---|---|---|")
 		for _, s := range c.Skills {
-			fmt.Fprintf(w, "| %s | %d | %s |\n", s.Name, s.Uses, ratePct(s.Rate))
+			fmt.Fprintf(w, "| %s | %d | %s |\n", mdText(s.label()), s.Uses, ratePct(s.Rate))
 		}
 		fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, "**Net: ~%s tok/session moved out of resident context.** Pair with `reap mute` to strip routed skills' descriptions.\n", humanChars(plan.RoutedTok))
+	fmt.Fprintf(w, "**Net: ~%s tok/session moved out of resident context.** Pair with `reap mute` to strip routed skills' descriptions.\n", HumanCount(plan.RoutedTok))
+}
+
+// survivors is "6 skills survive", "1 skill survives".
+func survivors(n int) string {
+	if n == 1 {
+		return "1 skill survives"
+	}
+	return nOf(n, "skill") + " survive"
 }

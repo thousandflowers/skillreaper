@@ -28,9 +28,11 @@ TOKENS  CATEGORY  NAME                 VERDICT  REASON
 
 To prune: reap prune   (interactive, reversible via reap restore --all)
 
-1 warning — some evidence was incomplete; those items were held back from a REAP verdict.
+1 warning — run reap for details.
 
 measured by skillreaper · github.com/thousandflowers/skillreaper
+
+The dead-token figure is a floor: 11 unused items (MCP servers) carry weight that was never measured.
 ```
 <!-- readme-numbers:end -->
 
@@ -44,9 +46,10 @@ measured by skillreaper · github.com/thousandflowers/skillreaper
   Most of what your AI agent loads, it never uses.
 </h1>
 <p align="center">
-  skillreaper finds the <b>unused skills, MCP servers, subagents, hooks and
-  always-loaded prose</b> quietly filling your <b>context window</b> - proven
-  from your own session transcripts - and prunes them reversibly.<br>
+  skillreaper finds the <b>unused skills, MCP servers and subagents</b>
+  quietly filling your <b>context window</b> - proven from your own session
+  transcripts - and prunes them reversibly. Hooks and always-loaded prose
+  are listed in the report, not judged or pruned.<br>
   Runs locally against transcripts you already have. Nothing is ever uploaded.
 </p>
 
@@ -81,6 +84,10 @@ figure on this page comes from that one run.</sub>
 every skill / MCP / agent your AI loads but never fires, and shows you exactly
 what it costs you.
 
+In a terminal, `skillreaper` opens [the menu](#the-menu): the same findings on
+one screen, where you choose what goes and see the number fall before anything
+is touched. `reap` prints the report, for reading, piping and agents.
+
 <br>
 
 ## What it does
@@ -112,61 +119,107 @@ measurement side without changing a single file.
 | Read-only, changes nothing | Writes, always reversible |
 |---|---|
 | `reap` <sup>1</sup> | `reap prune` &nbsp;↔&nbsp; `reap restore --all` |
-| `reap gap` | `reap mute <name>` &nbsp;↔&nbsp; `reap unmute <name>` |
-| `reap by-project` | `reap keep <name>` &nbsp;↔&nbsp; `reap keep --remove <name>` |
-| `reap why <name>` | `reap install-hook` &nbsp;↔&nbsp; `reap uninstall-hook` |
-| `reap route` | |
-| `reap apm` | |
-| `reap manifest <name>` | |
-| `reap share` | |
+| `reap gap` <sup>1</sup> | `reap mute <name>` &nbsp;↔&nbsp; `reap unmute <name>` |
+| `reap by-project` <sup>1</sup> | `reap keep <name>` &nbsp;↔&nbsp; `reap keep --remove <name>` |
+| `reap why <name>` <sup>1</sup> | `reap install-hook` &nbsp;↔&nbsp; `reap uninstall-hook` |
+| `reap route` <sup>1</sup> | `skillreaper` / `reap menu`: the same writes, chosen on one screen, undone from it with `u` |
+| `reap apm` <sup>1</sup> | |
+| `reap manifest <name>` <sup>1</sup> | |
+| `reap share` <sup>1</sup> | |
 | `reap snapshot` <sup>1</sup> | |
 | `reap diff` | |
 
-**Nothing is ever deleted.** `reap prune` moves files into a `reaped/`
-directory with a versioned manifest, `reap mute` keeps a backup of the
-description it strips, and `reap uninstall-hook` removes only skillreaper's own
-entry, leaving your other hooks alone. Every write is **atomic** (temp file +
-rename) and **confined** to your Claude directory, so an interrupted prune,
-mute, or hook edit leaves the original file intact, never a half-written mix.
+**Nothing is deleted unless you ask for exactly that.** `reap prune` moves files
+into a `reaped/` directory with a versioned manifest, `reap mute` keeps a backup
+of the description it strips, and `reap uninstall-hook` removes only
+skillreaper's own entry, leaving your other hooks alone. The one exception is
+the one you have to name: `reap delete <name>`, or `d` in the menu, removes an
+item for good, says so in red, and asks first. Every edit of an existing file is
+**atomic** (temp file + rename), so an interrupted prune, mute, or hook edit
+leaves the original file intact, never a half-written mix, and every write stays
+**inside your home folder**, in the files of the tools it reads (`~/.claude`,
+`~/.claude.json`, `~/.codex` and the like). Removing an MCP server edits
+`~/.claude.json` and keeps a copy of the whole file in `~/.claude/reaped/backups/`
+until you restore that server; if Claude Code changes the file while reap is
+editing it, reap writes nothing and asks you to run the command again.
+
+One command is not local, and it is not in the table: `reap reinvest`, which is
+experimental. It asks Claude, through `claude -p`, to read your sessions and
+write a skill for work none of yours covers, and with `--online` it searches
+skills.sh. Nothing else here calls a model or the network. (The menu's plugin
+switch runs `claude plugin disable`, Claude Code's own command for that.)
 
 <sub><sup>1</sup> The only files a read-only command writes are skillreaper's
 own: <code>~/.claude/reaped/nudge-state.json</code>, which the default report
-touches so a hint it already showed you does not repeat, and the snapshot
-<code>reap snapshot</code> exists to write. Neither touches your stack. Pass
-<code>--no-nudge</code> (or set <code>SKILLREAPER_NO_NUDGE=1</code>) and not
-even that happens. No command in either column sends anything over the
-network.</sub>
+touches so a hint it already showed you does not repeat; a parsed-transcript
+cache in your user cache folder, which keeps the next run fast; an evidence
+record in your user config folder, which remembers uses older than your
+transcripts; and the snapshot <code>reap snapshot</code> exists to write. None of
+them touches your stack. <code>--no-nudge</code> (or
+<code>SKILLREAPER_NO_NUDGE=1</code>) turns off the first and
+<code>--no-cache</code> the second. No command in either column sends anything
+over the network.</sub>
 
 <br>
 
 ## First 60 seconds
 
-Three commands, in this order. Only the third one writes anything, and it
-prints its own undo line.
+Three commands, in this order: measure, decide, act. Only the third one
+writes anything, and it prints its own undo line.
 
 ```bash
-reap                       # 1. measure: what you load, what fires, what it costs
-reap why <name>            # 2. decide: the evidence behind one verdict
-reap prune                 # 3. act: quarantine the dead ones, interactive
+reap
+reap why import-timesheet
+reap prune
 ```
 
-**1. `reap`** prints the report at the top of this page. Every row carries a
-verdict:
+`import-timesheet` stands for any name in your own report.
+
+Or all three on one screen: `skillreaper`, [the menu](#the-menu).
+
+With `npx` and nothing installed there is no `reap` on your PATH: write
+`npx skillreaper` where these lines say `reap` (`npx skillreaper why <name>`).
+
+**1. `reap`** prints the report: the same rows as the block at the top of this
+page (that one is `reap --agent`), grouped by verdict, with the reason in each
+group's title and in a NOTE column. Every row carries a verdict:
 
 | Label | Meaning |
 |---|---|
 | **`REAP(broken)`** | Invoked but errored - broken, not just cold |
 | **`REAP`** | Zero uses - safe to quarantine |
 | **`MUTE`** | Used rarely + heavy - description stripped, skill stays available |
-| **`KEEP`** | Used, tiny, or manually protected |
-| **`REVIEW`** | Too new or not enough sessions |
+| **`KEEP`** | Used, tiny, manually protected, or at work with no use of its own |
+| **`REVIEW`** | Too new, not enough sessions, or used in a way reap cannot weigh |
+| **`-`** | Not judged: something you muted, a hook, a prose file, an MCP server seen only in your transcripts |
 
 Every verdict includes a reason suffix explaining *why*, and an item whose
-evidence was incomplete stays `REVIEW` rather than being flagged.
+evidence was incomplete stays `REVIEW` rather than being flagged. The reasons:
+
+| Reason | With | It means |
+|---|---|---|
+| `unused` | REAP | never fired, with enough sessions to judge |
+| `broken` | REAP | invoked, and it only ever errored |
+| `heavy-rare` | MUTE | used, but heavy and in too few sessions |
+| `used` | KEEP | used in this window |
+| `tiny` | KEEP | weighs almost nothing |
+| `keep` | KEEP | you protected it with `reap keep` |
+| `claude-md-ref` | KEEP | named in your CLAUDE.md or rules |
+| `hook-loaded` | KEEP | a SessionStart hook reads it into the session |
+| `agent-loaded` | KEEP | an agent names it under `skills:` and loads it when it starts |
+| `main-agent` | KEEP | your settings run the session as this agent |
+| `skill-agent` | KEEP | a skill names it under `agent:` and runs in it |
+| `grace` | REVIEW | new here: installed, added, restored or unmuted too recently to judge |
+| `needs-data` | REVIEW | not enough sessions yet |
+| `rare` | REVIEW | fired before this window, on a longer cadence |
+| `no-transcript` | REVIEW | evidence about it is missing: this tool's sessions, or a file that could protect it, cannot be read |
+| `used-elsewhere` | REVIEW | another tool that loads the same folder used it |
+| `muted` | `-` | you muted it, so its uses prove nothing |
 
 **2. `reap why <name>`** is how you argue with a verdict before acting on it.
 It shows the whole case for one item, so you are not trusting a label:
 
+<!-- readme-why:start -->
 ```
 skill:import-timesheet
 
@@ -176,11 +229,13 @@ token weight ~185 tok  (description: 684 chars)
 sessions     34 total in window
 uses         0
 last seen    never
-installed    unknown
+installed    2026-07-01 (60 days ago)
+             grace period expired (grace: 14 days)
 keep-list    no
 claude-md    not referenced
 → safe to prune. run: reap prune
 ```
+<!-- readme-why:end -->
 
 **3. `reap prune`** asks before it moves anything, quarantines what you confirm
 into `reaped/`, and ends by printing `reap restore --all`. If a verdict looks
@@ -244,8 +299,19 @@ skillreaper measures both, from evidence - no guessing.
 
 ### Privacy
 
-**100 % local.** Zero telemetry, zero network, zero uploads. Reads config
-files and session transcripts on disk - your data never leaves your machine.
+**100 % local**, with one exception you start by hand. Zero telemetry, zero
+uploads. Reads config files and session transcripts on disk, and your data never
+leaves your machine, except through `reap reinvest`: it is experimental, says so
+on its first line, and sends Claude, through `claude -p` on your own Claude Code
+account, excerpts of your sessions (with the keys it recognises removed first)
+and the names and descriptions of your installed skills. With `--online` it also
+sends search words drawn from them to skills.sh (and, with `--mcp`, the MCP
+registry, then asks npm, PyPI and GitHub about the servers it finds), and says
+that too on its first line. It keeps what it read of your sessions, with the
+keys removed, in `sessions_memory.json` under reap's state folder
+(`~/Library/Application Support/skillreaper/reinvest` on macOS), readable by
+you alone, so that a kind of work is still known after Claude Code deletes
+the transcripts.
 
 <br>
 
@@ -279,20 +345,27 @@ report renders in the conversation instead of a scrollback you have to re-read:
 ```
 
 The plugin is a thin wrapper: it drives the same binary, so install that too
-with any line below. The skills fall back to `npx skillreaper` and tell you how
-to install permanently if they can't find it.
+with any line below. If the skills can't find it, they print how to run it with
+`npx skillreaper` and how to install it permanently.
 
 **Install permanently** - Homebrew and npm install both names, `reap` and
 `skillreaper`, so either one works. `go install` gives you `reap`:
 
+Pick one. macOS, with Homebrew:
+
 ```bash
-# macOS — Homebrew
 brew install thousandflowers/tap/skillreaper
+```
 
-# Any platform — npm (downloads the matching prebuilt, checksum-verified)
+Any platform, with npm (downloads the matching prebuilt, checksum-verified):
+
+```bash
 npm install -g skillreaper
+```
 
-# Any platform — Go (Go ≥ 1.24)
+Any platform, with Go 1.24 or newer:
+
+```bash
 go install github.com/thousandflowers/skillreaper/cmd/reap@latest
 ```
 
@@ -316,61 +389,116 @@ Upgrading, uninstalling, and platform-specific tips →
 ### Usage
 💬 **Curious what `reap` finds in other setups?** [Share your output →](https://github.com/thousandflowers/skillreaper/discussions)
 
-```bash
-reap                          # scan + report (read-only)
-reap gap                      # loaded-vs-fired utilization + MCP payload quality
-reap prune                    # quarantine REAP items (reversible)
-reap mute <name>              # strip description, keep skill available
-reap unmute <name>            # restore description from backup
-reap unmute --all             # restore all muted skills
-reap keep <name>              # protect an item from pruning
-reap restore --all            # undo every prune
-reap why <name>               # explain in detail why an item got its verdict
-reap by-project               # skills bucketed by the project that fired them
-reap route                    # propose a usage-informed lazy-load routing plan (opt-in)
-reap apm                      # emit a proposed APM apm.yml from this repo's firing
-reap apm --diff apm.yml       # reconcile: what to add (fired, undeclared) / drop (declared, cold)
-reap share                    # print a ready-to-paste line about what you reclaimed
-reap snapshot                 # save this run's --json payload for later comparison
-reap diff                     # compare the newest two snapshots
-reap diff <a> <b>             # compare two named snapshots
-reap manifest <name>          # emit a release manifest for one skill
-reap install-hook             # install weekly nudge (SessionStart hook)
-reap install-hook --dry-run   # preview without writing
-reap uninstall-hook           # remove hook, other hooks untouched
-reap --json                   # structured JSON output
-reap --md                     # markdown report
-reap --days 7                 # shorter evidence window
-reap --mute-threshold 0.20    # firing rate below which MUTE triggers (default 20%)
-reap version                  # print version
-```
+| Command | What it does |
+|---|---|
+| `skillreaper` | The menu: choose on one screen, apply after a receipt |
+| `reap menu` | The same menu, by its command name |
+| `reap` | Scan + report (read-only) |
+| `reap gap` | Loaded-vs-fired utilization + MCP payload quality |
+| `reap prune` | Quarantine REAP items (reversible) |
+| `reap prune <name>` | Quarantine that one item, whatever its verdict |
+| `reap mute <name>` | Strip description, keep skill available |
+| `reap delete <name>` | Remove one item for good (cannot be restored) |
+| `reap unmute` | List what is muted |
+| `reap unmute <name>` | Restore description from backup |
+| `reap unmute <path>` | Restore that one copy, not its namesakes elsewhere |
+| `reap unmute --all` | Restore all muted skills |
+| `reap keep <name>` | Protect an item from pruning |
+| `reap restore` | List what is pruned, with ids |
+| `reap restore <id>` | Undo one prune |
+| `reap restore --all` | Undo every prune |
+| `reap why <name>` | Explain in detail why an item got its verdict |
+| `reap by-project` | Skills bucketed by the project that fired them |
+| `reap route` | Propose a usage-informed lazy-load routing plan (opt-in) |
+| `reap apm` | Emit a proposed APM apm.yml from this repo's firing |
+| `reap apm --diff apm.yml` | Reconcile: what to add (fired, undeclared) / drop (declared, cold) |
+| `reap share` | Print a ready-to-paste line about what you reclaimed |
+| `reap reinvest --dry-run` | Experimental: propose a skill for work none of yours covers |
+| `reap snapshot` | Save this run's --json payload for later comparison |
+| `reap diff` | Compare the newest two snapshots |
+| `reap diff <a> <b>` | Compare two named snapshots |
+| `reap manifest <name>` | Emit a release manifest for one skill |
+| `reap install-hook` | Install weekly nudge (SessionStart hook) |
+| `reap install-hook --dry-run` | Preview without writing |
+| `reap uninstall-hook` | Remove hook, other hooks untouched |
+| `reap --json` | Structured JSON output |
+| `reap --md` | Markdown report |
+| `reap --days 7` | Shorter evidence window |
+| `reap --mute-threshold 0.20` | Uses ÷ sessions below which MUTE triggers (default 20%) |
+| `reap version` | Print version |
 
 <br>
 
-### Demo
+### The menu
+
+```bash
+skillreaper
+```
+
+`reap menu` opens the same screen.
 
 <p align="center">
-  <img src="docs/reap-demo.gif" alt="reap in action" width="800"><br>
-  <sub>Recorded against a small sample fixture
-  (<a href="docs/gif-helpers/demo-fixture.sh">demo-fixture.sh</a>), so the
-  numbers are the fixture's, not a real stack's.</sub>
+  <img src="docs/menu-demo.gif" alt="The skillreaper menu: choosing what to prune and mute, the number falling to zero, then the receipt" width="900"><br>
+  <sub>Recorded against an invented stack
+  (<a href="docs/gif-helpers/menu-fixture.sh">menu-fixture.sh</a>), so the
+  names and numbers are the fixture's, not a real machine's.</sub>
 </p>
+
+One screen instead of three commands. The number at the top is what you re-send
+in every session, and it falls as you choose. Nothing changes until you apply:
+the receipt lists every change and asks first. A prune, a mute or a lock can be
+taken back from the same screen with `u`.
+
+| Key | What it does |
+|---|---|
+| `space` | Takes reap's own suggestion for the row, the group or the selection |
+| `p` `m` `l` `d` | Prune, mute, lock, delete. Delete is the one choice that cannot be undone, and it says so in red |
+| `n` &nbsp; `u` | Clear a choice &nbsp;·&nbsp; undo a mute, a lock or a prune that is already on disk |
+| `a` | Fills in what reap suggests; pressed again, puts back what was there. Where reap is not sure it fills in nothing: those rows are yours to choose, one by one |
+| `o` | Turns the row's whole plugin off, through `claude plugin disable` |
+| `enter` | Opens a group, or a row's card: its weight, its last use, why reap says what it says |
+| `shift+↑↓` &nbsp; `v` &nbsp; mouse | Select many rows at once; a click takes reap's suggestion, a drag paints it |
+| `tab` | Money or tokens. On a subscription it starts with tokens: they are what eats the plan |
+| `g` &nbsp; `f` | Group by suggestion, by plugin, or flat &nbsp;·&nbsp; one platform at a time |
+| hold `s` | Shows what reap suggests on every row, while you hold it |
+| `shift+enter` | The receipt, then `y` applies. Where Shift cannot be read (ssh, some Linux terminals) the key is `x`, and the footer says so |
+
+Any action can be chosen on any row or group. reap's verdicts are suggestions
+and never limit the choice; it refuses only what is physically impossible, and
+says why on the row.
+
+What the menu does that the commands do not, all on macOS and all local:
+
+- Amounts are shown in the currency set on your Mac (or the locale in `LC_ALL`
+  or `LC_MONETARY`, when you set one), at a fixed ECB reference rate shipped
+  inside the release. Nothing is fetched. A release whose table is
+  more than 90 days old shows US dollars instead of a stale conversion.
+- Terminal.app sends Shift+arrows and Shift+Enter as the plain keys, so while
+  the menu is open a small `/usr/bin/osascript` helper asks macOS whether Shift
+  (and the `s` key, for the peek) is down. It reads those two keys' state and
+  nothing else, needs no permission, writes nothing, and exits with the menu. It
+  does not run over ssh.
+
+The menu runs on macOS and Linux. On Windows, in a pipe, or with any argument,
+`skillreaper` prints the report as it always did, and `reap` alone always does.
 
 <br>
 
 ### share - the number, ready to paste
 
-`reap share` prints one line about what you reclaimed, with the install command
-under it. Read-only: it measures and prints, nothing else. `--json` and `--md`
+`reap share` prints one line about what you reclaimed (or, before a prune, what
+you could), with the install command under it. Read-only: it measures and prints, nothing else. `--json` and `--md`
 are there for anything that wants to post it automatically.
 
+<!-- readme-share:start -->
 ```
-Just cut ~22.8k tokens/session of dead context from my AI agent with skillreaper.
+skillreaper says I could cut ~22.7k tokens/session of dead context from my AI agent.
 One read-only command, 100% local:
 
   brew install thousandflowers/tap/skillreaper
   github.com/thousandflowers/skillreaper
 ```
+<!-- readme-share:end -->
 
 <p align="center"><sub>Same generated sample stack as the report at the top of
 this page - the figure is the fixture's, not mine.</sub></p>
@@ -393,21 +521,20 @@ how much of what you load you actually use.
   mcp           12      1    8%  ▏▱▱▱▱▱▱▱▱▱           ?         ?
   agents        68      0    0%  ▱▱▱▱▱▱▱▱▱▱      ~1,305         0
   ───────────────────────────────────────────────────────────────
-  total        378      7    1%  ▏▱▱▱▱▱▱▱▱▱     ~22,998       278
+  total        378      7    1%  ▏▱▱▱▱▱▱▱▱▱   ~22,998+?     278+?
 
-  ~  MUTE — 2 heavy low-use skills, ~102 tok/session recoverable with reap mute
+  ~  MUTE — 2 heavy low-use skills, ~94 tok/session recoverable with reap mute
 ```
 <!-- readme-gap:end -->
 
 <p align="center"><sub>Same generated sample stack as the report at the top of this
 page, so the two agree. The numbers further up the page are measured on mine.</sub></p>
 
-Each row breaks down by category (skill, MCP, agent) with item count, token
-weight, and a 10-segment utilization bar. The token column reads
-*loaded → actually used*: the left number loads every session, the right is all
-that is ever touched - the gap between them is dead weight that reloads each
-time. Low utilization (<10 %) is red, medium (<50 %) yellow,
-high (≥50 %) green.
+Each row breaks down by category (skill, MCP, agent) with item count, a
+10-segment utilization bar and two token columns: `TOK LOADED` loads every
+session, `TOK USED` is all that is ever touched - the gap between them is dead
+weight that reloads each time. The bar and the percent beside it carry the
+magnitude; the rows are not tinted, so the view reads the same without colour.
 
 The default `reap` report also includes a compact utilization summary line:
 
@@ -421,18 +548,20 @@ The default `reap` report also includes a compact utilization summary line:
 blocks above it.</sub></p>
 
 This is the **real** gap between what your agent carries and what it fires -
-complementary to the shock box (which only counts items that are safe to prune
-right now).
+complementary to the report's REAP count (which only counts items that are safe
+to prune right now).
 
-<pre>reap gap          # text breakdown
-reap gap --json   # JSON output
-reap gap --md     # markdown table</pre>
+| Command | What it gives |
+|---|---|
+| `reap gap` | Text breakdown |
+| `reap gap --json` | JSON output |
+| `reap gap --md` | Markdown table |
 
 The gap view also scores **payload quality** for MCP tools: when a tool fires,
 is the result signal or noise? A fetch/screenshot tool can fire 80× and return
 mostly base64 or boilerplate every call - green under load utilization, but
 context burned on each call. Tools that fire often *and* return mostly noise are
-flagged `⚑ noisy`. This is the second utilization axis (load is the first), and
+flagged `noisy`. This is the second utilization axis (load is the first), and
 mute does not catch it.
 
 <br>
@@ -461,8 +590,10 @@ per-repo tool should not be read as global dead weight.
 capture is one of the files <code>make renders-check</code> verifies, so it
 cannot drift from what the binary prints.</sub></p>
 
-<pre>reap by-project          # text table
-reap by-project --json   # JSON output</pre>
+| Command | What it gives |
+|---|---|
+| `reap by-project` | Text table |
+| `reap by-project --json` | JSON output |
 
 <br>
 
@@ -478,11 +609,13 @@ else dominant firing project) loaded on demand. It is strictly opt-in and
 secondary to pruning - and below ~150 skills, native loading is usually enough,
 so the plan says so. The output is a **plan**: proposed, never auto-applied.
 
-<pre>reap route                      # text plan
-reap route --json               # JSON
-reap route --md                 # markdown
-reap route --route-threshold 0.05   # route skills firing in <5% of sessions
-reap route --route-min-skills 200   # only show a plan past 200 surviving skills</pre>
+| Command | What it gives |
+|---|---|
+| `reap route` | Text plan |
+| `reap route --json` | JSON |
+| `reap route --md` | Markdown |
+| `reap route --route-threshold 0.05` | Route skills firing in under 5% of sessions |
+| `reap route --route-min-skills 200` | Only show a plan past 200 surviving skills |
 
 <br>
 
@@ -495,10 +628,12 @@ include, REAP → omit, REVIEW → never auto-omit. Upstream coordinates are
 recovered from `apm.lock.yaml` when present; otherwise the skill becomes a clearly
 marked `TODO` comment rather than an invented coordinate.
 
-<pre>reap apm                        # propose apm.yml (yaml)
-reap apm --json                 # JSON
-reap apm --md                   # markdown
-reap apm --diff apm.yml         # reconcile: add fired-but-undeclared, drop declared-but-cold</pre>
+| Command | What it gives |
+|---|---|
+| `reap apm` | Propose apm.yml (yaml) |
+| `reap apm --json` | JSON |
+| `reap apm --md` | Markdown |
+| `reap apm --diff apm.yml` | Reconcile: add fired-but-undeclared, drop declared-but-cold |
 
 <br>
 
@@ -519,14 +654,17 @@ snapshots, so it says "this tool removed it and it returned" rather than
 "something is different". An item you restored yourself is not reported, since
 that was deliberate.
 
-<pre>reap snapshot            # save this run
-reap diff                # newest vs previous
-reap diff &lt;a&gt; &lt;b&gt;        # two named snapshots
-reap diff --json         # structured output</pre>
+| Command | What it gives |
+|---|---|
+| `reap snapshot` | Save this run |
+| `reap diff` | Newest vs previous |
+| `reap diff <a> <b>` | Two named snapshots |
+| `reap diff --json` | Structured output |
 
-Snapshots are never taken automatically. State nobody asked for is the disease
-this tool treats; `reap install-hook` is the place to opt into a periodic one,
-once `diff` has proved useful.
+Snapshots are never taken automatically: state nobody asked for is the disease
+this tool treats. Take one with `reap snapshot` when you want a point to compare
+against. The hook `reap install-hook` installs only nudges; a periodic snapshot
+would belong there, and is not there yet.
 
 <br>
 
@@ -541,7 +679,7 @@ Claude Code session. If 7 days have passed and the REAP or MUTE count has grown
 since the last check, it prints a single line to stderr:
 
 ```
-skillreaper: 3 skills flagged for pruning since last check. Run reap to review.
+skillreaper: 3 unused items to prune, more than at the last check. Run `reap` to review.
 ```
 
 Nothing else. No blocking. State stored at `~/.claude/reaped/nudge-state.json`.
@@ -585,8 +723,8 @@ installed.</sub></p>
 | Platform | Full support |
 |---|---|
 | **Claude Code** | ✅ |
-| **Codex CLI** | ✅ |
-| **Hermes** | ✅ |
+| **Codex CLI** | ✅ for what was used (its history shows what fired, not everything that was used, so an item with no use there surfaces as REVIEW, never REAP or MUTE) |
+| **Hermes** | Inventory only (session history is in `state.db`, which skillreaper does not parse yet, so its items surface as REVIEW, never REAP) |
 | **OpenCode** | ✅ (usage evidence needs the `sqlite3` CLI; inventory-only without it) |
 | **Cursor** | Inventory only (no local transcripts) |
 | **OpenClaw** | Inventory only (no session history) |
@@ -600,8 +738,8 @@ installed.</sub></p>
    platforms are scanned. No flags needed.
 2. **Inventory** - scans skills, agents, MCP servers, hooks, and prose
    files across all detected platforms.
-3. **Evidence** - parses JSONL session transcripts (Claude Code, Codex CLI,
-   Hermes). Counts `tool_use` blocks and command invocations with timestamps.
+3. **Evidence** - parses JSONL session transcripts (Claude Code, Codex CLI).
+   Counts `tool_use` blocks and command invocations with timestamps.
    OpenCode's SQLite history is read via the `sqlite3` CLI (read-only) when it
    is on `PATH`; without it, OpenCode stays inventory-only.
 4. **Cost** - character weight (`ceil(chars / 3.7)`) + init parser tool
@@ -630,18 +768,56 @@ in a SQLite database. skillreaper reads it through the system `sqlite3` binary
 in read-only mode - the real engine, so WAL-mode databases and overflow pages
 are handled correctly (a hand-rolled parser would not). No Go dependency is
 added. When `sqlite3` is **not** on `PATH`, OpenCode items have no usage
-evidence: they stay **REVIEW (never REAP)** with a warning at scan time. The
-same safety net applies to any platform with no readable session transcripts.
+evidence: they stay **REVIEW (never REAP)** with a warning at scan time. So do
+the skills in `~/.claude/skills`, which OpenCode loads too: one of them may be
+in use there, unseen. A history read only in part (a database too large for
+one query) counts as not read. The same safety net applies to any platform
+with no readable session transcripts.
 
 **Incomplete evidence never flags an item.** The scanner caps how much it
 reads per transcript record. If a record is oversized or unreadable, that
 platform's evidence is marked incomplete and its items stay **REVIEW (never
 REAP/MUTE)**, with a warning naming the platform - partial evidence can never
-mistakenly mark a tool as dead.
+mistakenly mark a tool as dead. The same holds for what reap cannot read
+elsewhere: a project folder that is a link to a disk that is not there, its
+own record of past uses, a CLAUDE.md, a `settings.json` or an agent's file.
+Each is named in a warning, and unused items stay REVIEW until it can be read.
+
+**An item that is new here waits out the grace period.** A skill or agent of
+your own is dated by its file; a server in a config, which has no date, by the
+day reap first found it. An item restored from quarantine or unmuted counts
+from that day too: it had no use while it was away. For `--grace-days` (14)
+after that it is REVIEW, and a bare `reap prune` leaves it. For an item that
+has existed for only part of the window, `--min-sessions` is scaled to that
+part.
+
+**A name in your CLAUDE.md protects a skill, a plain word only where it is
+written as a name.** A skill named in your CLAUDE.md or rules is kept
+(`claude-md-ref`). A name with a dash, a colon, an underscore or a digit in
+it (`code-review`, `ecc:plan`) counts wherever it stands. A one-word name
+(`review`) is also a word of the language, so it counts only where it is
+written as a name: `/review`, between backticks, asterisks or quotes, as a
+link's text, beside the word "skill", in a list item or a quoted line that
+begins with names (`- review: …`, `- review, deploy`, `> review`) or a heading
+of its own, or alone in a table cell. "always review the diff" protects nothing, and `reap why review`
+then says so.
+
+**A built-in command can count as a skill's use.** A transcript records
+`/plan` the same way whether it ran Claude Code's own command or a skill of
+yours named `plan`. reap counts it as a use of the skill, so such a skill is
+kept: when it cannot tell, it errs towards keeping.
+
+**One folder under two paths has two records.** What reap remembers about a
+config folder (uses seen before their transcripts were deleted, snapshots) is
+kept under the path you gave it. The same folder reached by two paths, through
+a link or as `/tmp/x` and `/private/tmp/x` on macOS, has two records: a run
+under one path does not see what a run under the other remembered, and `reap
+diff` does not find its snapshots. With the default `~/.claude` this never
+happens; with `--claude-dir`, write the folder one way.
 
 **Not a tool declaration fix.** Claude Code's deferred tools reduce the
 *init-time tool declaration* overhead. Skillreaper addresses a different
-problem: **always-loaded skill/agent/prose files.** If a skill description
+problem: **always-loaded skill and agent descriptions.** If a skill description
 is 248 characters, it is read into context every session - regardless of
 lazy tool loading. These two optimizations are complementary, not competing.
 
@@ -652,7 +828,7 @@ lazy tool loading. These two optimizations are complementary, not competing.
 - **100 % local**, zero dependencies, single static binary (Go ≥ 1.24)
 - **Multi-platform** - adding a new platform is one struct in
   `internal/platform/`
-- **Reversible quarantine** - never deletes, never destructive
+- **Reversible quarantine** - prune moves, never deletes; the only permanent removal is `reap delete`, which you name and confirm
 - **MIT licensed**
 
 ```
@@ -680,14 +856,24 @@ docs/           demo assets
 
 Tracked as issues, grouped by the problem they solve.
 
-- **Weigh MCP** - an MCP server's tool schemas are injected every session, but
-  their size is only knowable by running the server, so those rows read `?`
-  today and the total under-counts
-  ([#27](https://github.com/thousandflowers/skillreaper/issues/27)).
+- **The menu, next** - `reap reinvest` as its last step: what you removed
+  becomes credit for a skill that covers work none of yours does, written from
+  your own sessions (a command of its own today, and experimental); and the
+  menu on Windows.
 - **Better verdicts** - `--since` / `--until` and a window that respects the
   corpus ([#53](https://github.com/thousandflowers/skillreaper/issues/53));
   measuring wrong-tool picks
-  ([#55](https://github.com/thousandflowers/skillreaper/issues/55)).
+  ([#55](https://github.com/thousandflowers/skillreaper/issues/55)); two
+  counters for a use, the ones you made and the automatic ones (a subagent's,
+  or a line Claude Code adds by itself), so that a skill kept only by the
+  second kind shows as such. Today both count as one. One record for a
+  config folder reached by two paths (a link, `/tmp` and `/private/tmp`),
+  with what both had remembered brought together.
+- **Act on more than one stack shape** - group skills by domain and language,
+  then act on a group
+  ([#101](https://github.com/thousandflowers/skillreaper/issues/101)); move a
+  skill between user and workspace scope
+  ([#102](https://github.com/thousandflowers/skillreaper/issues/102)).
 - **Teams** - shared policy with verdicts that stay on each machine
   ([#89](https://github.com/thousandflowers/skillreaper/issues/89)), and a
   hosted view of them
@@ -695,9 +881,9 @@ Tracked as issues, grouped by the problem they solve.
 
 Not planned: a CI job running `reap` (a runner has no session transcripts, so it
 would measure nothing - the periodic loop is `reap install-hook`), an
-extrapolated annual dollar figure (see [docs/decisions.md](docs/decisions.md)),
-and git commit ranges (transcripts carry timestamps, which `--since` /
-`--until` already covers).
+extrapolated annual dollar figure,
+and git commit ranges (transcripts carry timestamps, so a window of days,
+`--days` today and `--since` / `--until` once #53 lands, covers it).
 
 <br>
 

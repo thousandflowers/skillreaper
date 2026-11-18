@@ -1,6 +1,6 @@
 # hero.tape - `reap --agent` against the hero fixture, for posts and threads.
 #
-#   cd docs/tapes && vhs hero.tape
+#   (cd docs/tapes && vhs hero.tape)
 #
 # Writes /tmp/skillreaper-hero.gif, deliberately outside the repo: this GIF is
 # for posts, not for the README, and docs/gifs/ is gitignored anyway.
@@ -16,6 +16,9 @@
 # 800px wide caps the font at 16pt - 17 measured at 70 usable columns, one short.
 # reap-prune.tape's 26pt would need ~1150px, so the size differs and the theme
 # and font do not.
+# Since 0.9.0 the report ends with a line of 101 columns ("The dead-token
+# figure is a floor: ..."), which wraps at this width: widen the window to
+# about 1140px before recording again, or accept the wrap.
 
 # Quoted: the parser in vhs 0.11 rejects an unquoted path that starts with "/".
 Output "/tmp/skillreaper-hero.gif"

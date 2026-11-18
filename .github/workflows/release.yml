@@ -55,6 +55,17 @@ jobs:
             exit 1
           }
           echo "plugin manifest is at $got"
+      # The release page shows the changelog's section for this version, not a
+      # list of commit subjects. A tag with no section would publish an empty
+      # page, so it stops here, before anything is built.
+      - name: Assert the changelog has a section for the tag
+        run: |
+          set -euo pipefail
+          want="${GITHUB_REF_NAME#v}"
+          grep -qx "## $want" CHANGELOG.md || {
+            echo "CHANGELOG.md has no \"## $want\" section for tag $GITHUB_REF_NAME" >&2
+            exit 1
+          }
 
   goreleaser:
     runs-on: ubuntu-latest
@@ -66,12 +77,19 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+      # Written outside the checkout: goreleaser refuses a tree with a new file in it.
+      - name: Write the release notes from CHANGELOG.md
+        run: |
+          set -euo pipefail
+          want="${GITHUB_REF_NAME#v}"
+          awk -v head="## $want" '$0 == head {on = 1; next} on && /^## / {exit} on' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          [ -s "$RUNNER_TEMP/release-notes.md" ]
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes ${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -168,6 +186,7 @@ jobs:
           # directory has no copy of its own, so pull the canonical one
           # in at publish time.
           cp README.md npm/README.md
+          cp LICENSE npm/LICENSE
           cd npm
           VERSION="${GITHUB_REF_NAME#v}"
           npm version "$VERSION" --no-git-tag-version --allow-same-version

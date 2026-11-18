@@ -21,11 +21,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/atomicfile"
+	"strings"
 )
 
 // Format is the on-disk schema version. A mismatch is treated as no digest at
@@ -55,6 +59,13 @@ type Digest struct {
 	Updated time.Time                    `json:"updated"`
 	Sources map[string]Source            `json:"sources"`
 	Items   map[string]map[string]Record `json:"items"`
+	// FirstSeen is when reap first found an item in the stack, for the items
+	// that came after its first look (those there at the first look hold the
+	// zero time). It dates what has no date of its own, a server in a config,
+	// and what came back: an item restored, or unmuted.
+	// Not omitempty: an empty list is a first look taken that found nothing,
+	// and left out of the file it made the next run a first look again.
+	FirstSeen map[string]time.Time `json:"first_seen"`
 }
 
 // New returns an empty digest ready to merge into.
@@ -106,16 +117,32 @@ func Path(claudeDir string) string {
 // malformed — yields an empty digest and never an error: a missing record is
 // the normal first run, and a corrupt one must not stop a report.
 func Load(path string) *Digest {
+	d, _ := LoadChecked(path)
+	return d
+}
+
+// LoadChecked is Load that tells a record that is not there (the normal first
+// run: no error) from one that is there and cannot be used: unreadable, cut
+// short, or written in another format. The digest is empty then too, and the
+// caller says so and keeps the file: read as a first run, it was written over
+// and what it knew was lost for good.
+func LoadChecked(path string) (*Digest, error) {
 	if path == "" {
-		return New()
+		return New(), nil
 	}
 	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return New(), nil
+	}
 	if err != nil {
-		return New()
+		return New(), err
 	}
 	var d Digest
-	if json.Unmarshal(b, &d) != nil || d.Format != Format {
-		return New()
+	if err := json.Unmarshal(b, &d); err != nil {
+		return New(), fmt.Errorf("it is not a record reap wrote: %w", err)
+	}
+	if d.Format != Format {
+		return New(), fmt.Errorf("it is in format %d, this reap writes %d", d.Format, Format)
 	}
 	if d.Sources == nil {
 		d.Sources = map[string]Source{}
@@ -123,7 +150,7 @@ func Load(path string) *Digest {
 	if d.Items == nil {
 		d.Items = map[string]map[string]Record{}
 	}
-	return &d
+	return &d, nil
 }
 
 // Save writes the digest atomically.
@@ -159,6 +186,9 @@ type Observation struct {
 	Errors map[string]map[string]int
 	// At is the transcript's timestamp, used to widen First and Last.
 	At time.Time
+	// Last is when each use last happened, where that is known. A transcript can
+	// span months, and its date is not the date of what fired early in it.
+	Last map[string]map[string]time.Time
 }
 
 // Add folds one transcript in, keyed by its identity. Adding the same identity
@@ -176,7 +206,11 @@ func (d *Digest) Add(id string, o Observation) {
 
 	for cat, byName := range o.Uses {
 		for name, n := range byName {
-			d.bump(cat, name, n, 0, o.At, true)
+			at := o.At
+			if t := o.Last[cat][name]; !t.IsZero() {
+				at = t
+			}
+			d.bump(cat, name, n, 0, at, true)
 		}
 	}
 	for cat, byName := range o.Errors {
@@ -220,23 +254,81 @@ func (d *Digest) Lookup(cat, name string) (Record, bool) {
 	return r, ok
 }
 
-// SpanDays is how many days separate the earliest and latest observation held.
-// This is the number that can exceed the retention horizon, and the whole
-// reason the digest exists.
-func (d *Digest) SpanDays() int {
-	var first, last time.Time
-	for _, byName := range d.Items {
-		for _, r := range byName {
-			if !r.First.IsZero() && (first.IsZero() || r.First.Before(first)) {
-				first = r.First
-			}
-			if r.Last.After(last) {
-				last = r.Last
+// LookupFold is Lookup for a name whose case is not fixed: a skill or an agent
+// is invoked as the person types it, and its folder may spell it another way.
+// Every record under the name in any case counts.
+func (d *Digest) LookupFold(cat, name string) (Record, bool) {
+	return d.sumWhere(cat, func(recorded string) bool { return strings.EqualFold(recorded, name) })
+}
+
+// serverSep is what joins a server's name and a tool's in a recorded call.
+const serverSep = "__"
+
+// LookupServer is Lookup for an MCP server: what was filed under its own name,
+// and its calls that were kept whole. A call is recorded as server__tool and
+// the parser can only credit what stands before the first "__", so a server
+// whose name holds "__", or ends in "_", has its calls under their whole names
+// and filed under another's. servers is every configured server: a call kept
+// whole belongs to the longest of them that begins it, and is taken off the
+// shorter one it was filed under.
+// In a record written before whole names were kept there is only the parser's
+// credit, and it is taken: more uses than its own is the safe mistake, none
+// would condemn it.
+func (d *Digest) LookupServer(cat, name string, servers []string) (Record, bool) {
+	sum, found := d.Lookup(cat, name)
+	anothers := func(recorded string) bool {
+		for _, s := range servers {
+			if len(s) > len(name) && strings.HasPrefix(recorded, s+serverSep) {
+				return true
 			}
 		}
+		return false
 	}
-	if first.IsZero() || last.IsZero() {
-		return 0
+	kept := false
+	for recorded, r := range d.Items[cat] {
+		if !strings.HasPrefix(recorded, name+serverSep) {
+			continue
+		}
+		switch mine, filedHere := !anothers(recorded), creditedTo(recorded) == name; {
+		case mine && !filedHere:
+			kept = true
+			sum.Uses += r.Uses
+			if r.Last.After(sum.Last) {
+				sum.Last = r.Last
+			}
+		case !mine && filedHere:
+			sum.Uses = max(sum.Uses-r.Uses, 0)
+		}
 	}
-	return int(last.Sub(first).Hours() / 24)
+	if older := creditedTo(name + serverSep); !kept && !found && older != name {
+		return d.Lookup(cat, older)
+	}
+	return sum, (kept || found) && sum.Uses > 0
+}
+
+// creditedTo is the server the parser credits a call to before the configured
+// names are known: what stands before the first separator, the whole name when
+// nothing does.
+func creditedTo(tool string) string {
+	if i := strings.Index(tool, serverSep); i > 0 {
+		return tool[:i]
+	}
+	return tool
+}
+
+// sumWhere adds up every record of cat whose name matches.
+func (d *Digest) sumWhere(cat string, matches func(recorded string) bool) (Record, bool) {
+	var sum Record
+	found := false
+	for recorded, r := range d.Items[cat] {
+		if !matches(recorded) {
+			continue
+		}
+		found = true
+		sum.Uses += r.Uses
+		if r.Last.After(sum.Last) {
+			sum.Last = r.Last
+		}
+	}
+	return sum, found
 }

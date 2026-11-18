@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -207,5 +208,54 @@ INSERT INTO messages (session_id, role, content, created_at) VALUES
 	}
 	if got := st.Uses[scan.CatSkill]["overlong"]; got != 0 {
 		t.Errorf("overlong uses = %d, want 0: that row really is unreadable", got)
+	}
+}
+
+func sqliteExec(t *testing.T, db, sql string) {
+	t.Helper()
+	if out, err := exec.Command(sqlite3Bin, db, sql).CombinedOutput(); err != nil {
+		t.Fatalf("sqlite3: %v: %s", err, out)
+	}
+}
+
+// Reading must leave the other tool's folder as it was, in both layouts.
+func TestParseSQLiteLeavesTheFolderUnchangedAndReadsParts(t *testing.T) {
+	if _, err := exec.LookPath(sqlite3Bin); err != nil {
+		t.Skip("sqlite3 not installed")
+	}
+	dir := t.TempDir()
+	db := filepath.Join(dir, "opencode.db")
+	sqliteExec(t, db, `PRAGMA journal_mode=WAL;
+CREATE TABLE session(id, parent_id, time_created, time_updated);
+CREATE TABLE part(id, message_id, session_id, time_created, time_updated, data);
+INSERT INTO session VALUES('s1',NULL,1893456000000,1893456000000),('s2',NULL,1893456000000,1893456000000),('child','s1',1893456000000,1893456000000);
+INSERT INTO part VALUES('p1','m','s1',1893456000000,0,'{"type":"tool","tool":"skill","state":{"status":"completed","input":{"name":"oskill"}}}');
+INSERT INTO part VALUES('p2','m','s1',1893456000000,0,'{"type":"tool","tool":"srv_ping","state":{"status":"completed","input":{}}}');
+INSERT INTO part VALUES('p3','m','s1',1893456000000,0,'{"type":"text","text":"the tool"}');`)
+	listing := func() []string {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		return names
+	}
+	before := fmt.Sprint(listing())
+
+	st, err := ParseSQLite(db, time.Time{}, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after := fmt.Sprint(listing()); after != before {
+		t.Errorf("folder changed: %s -> %s", before, after)
+	}
+	if st.Sessions != 2 {
+		t.Errorf("Sessions = %d, want 2: a child session is not a session", st.Sessions)
+	}
+	if st.Uses[scan.CatSkill]["oskill"] != 1 || st.ToolCalls["srv_ping"] != 1 || st.ToolSep != "_" || !st.PositiveOnly {
+		t.Errorf("uses=%v tools=%v sep=%q positive=%v", st.Uses[scan.CatSkill], st.ToolCalls, st.ToolSep, st.PositiveOnly)
 	}
 }

@@ -3,15 +3,23 @@
 package hook
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/thousandflowers/skillreaper/internal/atomicfile"
+	"github.com/thousandflowers/skillreaper/internal/jsonedit"
 )
+
+// defaultSettingsMode is for a settings.json this tool creates.
+const defaultSettingsMode = 0o644
 
 // starCtaCooldownDays limits the star-CTA to at most once per 30 days.
 const starCtaCooldownDays = 30
@@ -64,141 +72,264 @@ func isOurHook(command string) bool {
 	return strings.HasSuffix(strings.TrimSpace(command), "# "+Marker)
 }
 
+// sessionStartPath is where the hook groups sit in settings.json.
+var sessionStartPath = []string{"hooks", "SessionStart"}
+
 // Install adds the SessionStart nudge hook to settings.json (creating the file
-// if absent), preserving existing hooks and top-level keys. It is idempotent.
-// With dryRun the resulting JSON is returned without writing.
+// if absent). Nothing else in the file changes: not another key, not a hook's
+// other fields, not the file's mode. It is idempotent. With dryRun the resulting
+// JSON is returned without writing.
 func Install(settingsPath, command string, dryRun bool) ([]byte, error) {
-	top, err := readTop(settingsPath)
-	if err != nil {
-		return nil, err
-	}
-	hooks, err := decodeHooks(top["hooks"])
-	if err != nil {
-		return nil, err
-	}
-	for _, g := range hooks["SessionStart"] {
-		for _, h := range g.Hooks {
-			if isOurHook(h.Command) {
-				return marshalTop(top) // already installed
-			}
-		}
-	}
-	hooks["SessionStart"] = append(hooks["SessionStart"], group{
-		Hooks: []cmdEntry{{Type: "command", Command: command}},
-	})
-	if err := encodeHooks(top, hooks); err != nil {
-		return nil, err
-	}
-	out, err := marshalTop(top)
-	if err != nil {
-		return nil, err
-	}
-	if dryRun {
-		return out, nil
-	}
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
-		return nil, err
-	}
-	if err := atomicfile.Write(settingsPath, out, 0o644); err != nil {
-		return nil, err
-	}
-	return out, nil
+	out, _, err := Installed(settingsPath, command, dryRun)
+	return out, err
 }
 
-// Uninstall removes only skillreaper's nudge entry from SessionStart, leaving
-// other hooks intact. Missing files and missing entries are no-ops.
-func Uninstall(settingsPath string) error {
-	if _, err := os.Stat(settingsPath); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	top, err := readTop(settingsPath)
+// Change is what an install did to settings.json.
+type Change int
+
+const (
+	Unchanged Change = iota // the hook was there, with this command
+	Added                   // there was no hook
+	Updated                 // the hook named another program: the binary moved
+)
+
+// Installed is Install that also says what it changed. A hook of ours with
+// another command is pointed at this one: the old program may be gone.
+func Installed(settingsPath, command string, dryRun bool) ([]byte, Change, error) {
+	doc, perm, err := readSettings(settingsPath)
 	if err != nil {
-		return err
+		return nil, Unchanged, err
 	}
-	hooks, err := decodeHooks(top["hooks"])
+	groups, err := sessionStartGroups(doc)
 	if err != nil {
-		return err
+		return nil, Unchanged, fmt.Errorf("settings %s: %w", settingsPath, err)
 	}
-	var kept []group
-	for _, g := range hooks["SessionStart"] {
-		var kc []cmdEntry
-		for _, h := range g.Hooks {
-			if isOurHook(h.Command) {
+	out, change := doc, Added
+	for i, g := range groups {
+		for j, h := range g.Hooks {
+			if !isOurHook(h.Command) {
 				continue
 			}
-			kc = append(kc, h)
+			if change == Added {
+				change = Unchanged // ours is there: only a stale one changes this
+			}
+			if h.Command == command {
+				continue
+			}
+			value, err := marshalNoEscape(command)
+			if err != nil {
+				return nil, Unchanged, err
+			}
+			path := append(slices.Clone(sessionStartPath), strconv.Itoa(i), "hooks", strconv.Itoa(j), "command")
+			if out, err = jsonedit.Set(out, value, path...); err != nil { // on out: every stale one, not the last
+				return nil, Unchanged, err
+			}
+			change = Updated
 		}
-		if len(kc) == 0 {
-			continue // drop a group left empty
+	}
+	if change == Unchanged {
+		return doc, Unchanged, nil
+	}
+	if change == Added {
+		entry, err := marshalNoEscape(group{Hooks: []cmdEntry{{Type: "command", Command: command}}})
+		if err != nil {
+			return nil, Unchanged, err
 		}
-		g.Hooks = kc
-		kept = append(kept, g)
+		if out, err = appendGroup(doc, entry); err != nil {
+			return nil, Unchanged, fmt.Errorf("settings %s: %w", settingsPath, err)
+		}
 	}
-	if len(kept) == 0 {
-		delete(hooks, "SessionStart")
-	} else {
-		hooks["SessionStart"] = kept
+	if dryRun {
+		_, err := settingsTarget(settingsPath) // what the real run would stop at
+		return out, change, err
 	}
-	if err := encodeHooks(top, hooks); err != nil {
-		return err
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		return nil, Unchanged, err
 	}
-	out, err := marshalTop(top)
-	if err != nil {
-		return err
+	if err := writeSettings(settingsPath, out, perm); err != nil {
+		return nil, Unchanged, err
 	}
-	return atomicfile.Write(settingsPath, out, 0o644)
+	return out, change, nil
 }
 
-func readTop(path string) (map[string]json.RawMessage, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
+// Uninstall removes only skillreaper's nudge entry from SessionStart, and the
+// containers that entry alone was keeping alive, so an install followed by an
+// uninstall leaves the file as it was. Missing files and missing entries are
+// no-ops.
+func Uninstall(settingsPath string) error {
+	_, err := Uninstalled(settingsPath)
+	return err
+}
+
+// Uninstalled is Uninstall that also says whether there was a hook to remove.
+func Uninstalled(settingsPath string) (removed bool, err error) {
+	if _, err := os.Stat(settingsPath); err != nil {
 		if os.IsNotExist(err) {
-			return map[string]json.RawMessage{}, nil
+			return false, nil
 		}
+		return false, err
+	}
+	doc, perm, err := readSettings(settingsPath)
+	if err != nil {
+		return false, err
+	}
+	groups, err := sessionStartGroups(doc)
+	if err != nil {
+		return false, fmt.Errorf("settings %s: %w", settingsPath, err)
+	}
+	out := doc
+	// Backwards, so the indexes still to come stay valid as elements go.
+	for i := len(groups) - 1; i >= 0; i-- {
+		kept, ours := len(groups[i].Hooks), 0
+		for j := len(groups[i].Hooks) - 1; j >= 0; j-- {
+			if !isOurHook(groups[i].Hooks[j].Command) {
+				continue
+			}
+			kept--
+			ours++
+			path := append(slices.Clone(sessionStartPath), strconv.Itoa(i), "hooks", strconv.Itoa(j))
+			if out, _, err = jsonedit.Delete(out, path...); err != nil {
+				return false, err
+			}
+		}
+		if kept == 0 && ours > 0 { // a group someone left empty is theirs to keep
+			if out, _, err = jsonedit.Delete(out, append(slices.Clone(sessionStartPath), strconv.Itoa(i))...); err != nil {
+				return false, err
+			}
+		}
+	}
+	if bytes.Equal(out, doc) {
+		return false, nil
+	}
+	if out, err = dropIfEmpty(out, sessionStartPath...); err != nil {
+		return false, err
+	}
+	if out, err = dropIfEmpty(out, sessionStartPath[:1]...); err != nil {
+		return false, err
+	}
+	return true, writeSettings(settingsPath, out, perm)
+}
+
+// writeSettings writes through a link: settings.json is often a link into a
+// dotfiles repo, and a rename onto the link would cut it off from there.
+func writeSettings(path string, b []byte, perm os.FileMode) error {
+	target, err := settingsTarget(path)
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(target, b, perm)
+}
+
+// settingsTarget is the file a write to path lands in: what a link leads to.
+func settingsTarget(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return path, nil
+	}
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("%s is a link that leads nowhere: %w", path, err)
+	}
+	return target, nil
+}
+
+// dropIfEmpty removes the container at path when nothing is left in it.
+func dropIfEmpty(doc []byte, path ...string) ([]byte, error) {
+	raw, err := jsonedit.Get(doc, path...)
+	if errors.Is(err, jsonedit.ErrNotFound) {
+		return doc, nil
+	}
+	if err != nil {
 		return nil, err
+	}
+	if s := strings.TrimSpace(string(raw[1 : len(raw)-1])); s != "" {
+		return doc, nil
+	}
+	out, _, err := jsonedit.Delete(doc, path...)
+	return out, err
+}
+
+// readSettings returns the file and the mode to write it back with. A file that
+// holds a secret stays as private as it is; only a new file gets the default.
+func readSettings(path string) ([]byte, os.FileMode, error) {
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return []byte("{}\n"), defaultSettingsMode, nil
+	}
+	if err != nil {
+		return nil, 0, err
 	}
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(b, &top); err != nil {
-		return nil, fmt.Errorf("unreadable settings %s: %w", path, err)
+		return nil, 0, fmt.Errorf("unreadable settings %s: %w", path, err)
 	}
-	if top == nil {
-		top = map[string]json.RawMessage{}
+	if top == nil { // the file says null
+		return nil, 0, fmt.Errorf("unreadable settings %s: not a JSON object", path)
 	}
-	return top, nil
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	return b, info.Mode().Perm(), nil
 }
 
-func decodeHooks(raw json.RawMessage) (map[string][]group, error) {
-	if len(raw) == 0 {
-		return map[string][]group{}, nil
+// sessionStartGroups decodes just enough of the hooks to find commands.
+// appendGroup adds a SessionStart group. "hooks": null or [] holds no hook, so
+// a hooks object takes its place; any other hooks that is not an object is
+// named, as Claude Code would not read a hook there either.
+func appendGroup(doc, entry []byte) ([]byte, error) {
+	out, err := jsonedit.Append(doc, entry, sessionStartPath...)
+	if err == nil {
+		return out, nil
 	}
-	var h map[string][]group
-	if err := json.Unmarshal(raw, &h); err != nil {
+	// "SessionStart": null is an empty list, as "hooks": null is an empty object.
+	if list, listErr := jsonedit.Get(doc, sessionStartPath...); listErr == nil && string(bytes.TrimSpace(list)) == "null" {
+		return jsonedit.Set(doc, []byte("["+string(entry)+"]"), sessionStartPath...)
+	}
+	hooks, getErr := jsonedit.Get(doc, sessionStartPath[0])
+	switch v := string(bytes.TrimSpace(hooks)); {
+	case getErr != nil:
+		return nil, err
+	case v == "null" || strings.ReplaceAll(v, " ", "") == "[]":
+		return jsonedit.Set(doc, []byte(`{"SessionStart": [`+string(entry)+`]}`), sessionStartPath[0])
+	case !strings.HasPrefix(v, "{"):
+		return nil, fmt.Errorf(`"hooks" is not an object (%s): fix it by hand, Claude Code would not read a hook there`, firstWord(v))
+	}
+	return nil, err
+}
+
+// firstWord is the start of a JSON value, enough to name it in a message.
+func firstWord(v string) string {
+	if len(v) > 20 {
+		return v[:20] + "…"
+	}
+	return v
+}
+
+func sessionStartGroups(doc []byte) ([]group, error) {
+	raw, err := jsonedit.Get(doc, sessionStartPath...)
+	if errors.Is(err, jsonedit.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
 		return nil, err
 	}
-	if h == nil {
-		h = map[string][]group{}
+	var groups []group
+	if err := json.Unmarshal(raw, &groups); err != nil {
+		return nil, fmt.Errorf("hooks.SessionStart is not a list of hook groups: %w", err)
 	}
-	return h, nil
+	return groups, nil
 }
 
-func encodeHooks(top map[string]json.RawMessage, hooks map[string][]group) error {
-	if len(hooks) == 0 {
-		delete(top, "hooks")
-		return nil
+// marshalNoEscape encodes v leaving & < > readable, as a person wrote them.
+func marshalNoEscape(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
 	}
-	b, err := json.Marshal(hooks)
-	if err != nil {
-		return err
-	}
-	top["hooks"] = b
-	return nil
-}
-
-func marshalTop(top map[string]json.RawMessage) ([]byte, error) {
-	return json.MarshalIndent(top, "", "  ")
+	return bytes.TrimSpace(buf.Bytes()), nil
 }
 
 // NudgeState is persisted between sessions to throttle the nudge to weekly
@@ -226,34 +357,30 @@ func nudgeStatePath(claudeDir string) string {
 // LoadNudgeState returns the saved nudge state, or a zero state when none
 // exists yet (which makes the first run eligible to nudge).
 func LoadNudgeState(claudeDir string) (NudgeState, error) {
-	b, err := os.ReadFile(nudgeStatePath(claudeDir))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return NudgeState{}, nil
-		}
-		return NudgeState{}, err
-	}
-	var s NudgeState
-	if err := json.Unmarshal(b, &s); err != nil {
-		return NudgeState{}, err
-	}
-	return s, nil
+	return atomicfile.LoadJSON[NudgeState](nudgeStatePath(claudeDir))
 }
 
 // SaveNudgeState writes the nudge state, creating the reaped/ directory.
 func SaveNudgeState(claudeDir string, s NudgeState) error {
-	if err := os.MkdirAll(filepath.Dir(nudgeStatePath(claudeDir)), 0o755); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return atomicfile.Write(nudgeStatePath(claudeDir), b, 0o600)
+	return atomicfile.SaveJSON(nudgeStatePath(claudeDir), s)
 }
 
 // ShouldNudge reports whether a passive nudge should print now: at least
 // nudgeIntervalDays since the last nudge, and the reap or mute count has grown.
+// Lowered follows a cleanup down: each count that fell below its baseline
+// becomes the baseline, the time of the last nudge untouched. Without it, new
+// dead items would have to pass the old peak before the nudge spoke again.
+func Lowered(st NudgeState, reapCount, muteCount int) (NudgeState, bool) {
+	changed := false
+	if reapCount < st.LastReapCount {
+		st.LastReapCount, changed = reapCount, true
+	}
+	if muteCount < st.LastMuteCount {
+		st.LastMuteCount, changed = muteCount, true
+	}
+	return st, changed
+}
+
 func ShouldNudge(now time.Time, reapCount, muteCount int, st NudgeState) bool {
 	if now.Sub(st.LastNudgeAt) < nudgeIntervalDays*24*time.Hour {
 		return false

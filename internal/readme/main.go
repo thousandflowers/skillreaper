@@ -100,7 +100,7 @@ func blocks(r *report.Report) []block {
 			`On my own installation, measured %s: **%d items loaded, %d ever fired - %s utilization.**
 That's ~%s dead tokens re-sent in every single session, ~%dk a month of
 pure token waste, paid for on every request before you type anything.`,
-			measured, loaded, fired, pct(fired, loaded), commas(tok), roundTo(monthly, 1000)/1000)},
+			measured, loaded, fired, report.PctOf(fired, loaded), commas(tok), roundTo(monthly, 1000)/1000)},
 
 		{"mine-costs", fmt.Sprintf(
 			`- %s items loaded
@@ -153,34 +153,13 @@ func replace(doc, marker, body string) (string, error) {
 	return doc[:i+len(start)] + "\n" + body + "\n" + doc[j:], nil
 }
 
-// pct mirrors the tool's own rounding so the README cannot disagree with what
-// reap prints for the same run.
-func pct(part, whole int) string {
-	if whole == 0 {
-		return "n/a"
-	}
-	p := part * 100 / whole
-	if p == 0 && part > 0 {
-		return "<1%"
-	}
-	return fmt.Sprintf("%d%%", p)
+func pctSpaced(part, whole int) string {
+	return strings.Replace(report.PctOf(part, whole), "%", " %", 1)
 }
-
-func pctSpaced(part, whole int) string { return strings.Replace(pct(part, whole), "%", " %", 1) }
 
 // spaced and commas are the two thousands separators already in use on the
 // page: "19 760" in the cost list, "19,760" in the sentence above it.
-func spaced(n int) string { return group(n, " ") }
-func commas(n int) string { return group(n, ",") }
-
-func group(n int, sep string) string {
-	s := fmt.Sprintf("%d", n)
-	var out []string
-	for len(s) > 3 {
-		out = append([]string{s[len(s)-3:]}, out...)
-		s = s[:len(s)-3]
-	}
-	return strings.Join(append([]string{s}, out...), sep)
-}
+func spaced(n int) string { return strings.ReplaceAll(report.HumanNum(n), ",", " ") }
+func commas(n int) string { return report.HumanNum(n) }
 
 func roundTo(n, unit int) int { return (n + unit/2) / unit * unit }

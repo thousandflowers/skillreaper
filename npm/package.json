@@ -1,11 +1,15 @@
 {
   "name": "skillreaper",
   "version": "0.0.0",
-  "description": "Audit and prune unused AI agent skills, MCP servers, hooks, and agents",
+  "description": "Audit unused AI agent skills, MCP servers and subagents, and prune them reversibly",
   "bin": {
     "skillreaper": "bin/skillreaper.js",
     "reap": "bin/skillreaper.js"
   },
+  "files": [
+    "bin",
+    "lib"
+  ],
   "scripts": {
     "test": "node --test"
   },

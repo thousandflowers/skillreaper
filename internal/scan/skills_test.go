@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -166,8 +167,9 @@ func TestScanSkillsSkipsSymlinkedSkillOutsideSkillsRoot(t *testing.T) {
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
-	if findItem(items, "linked") != nil {
-		t.Fatal("symlinked skill outside skills root should not be loaded")
+	it := findItem(items, "linked")
+	if it == nil || it.Removable || it.ViaLink == "" || it.DescChars == 0 {
+		t.Fatalf("symlinked skill outside skills root must be a weighed read-only row: %+v", it)
 	}
 }
 
@@ -181,8 +183,9 @@ func TestScanSkillsSkipsSymlinkedSkillsRootOutsideClaudeDir(t *testing.T) {
 	}
 
 	items, _ := ScanSkills(home, "test")
-	if findItem(items, "outside") != nil {
-		t.Fatal("symlinked skills root outside claudeDir should not be loaded")
+	it := findItem(items, "outside")
+	if it == nil || it.Removable || it.ViaLink == "" || it.DescChars == 0 {
+		t.Fatalf("symlinked skills root must give weighed read-only rows: %+v", it)
 	}
 }
 
@@ -272,5 +275,95 @@ func TestScanAgentsSkipsSymlinkedAgentsRootOutsideClaudeDir(t *testing.T) {
 	items, _ := ScanAgents(home, "test")
 	if findItem(items, "helper") != nil {
 		t.Fatal("symlinked agents root outside claudeDir should not be loaded")
+	}
+}
+
+// A link that leads nowhere is said, and stops nothing else.
+func TestScanSkillsNamesBrokenLinks(t *testing.T) {
+	home := t.TempDir()
+	mustWrite(t, filepath.Join(home, "skills", "real", "SKILL.md"), "---\nname: real\ndescription: d\n---\n")
+	skills := filepath.Join(home, "skills")
+	if err := os.Symlink(filepath.Join(home, "missing"), filepath.Join(skills, "dangling")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(skills, "loop"), filepath.Join(skills, "loop")); err != nil {
+		t.Fatal(err)
+	}
+	items, warns := ScanSkills(home, "test")
+	if findItem(items, "real") == nil || !findItem(items, "real").Removable {
+		t.Errorf("the real skill was affected: %+v", items)
+	}
+	named := map[string]bool{}
+	for _, w := range warns {
+		named[filepath.Base(w.Path)] = strings.Contains(w.Msg, "leads nowhere")
+	}
+	if !named["dangling"] || !named["loop"] {
+		t.Errorf("broken links not named: %+v", warns)
+	}
+}
+
+// A plain folder with no SKILL.md is neither a skill nor a broken link.
+func TestScanSkillsFolderWithoutSkillFileIsNotBroken(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, "skills", "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	items, warns := ScanSkills(home, "test")
+	if len(items) != 0 || len(warns) != 0 {
+		t.Errorf("want nothing for an empty folder, got items %+v warns %+v", items, warns)
+	}
+}
+
+// An agent's `skills:` list is read in both of the ways YAML writes a list.
+func TestScanAgentsReadsTheSkillsAnAgentPreloads(t *testing.T) {
+	home := t.TempDir()
+	mustWrite(t, filepath.Join(home, "agents", "block.md"), "---\nname: block\ndescription: d\nskills:\n  - one\n  - \"two\"\ntools: Read\n---\n")
+	mustWrite(t, filepath.Join(home, "agents", "inline.md"), "---\nname: inline\nskills: [three, 'four']\n---\n")
+	mustWrite(t, filepath.Join(home, "agents", "comma.md"), "---\nname: comma\nskills: five, six\n---\n")
+	mustWrite(t, filepath.Join(home, "agents", "none.md"), "---\nname: none\ndescription: skills: are great\n---\nskills:\n  - seven\n")
+
+	items, _ := ScanAgents(home, "test")
+
+	for name, want := range map[string]string{"block": "one two", "inline": "three four", "comma": "five six", "none": ""} {
+		it := findItem(items, name)
+		if it == nil {
+			t.Fatalf("no agent %s", name)
+		}
+		if got := strings.Join(it.Preloads, " "); got != want {
+			t.Errorf("%s preloads %q, want %q", name, got, want)
+		}
+	}
+}
+
+// The ways YAML writes a list, and what stands around its items.
+func TestFrontmatterListReadsEveryWayAListIsWritten(t *testing.T) {
+	for front, want := range map[string]string{
+		"skills:\n  - a\n\n  - b\n":            "a b", // a blank line inside the list
+		"skills: [a,\n  b]\n":                  "a b", // brackets over two lines
+		"skills: [\n  a,\n  b\n]\nname: x\n":   "a b",
+		"skills: # note\n  - a\n":              "a",   // a comment after the key
+		"skills:\n  - a # why\n  - \"b\"\n":    "a b", // a comment after an item
+		"skills: [a, b] # note\n":              "a b", // a comment after the brackets
+		"skills:\n- a\n- b\nname: x\n":         "a b", // items not indented
+		"skills:\n  # only a comment\n  - a\n": "a",
+		"skills: a, 'b'\n":                     "a b", // one line, no brackets
+		"name: x\nskills:\n  nested: map\n":    "",    // not a list
+		"other:\n  skills:\n    - a\n":         "",    // someone else's key
+	} {
+		if got := strings.Join(frontmatterList([]byte("---\n"+front+"---\nbody\n"), "skills"), " "); got != want {
+			t.Errorf("%q gives %q, want %q", front, got, want)
+		}
+	}
+	if got := frontmatterList([]byte("---\nskills:\n  - a\n"), "skills"); got != nil {
+		t.Errorf("a header that never closes gives %q", got)
+	}
+}
+
+// "skills: null" is no skill named null.
+func TestFrontmatterListTakesNoValueForNull(t *testing.T) {
+	for _, front := range []string{"skills: null\n", "skills: ~\n", "skills: []\n"} {
+		if got := frontmatterList([]byte("---\n"+front+"---\n"), "skills"); len(got) != 0 {
+			t.Errorf("%q gives %q", front, got)
+		}
 	}
 }
